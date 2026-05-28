@@ -165,11 +165,12 @@ function updateAudioToggleState() {
 }
 
 function generateCaptcha() {
-  const left = Math.floor(10 + Math.random() * 89);
-  const right = Math.floor(10 + Math.random() * 89);
-  captchaAnswer = String(left + right);
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
+  captchaAnswer = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
   if (authCaptchaQuestion) {
-    authCaptchaQuestion.textContent = `${left} + ${right}`;
+    authCaptchaQuestion.textContent = captchaAnswer;
+    authCaptchaQuestion.style.setProperty("--captcha-tilt", `${Math.random() * 5 - 2.5}deg`);
+    authCaptchaQuestion.style.setProperty("--captcha-offset", `${Math.random() * 8 - 4}px`);
   }
   if (authCaptchaAnswer) {
     authCaptchaAnswer.value = "";
@@ -177,7 +178,7 @@ function generateCaptcha() {
 }
 
 function validateCaptcha() {
-  if (String(authCaptchaAnswer?.value || "").trim() !== captchaAnswer) {
+  if (String(authCaptchaAnswer?.value || "").trim().toLowerCase() !== captchaAnswer.toLowerCase()) {
     generateCaptcha();
     const error = new Error("Captcha is incorrect. Try the new captcha.");
     error.isCaptchaError = true;

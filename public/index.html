@@ -72,10 +72,13 @@
           </label>
           <label class="captcha-field">
             Captcha
-            <div class="auth-inline-field captcha-inline">
-              <span id="authCaptchaQuestion" class="captcha-question">0000</span>
-              <input type="text" id="authCaptchaAnswer" name="captchaAnswer" placeholder="Enter captcha" autocomplete="off" inputmode="text" />
-              <button type="button" id="refreshCaptchaBtn" class="chip-button captcha-refresh" aria-label="Refresh captcha">↻</button>
+            <div class="captcha-stack">
+              <div id="authCaptchaQuestion" class="captcha-question" aria-label="Captcha word">CAPTCHA</div>
+              <p class="helper-text captcha-helper">Type the above word</p>
+              <div class="auth-inline-field captcha-inline">
+                <input type="text" id="authCaptchaAnswer" name="captchaAnswer" placeholder="Enter captcha" autocomplete="off" inputmode="text" />
+                <button type="button" id="refreshCaptchaBtn" class="chip-button captcha-refresh" aria-label="Refresh captcha">↻</button>
+              </div>
             </div>
           </label>
           <label id="authEmailField" hidden>

@@ -1807,20 +1807,68 @@ select:focus {
   align-items: center;
 }
 
-.captcha-inline {
-  grid-template-columns: auto minmax(0, 1fr) auto;
+.captcha-stack {
+  display: grid;
+  gap: 8px;
 }
 
 .captcha-question {
-  min-width: 92px;
-  padding: 12px 14px;
-  border-radius: 999px;
-  background: rgba(41, 37, 36, 0.96);
-  color: #fff7ed;
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 108px;
+  padding: 18px 20px;
+  overflow: hidden;
+  border-radius: 2px;
+  border: 1px solid rgba(120, 113, 108, 0.34);
+  background:
+    linear-gradient(90deg, rgba(41, 37, 36, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(41, 37, 36, 0.07) 1px, transparent 1px),
+    #fbfaf7;
+  background-size: 22px 22px;
+  color: #12091c;
   text-align: center;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  box-shadow: var(--shadow-soft);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2.5rem, 10vw, 4rem);
+  font-style: italic;
+  font-weight: 800;
+  letter-spacing: -0.08em;
+  line-height: 1;
+  text-decoration: line-through;
+  text-decoration-thickness: 0.12em;
+  text-decoration-color: rgba(18, 9, 28, 0.72);
+  transform: skewX(-9deg) rotate(var(--captcha-tilt, -1deg)) translateY(var(--captcha-offset, 0));
+  text-shadow:
+    1px 0 0 rgba(255, 255, 255, 0.8),
+    -1px 1px 0 rgba(255, 138, 126, 0.18);
+}
+
+.captcha-question::before,
+.captcha-question::after {
+  content: "";
+  position: absolute;
+  left: -8%;
+  right: -8%;
+  top: 48%;
+  height: 3px;
+  background: rgba(18, 9, 28, 0.7);
+  transform: rotate(-4deg);
+}
+
+.captcha-question::after {
+  top: 56%;
+  height: 2px;
+  opacity: 0.55;
+  transform: rotate(3deg);
+}
+
+.captcha-helper {
+  margin: 0;
+  font-size: 0.82rem;
+}
+
+.captcha-inline {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .captcha-refresh {
@@ -2021,13 +2069,9 @@ select:focus {
     text-align: left;
   }
 
-  .captcha-inline {
-    grid-template-columns: 1fr auto;
-  }
-
   .captcha-question {
-    grid-column: 1 / -1;
     width: 100%;
+    min-height: 92px;
   }
 }
 
