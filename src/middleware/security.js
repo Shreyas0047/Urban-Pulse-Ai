@@ -21,7 +21,7 @@ function setSecurityHeaders(_req, res, next) {
       "object-src 'none'",
       "form-action 'self'",
       "frame-ancestors 'self'",
-      "script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
+      "script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: blob: https:",

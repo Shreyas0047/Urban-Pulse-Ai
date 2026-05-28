@@ -36,6 +36,7 @@ app.use("/api/chatbot", createRateLimiter({ windowMs: 10 * 60 * 1000, max: 40, k
 
 app.use("/api", apiRoutes);
 app.use("/receipts", express.static(env.receiptsDir));
+app.use("/intro", express.static(path.join(process.cwd(), "intro")));
 app.use(express.static(env.publicDir));
 
 app.get("*", (_req, res) => {

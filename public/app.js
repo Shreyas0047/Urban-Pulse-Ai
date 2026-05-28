@@ -67,9 +67,14 @@ const mapWorkspace = document.getElementById("mapWorkspace");
 const userManagementWorkspace = document.getElementById("userManagementWorkspace");
 const locationMapFrame = document.getElementById("locationMapFrame");
 const liveLocationStatus = document.getElementById("liveLocationStatus");
+const introSplash = document.getElementById("introSplash");
+const introFrame = document.getElementById("introFrame");
+const introLoader = document.getElementById("introLoader");
+const skipIntroBtn = document.getElementById("skipIntroBtn");
 
 const storageKey = "smart-community-auth";
 const audioStorageKey = "smart-community-audio-enabled";
+const introStorageKey = "smart-community-intro-seen";
 let authState = null;
 let authMode = "login";
 let currentImageFeatures = null;
@@ -138,6 +143,87 @@ function saveAudioPreference() {
 function updateAudioToggleState() {
   audioToggleBtn.textContent = audioEnabled ? "Sound On" : "Sound Off";
   audioToggleBtn.dataset.state = audioEnabled ? "enabled" : "muted";
+}
+
+function hasSeenIntroThisSession() {
+  try {
+    return (
+      window.sessionStorage?.getItem(introStorageKey) === "true" ||
+      String(window.name || "").includes(`${introStorageKey}=true`)
+    );
+  } catch (_error) {
+    return String(window.name || "").includes(`${introStorageKey}=true`);
+  }
+}
+
+function markIntroSeen() {
+  try {
+    window.sessionStorage?.setItem(introStorageKey, "true");
+  } catch (_error) {
+    // Intro playback should never block authentication if storage is unavailable.
+  }
+
+  if (!String(window.name || "").includes(`${introStorageKey}=true`)) {
+    window.name = `${window.name || ""};${introStorageKey}=true`;
+  }
+}
+
+function removeIntroSessionClass() {
+  document.documentElement.classList.remove("intro-session-pending");
+}
+
+function playCinematicIntro() {
+  return new Promise((resolve) => {
+    if (!introSplash || !introFrame || hasSeenIntroThisSession()) {
+      removeIntroSessionClass();
+      resolve();
+      return;
+    }
+
+    let isComplete = false;
+    let completionTimer = null;
+    let fallbackTimer = null;
+
+    const finishIntro = () => {
+      if (isComplete) {
+        return;
+      }
+
+      isComplete = true;
+      markIntroSeen();
+      window.clearTimeout(completionTimer);
+      window.clearTimeout(fallbackTimer);
+      introSplash.classList.add("is-exiting");
+      introSplash.classList.remove("is-visible");
+
+      window.setTimeout(() => {
+        introFrame.src = "about:blank";
+        introSplash.classList.remove("is-active", "is-exiting");
+        introSplash.setAttribute("hidden", "");
+        removeIntroSessionClass();
+        resolve();
+      }, 920);
+    };
+
+    const revealIntro = () => {
+      introFrame.classList.add("is-ready");
+      introLoader?.classList.add("is-hidden");
+      completionTimer = window.setTimeout(finishIntro, 7800);
+    };
+
+    introSplash.hidden = false;
+    introSplash.classList.add("is-active");
+    document.body.classList.add("auth-open");
+
+    window.requestAnimationFrame(() => {
+      introSplash.classList.add("is-visible");
+      introFrame.src = "/intro/index.html";
+    });
+
+    introFrame.addEventListener("load", revealIntro, { once: true });
+    skipIntroBtn?.addEventListener("click", finishIntro, { once: true });
+    fallbackTimer = window.setTimeout(finishIntro, 8200);
+  });
 }
 
 function ensureAudioContext() {
@@ -2346,7 +2432,9 @@ applyPermissionState();
 updateAudioToggleState();
 setPdfButtonState(false);
 resetComposer();
-openAuthOverlay("login");
+playCinematicIntro().then(() => {
+  openAuthOverlay("login");
+});
 loadDashboard().catch((error) => {
   setDashboardMessage(error.message, "error");
 });

@@ -10,10 +10,29 @@
       href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Reenie+Beanie&display=swap"
       rel="stylesheet"
     />
+    <script src="/intro-boot.js"></script>
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   </head>
   <body>
+    <section id="introSplash" class="intro-splash" aria-label="Urban Pulse AI cinematic intro">
+      <iframe
+        id="introFrame"
+        class="intro-frame"
+        title="Urban Pulse AI cinematic intro"
+        src="about:blank"
+        loading="eager"
+        allow="autoplay; fullscreen"
+      ></iframe>
+      <div class="intro-vignette" aria-hidden="true"></div>
+      <div class="intro-scanline" aria-hidden="true"></div>
+      <div id="introLoader" class="intro-loader" role="status" aria-live="polite">
+        <span class="intro-loader-orbit" aria-hidden="true"></span>
+        <span>Initializing civic intelligence</span>
+      </div>
+      <button type="button" id="skipIntroBtn" class="intro-skip-button">Skip Intro</button>
+    </section>
+
     <div class="grain-overlay" aria-hidden="true"></div>
 
     <div id="authOverlay" class="auth-overlay" hidden>
