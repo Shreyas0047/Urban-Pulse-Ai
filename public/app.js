@@ -48,7 +48,9 @@ const authUsernameLabel = document.getElementById("authUsernameLabel");
 const authUsernameInput = document.getElementById("authUsername");
 const authCaptchaQuestion = document.getElementById("authCaptchaQuestion");
 const authCaptchaAnswer = document.getElementById("authCaptchaAnswer");
+const verifyCaptchaBtn = document.getElementById("verifyCaptchaBtn");
 const refreshCaptchaBtn = document.getElementById("refreshCaptchaBtn");
+const captchaVerifyMessage = document.getElementById("captchaVerifyMessage");
 const loginAttemptCounter = document.getElementById("loginAttemptCounter");
 const authEmailField = document.getElementById("authEmailField");
 const authEmailInput = document.getElementById("authEmail");
@@ -114,6 +116,7 @@ let voiceRecordingStartedAt = 0;
 let isVoiceRecording = false;
 let registrationOtpIssued = false;
 let captchaAnswer = "";
+let captchaVerified = false;
 let loginAttemptsRemaining = 4;
 let loginLockTimer = null;
 
@@ -167,6 +170,7 @@ function updateAudioToggleState() {
 function generateCaptcha() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
   captchaAnswer = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+  captchaVerified = false;
   if (authCaptchaQuestion) {
     authCaptchaQuestion.textContent = captchaAnswer;
     authCaptchaQuestion.style.setProperty("--captcha-tilt", `${Math.random() * 5 - 2.5}deg`);
@@ -175,14 +179,43 @@ function generateCaptcha() {
   if (authCaptchaAnswer) {
     authCaptchaAnswer.value = "";
   }
+  if (captchaVerifyMessage) {
+    captchaVerifyMessage.textContent = "";
+    captchaVerifyMessage.dataset.state = "";
+  }
+}
+
+function createCaptchaError(message) {
+  const error = new Error(message);
+  error.isCaptchaError = true;
+  return error;
+}
+
+function verifyCaptchaInput() {
+  if (String(authCaptchaAnswer?.value || "").trim() !== captchaAnswer) {
+    captchaVerified = false;
+    if (captchaVerifyMessage) {
+      captchaVerifyMessage.textContent = "Captcha does not match. Capital letters must be exact.";
+      captchaVerifyMessage.dataset.state = "error";
+    }
+    throw createCaptchaError("Captcha is incorrect. Capital letters must match exactly.");
+  }
+
+  captchaVerified = true;
+  if (captchaVerifyMessage) {
+    captchaVerifyMessage.textContent = "Captcha verified.";
+    captchaVerifyMessage.dataset.state = "success";
+  }
 }
 
 function validateCaptcha() {
-  if (String(authCaptchaAnswer?.value || "").trim().toLowerCase() !== captchaAnswer.toLowerCase()) {
-    generateCaptcha();
-    const error = new Error("Captcha is incorrect. Try the new captcha.");
-    error.isCaptchaError = true;
-    throw error;
+  if (!captchaVerified) {
+    throw createCaptchaError("Verify the captcha before continuing.");
+  }
+
+  if (String(authCaptchaAnswer?.value || "").trim() !== captchaAnswer) {
+    captchaVerified = false;
+    throw createCaptchaError("Captcha changed after verification. Verify it again.");
   }
 }
 
@@ -2378,7 +2411,21 @@ showAiAccuracyBtn.addEventListener("click", () => {
 showLoginBtn.addEventListener("click", () => openAuthOverlay("login"));
 showRegisterBtn.addEventListener("click", () => openAuthOverlay("register"));
 sendOtpBtn?.addEventListener("click", requestRegistrationOtp);
+verifyCaptchaBtn?.addEventListener("click", () => {
+  try {
+    verifyCaptchaInput();
+  } catch (error) {
+    authMessage.textContent = error.message;
+  }
+});
 refreshCaptchaBtn?.addEventListener("click", generateCaptcha);
+authCaptchaAnswer?.addEventListener("input", () => {
+  captchaVerified = false;
+  if (captchaVerifyMessage) {
+    captchaVerifyMessage.textContent = "";
+    captchaVerifyMessage.dataset.state = "";
+  }
+});
 issueTokenBtn.addEventListener("click", () => openAuthOverlay("login"));
 closeAuthBtn.addEventListener("click", closeAuthOverlay);
 openFaqLink?.addEventListener("click", (event) => {

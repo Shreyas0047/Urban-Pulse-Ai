@@ -1868,14 +1868,35 @@ select:focus {
 }
 
 .captcha-inline {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
 }
 
 .captcha-refresh {
-  width: 46px;
   height: 46px;
-  padding: 0;
-  font-size: 1rem;
+  padding: 0 12px;
+  font-size: 0.86rem;
+}
+
+.captcha-verify {
+  height: 46px;
+  padding: 0 14px;
+}
+
+.captcha-verify-message {
+  min-height: 1.2em;
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.captcha-verify-message[data-state="success"] {
+  color: #166534;
+  font-weight: 600;
+}
+
+.captcha-verify-message[data-state="error"] {
+  color: #b42318;
+  font-weight: 600;
 }
 
 .login-attempt-counter {
@@ -2072,6 +2093,14 @@ select:focus {
   .captcha-question {
     width: 100%;
     min-height: 58px;
+  }
+
+  .captcha-inline {
+    grid-template-columns: 1fr;
+  }
+
+  .captcha-inline button {
+    width: 100%;
   }
 }
 

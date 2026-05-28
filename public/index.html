@@ -77,8 +77,10 @@
               <p class="helper-text captcha-helper">Type the above word</p>
               <div class="auth-inline-field captcha-inline">
                 <input type="text" id="authCaptchaAnswer" name="captchaAnswer" placeholder="Enter captcha" autocomplete="off" inputmode="text" />
-                <button type="button" id="refreshCaptchaBtn" class="chip-button captcha-refresh" aria-label="Refresh captcha">↻</button>
+                <button type="button" id="verifyCaptchaBtn" class="secondary-button captcha-verify">Verify</button>
+                <button type="button" id="refreshCaptchaBtn" class="chip-button captcha-refresh" aria-label="Refresh captcha">New</button>
               </div>
+              <p id="captchaVerifyMessage" class="helper-text captcha-verify-message"></p>
             </div>
           </label>
           <label id="authEmailField" hidden>
