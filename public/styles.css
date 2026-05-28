@@ -1807,6 +1807,35 @@ select:focus {
   align-items: center;
 }
 
+.captcha-inline {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.captcha-question {
+  min-width: 92px;
+  padding: 12px 14px;
+  border-radius: 999px;
+  background: rgba(41, 37, 36, 0.96);
+  color: #fff7ed;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  box-shadow: var(--shadow-soft);
+}
+
+.captcha-refresh {
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  font-size: 1rem;
+}
+
+.login-attempt-counter {
+  margin: 0;
+  color: #b45309;
+  font-weight: 600;
+}
+
 [data-reveal] {
   opacity: 0;
   transform: translateY(30px);
@@ -1990,6 +2019,15 @@ select:focus {
 
   .post-submit-summary-row strong {
     text-align: left;
+  }
+
+  .captcha-inline {
+    grid-template-columns: 1fr auto;
+  }
+
+  .captcha-question {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 }
 

@@ -44,6 +44,12 @@ const closeFaqBtn = document.getElementById("closeFaqBtn");
 const authForm = document.getElementById("authForm");
 const authSubmitBtn = document.getElementById("authSubmitBtn");
 const authMessage = document.getElementById("authMessage");
+const authUsernameLabel = document.getElementById("authUsernameLabel");
+const authUsernameInput = document.getElementById("authUsername");
+const authCaptchaQuestion = document.getElementById("authCaptchaQuestion");
+const authCaptchaAnswer = document.getElementById("authCaptchaAnswer");
+const refreshCaptchaBtn = document.getElementById("refreshCaptchaBtn");
+const loginAttemptCounter = document.getElementById("loginAttemptCounter");
 const authEmailField = document.getElementById("authEmailField");
 const authEmailInput = document.getElementById("authEmail");
 const authOtpField = document.getElementById("authOtpField");
@@ -107,6 +113,9 @@ let voiceRecordingChunks = [];
 let voiceRecordingStartedAt = 0;
 let isVoiceRecording = false;
 let registrationOtpIssued = false;
+let captchaAnswer = "";
+let loginAttemptsRemaining = 4;
+let loginLockTimer = null;
 
 function emitAuthStateChange() {
   window.dispatchEvent(
@@ -153,6 +162,83 @@ function saveAudioPreference() {
 function updateAudioToggleState() {
   audioToggleBtn.textContent = audioEnabled ? "Sound On" : "Sound Off";
   audioToggleBtn.dataset.state = audioEnabled ? "enabled" : "muted";
+}
+
+function generateCaptcha() {
+  const left = Math.floor(10 + Math.random() * 89);
+  const right = Math.floor(10 + Math.random() * 89);
+  captchaAnswer = String(left + right);
+  if (authCaptchaQuestion) {
+    authCaptchaQuestion.textContent = `${left} + ${right}`;
+  }
+  if (authCaptchaAnswer) {
+    authCaptchaAnswer.value = "";
+  }
+}
+
+function validateCaptcha() {
+  if (String(authCaptchaAnswer?.value || "").trim() !== captchaAnswer) {
+    generateCaptcha();
+    const error = new Error("Captcha is incorrect. Try the new captcha.");
+    error.isCaptchaError = true;
+    throw error;
+  }
+}
+
+function resetLoginAttemptState() {
+  loginAttemptsRemaining = 4;
+  authSubmitBtn.disabled = false;
+  if (loginLockTimer) {
+    window.clearInterval(loginLockTimer);
+    loginLockTimer = null;
+  }
+  if (loginAttemptCounter) {
+    loginAttemptCounter.hidden = true;
+    loginAttemptCounter.textContent = "";
+  }
+}
+
+function startLoginRetryCounter() {
+  let secondsRemaining = 30;
+  authSubmitBtn.disabled = true;
+  loginAttemptCounter.hidden = false;
+
+  const updateCounter = () => {
+    loginAttemptCounter.textContent = `Too many failed login attempts. Extra attempt available in ${secondsRemaining}s.`;
+  };
+
+  updateCounter();
+  if (loginLockTimer) {
+    window.clearInterval(loginLockTimer);
+  }
+
+  loginLockTimer = window.setInterval(() => {
+    secondsRemaining -= 1;
+    if (secondsRemaining <= 0) {
+      window.clearInterval(loginLockTimer);
+      loginLockTimer = null;
+      loginAttemptsRemaining = 1;
+      authSubmitBtn.disabled = false;
+      loginAttemptCounter.textContent = "Extra login attempt available now.";
+      generateCaptcha();
+      return;
+    }
+
+    updateCounter();
+  }, 1000);
+}
+
+function recordClientLoginFailure() {
+  loginAttemptsRemaining -= 1;
+
+  if (loginAttemptsRemaining > 0) {
+    loginAttemptCounter.hidden = false;
+    loginAttemptCounter.textContent = `${loginAttemptsRemaining} login attempt${loginAttemptsRemaining === 1 ? "" : "s"} remaining.`;
+    generateCaptcha();
+    return;
+  }
+
+  startLoginRetryCounter();
 }
 
 function hasSeenIntroThisSession() {
@@ -535,11 +621,18 @@ function openAuthOverlay(mode = "login") {
   sendOtpBtn.style.display = isRegisterMode ? "" : "none";
   authEmailInput.disabled = !isRegisterMode;
   authOtpInput.disabled = !isRegisterMode;
+  authUsernameLabel.textContent = isRegisterMode ? "Username" : "Username or Email";
+  authUsernameInput.placeholder = isRegisterMode ? "Enter username" : "Enter username or email";
+  authUsernameInput.autocomplete = isRegisterMode ? "username" : "username";
   registrationOtpIssued = false;
+  generateCaptcha();
+  if (mode === "login" && !loginLockTimer) {
+    authSubmitBtn.disabled = false;
+  }
   authSubmitBtn.textContent = mode === "login" ? "Login" : "Verify OTP & Register";
   authMessage.textContent =
     mode === "login"
-      ? "Choose Admin or Citizen, then login with your username and password."
+      ? "Choose Admin or Citizen, then login with your username/email and password."
       : "Choose Admin or Citizen, enter username, email, and password, then request an OTP to complete registration.";
 }
 
@@ -819,20 +912,24 @@ function getAuthSuccessMessage(mode, data) {
 
 async function requestRegistrationOtp() {
   try {
+    validateCaptcha();
     sendOtpBtn.disabled = true;
     authSubmitBtn.disabled = true;
     const formData = new FormData(authForm);
     const payload = Object.fromEntries(formData.entries());
     delete payload.otp;
+    delete payload.captchaAnswer;
     const data = await apiRequest("/api/auth/register/request-otp", {
       method: "POST",
       body: JSON.stringify(payload)
     });
     registrationOtpIssued = true;
+    generateCaptcha();
     authMessage.textContent = data.message;
     setDashboardMessage(data.message, "success");
     authOtpInput.focus();
   } catch (error) {
+    generateCaptcha();
     authMessage.textContent = error.message;
     setDashboardMessage(error.message, "error");
   } finally {
@@ -2280,6 +2377,7 @@ showAiAccuracyBtn.addEventListener("click", () => {
 showLoginBtn.addEventListener("click", () => openAuthOverlay("login"));
 showRegisterBtn.addEventListener("click", () => openAuthOverlay("register"));
 sendOtpBtn?.addEventListener("click", requestRegistrationOtp);
+refreshCaptchaBtn?.addEventListener("click", generateCaptcha);
 issueTokenBtn.addEventListener("click", () => openAuthOverlay("login"));
 closeAuthBtn.addEventListener("click", closeAuthOverlay);
 openFaqLink?.addEventListener("click", (event) => {
@@ -2431,9 +2529,11 @@ authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   try {
+    validateCaptcha();
     authSubmitBtn.disabled = true;
     const formData = new FormData(authForm);
     const payload = Object.fromEntries(formData.entries());
+    delete payload.captchaAnswer;
 
     if (authMode === "register" && !registrationOtpIssued) {
       throw new Error("Send the OTP to your email before completing registration.");
@@ -2448,6 +2548,7 @@ authForm.addEventListener("submit", async (event) => {
     authState = data;
     saveAuthState();
     applyPermissionState();
+    resetLoginAttemptState();
     const successMessage = getAuthSuccessMessage(authMode, data);
     authMessage.textContent = successMessage;
     setDashboardMessage(successMessage, "success");
@@ -2457,10 +2558,17 @@ authForm.addEventListener("submit", async (event) => {
     goToMainDashboard();
     await loadDashboard();
   } catch (error) {
+    if (authMode === "login" && !error.isCaptchaError) {
+      recordClientLoginFailure();
+    } else {
+      generateCaptcha();
+    }
     authMessage.textContent = error.message;
     setDashboardMessage(error.message, "error");
   } finally {
-    authSubmitBtn.disabled = false;
+    if (!loginLockTimer) {
+      authSubmitBtn.disabled = false;
+    }
   }
 });
 

@@ -63,12 +63,20 @@
             </select>
           </label>
           <label>
-            Username
-            <input type="text" id="authUsername" name="username" placeholder="Enter username" />
+            <span id="authUsernameLabel">Username or Email</span>
+            <input type="text" id="authUsername" name="username" placeholder="Enter username or email" autocomplete="username" />
           </label>
           <label>
             Password
             <input type="password" id="authPassword" name="password" placeholder="Enter password" />
+          </label>
+          <label class="captcha-field">
+            Captcha
+            <div class="auth-inline-field captcha-inline">
+              <span id="authCaptchaQuestion" class="captcha-question">0000</span>
+              <input type="text" id="authCaptchaAnswer" name="captchaAnswer" placeholder="Enter captcha" autocomplete="off" inputmode="text" />
+              <button type="button" id="refreshCaptchaBtn" class="chip-button captcha-refresh" aria-label="Refresh captcha">↻</button>
+            </div>
           </label>
           <label id="authEmailField" hidden>
             Email ID
@@ -84,6 +92,7 @@
           <div class="auth-form-actions">
             <button type="submit" id="authSubmitBtn" class="light-beam-button">Login</button>
           </div>
+          <p id="loginAttemptCounter" class="helper-text login-attempt-counter" hidden></p>
         </form>
         <p id="authMessage" class="helper-text">Choose Admin or Citizen, then login or register.</p>
       </div>

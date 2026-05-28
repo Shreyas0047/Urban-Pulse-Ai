@@ -58,6 +58,20 @@ function validateEmail(email) {
   }
 }
 
+function normalizeLoginIdentifier(value) {
+  const identifier = normalizeValue(value);
+  return identifier.includes("@") ? identifier.toLowerCase() : identifier;
+}
+
+function validateLoginIdentifier(identifier) {
+  if (identifier.includes("@")) {
+    validateEmail(identifier);
+    return;
+  }
+
+  validateUsername(identifier);
+}
+
 function getLoginAttemptKey(req, username) {
   const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   const ip = forwarded || req.ip || req.socket?.remoteAddress || "unknown";
@@ -290,25 +304,28 @@ async function requestRegistrationOtp(req, res, next) {
 
 async function login(req, res, next) {
   try {
-    const username = normalizeValue(req.body.username);
+    const identifier = normalizeLoginIdentifier(req.body.username);
     const password = req.body.password;
     const role = normalizeValue(req.body.role);
 
-    if (!username || !password || !role) {
-      throw createHttpError("Username, password, and role are required.", 400);
+    if (!identifier || !password || !role) {
+      throw createHttpError("Username/email, password, and role are required.", 400);
     }
 
     validateRole(role);
-    validateUsername(username);
+    validateLoginIdentifier(identifier);
     validatePassword(password);
-    assertLoginNotLocked(req, username);
+    assertLoginNotLocked(req, identifier);
 
-    const user = await User.findOne({ username, role });
+    const user = await User.findOne({
+      role,
+      $or: [{ username: identifier }, { email: identifier.toLowerCase() }]
+    });
     if (!user || !verifyPassword(password, user.passwordHash)) {
-      recordLoginFailure(req, username);
-      throw createHttpError("Invalid username, password, or role.", 401);
+      recordLoginFailure(req, identifier);
+      throw createHttpError("Invalid username/email, password, or role.", 401);
     }
-    clearLoginFailures(req, username);
+    clearLoginFailures(req, identifier);
 
     const token = issueRoleToken(user.role, user.username, user._id);
     res.json({
