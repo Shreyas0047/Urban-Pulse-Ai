@@ -71,6 +71,16 @@ const introSplash = document.getElementById("introSplash");
 const introFrame = document.getElementById("introFrame");
 const introLoader = document.getElementById("introLoader");
 const skipIntroBtn = document.getElementById("skipIntroBtn");
+const postSubmitOverlay = document.getElementById("postSubmitOverlay");
+const closePostSubmitBtn = document.getElementById("closePostSubmitBtn");
+const postSubmitSummary = document.getElementById("postSubmitSummary");
+const modalGeneratePdfBtn = document.getElementById("modalGeneratePdfBtn");
+const modalEmailBbmpBtn = document.getElementById("modalEmailBbmpBtn");
+const informClosedOnesBtn = document.getElementById("informClosedOnesBtn");
+const closeContactsForm = document.getElementById("closeContactsForm");
+const sendCloseContactsBtn = document.getElementById("sendCloseContactsBtn");
+const cancelCloseContactsBtn = document.getElementById("cancelCloseContactsBtn");
+const closeContactsMessage = document.getElementById("closeContactsMessage");
 
 const storageKey = "smart-community-auth";
 const audioStorageKey = "smart-community-audio-enabled";
@@ -539,7 +549,7 @@ function closeAuthOverlay() {
     return;
   }
   authOverlay.hidden = true;
-  if (faqOverlay?.hidden !== false) {
+  if (faqOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
 }
@@ -555,7 +565,56 @@ function openFaqOverlay() {
 
 function closeFaqOverlay() {
   faqOverlay.hidden = true;
-  if (authOverlay?.hidden !== false) {
+  if (authOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false) {
+    document.body.classList.remove("auth-open");
+  }
+}
+
+function renderPostSubmitSummary(report) {
+  if (!postSubmitSummary || !report) {
+    return;
+  }
+
+  postSubmitSummary.innerHTML = [
+    ["Complaint ID", report.complaintId || "Pending"],
+    ["Severity", report.priority || "Low"],
+    ["Issue", report.issueType || "Civic Complaint"],
+    ["Location", report.location || "Unknown"]
+  ]
+    .map(
+      ([label, value]) => `
+        <div class="post-submit-summary-row">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function openPostSubmitOverlay(report) {
+  if (!postSubmitOverlay) {
+    return;
+  }
+
+  renderPostSubmitSummary(report);
+  closeContactsForm.hidden = true;
+  closeContactsForm.reset();
+  closeContactsMessage.textContent = "";
+  postSubmitOverlay.hidden = false;
+  document.body.classList.add("auth-open");
+}
+
+function closePostSubmitOverlay() {
+  if (!postSubmitOverlay) {
+    return;
+  }
+
+  postSubmitOverlay.hidden = true;
+  closeContactsForm.hidden = true;
+  closeContactsForm.reset();
+  closeContactsMessage.textContent = "";
+  if (authOverlay?.hidden !== false && faqOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
 }
@@ -2228,6 +2287,55 @@ openFaqLink?.addEventListener("click", (event) => {
   openFaqOverlay();
 });
 closeFaqBtn?.addEventListener("click", closeFaqOverlay);
+closePostSubmitBtn?.addEventListener("click", closePostSubmitOverlay);
+modalGeneratePdfBtn?.addEventListener("click", () => generatePdfBtn.click());
+modalEmailBbmpBtn?.addEventListener("click", () => emailBbmpBtn.click());
+informClosedOnesBtn?.addEventListener("click", () => {
+  closeContactsForm.hidden = false;
+  closeContactsMessage.textContent = "Add at least one email ID, up to 5.";
+  closeContactsForm.querySelector("input")?.focus();
+});
+cancelCloseContactsBtn?.addEventListener("click", () => {
+  closeContactsForm.hidden = true;
+  closeContactsForm.reset();
+  closeContactsMessage.textContent = "";
+});
+closeContactsForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+
+  try {
+    if (!lastSubmittedReport) {
+      throw new Error("Submit a complaint before informing close contacts.");
+    }
+
+    const emails = Array.from(closeContactsForm.querySelectorAll('input[name="contactEmail"]'))
+      .map((input) => input.value.trim())
+      .filter(Boolean);
+
+    if (!emails.length) {
+      throw new Error("Enter at least one email ID.");
+    }
+
+    sendCloseContactsBtn.disabled = true;
+    closeContactsMessage.textContent = "Sending warning email...";
+    const response = await apiRequest("/api/inform-close-contacts", {
+      method: "POST",
+      body: JSON.stringify({
+        emails,
+        report: lastSubmittedReport
+      })
+    });
+
+    closeContactsMessage.textContent = response.message || "Close contacts were informed successfully.";
+    setDashboardMessage(closeContactsMessage.textContent, "success");
+    closeContactsForm.reset();
+  } catch (error) {
+    closeContactsMessage.textContent = error.message;
+    setDashboardMessage(error.message, "error");
+  } finally {
+    sendCloseContactsBtn.disabled = false;
+  }
+});
 generatePdfBtn.addEventListener("click", async () => {
   try {
     const result = await generatePdfReport(lastSubmittedReport, { download: true });
@@ -2386,6 +2494,7 @@ form.addEventListener("submit", async (event) => {
     setPdfButtonState(true);
     resetComposer();
     renderAnalysis(result);
+    openPostSubmitOverlay(lastSubmittedReport);
     await loadDashboard();
   } catch (error) {
     setDashboardMessage(error.message, "error");

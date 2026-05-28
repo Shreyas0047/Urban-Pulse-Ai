@@ -220,10 +220,6 @@
         </section>
 
         <section class="scenario-section" data-reveal>
-          <div class="section-intro">
-            <p class="eyebrow dark">Daily moments</p>
-            <h2>The kinds of issues communities actually need to act on.</h2>
-          </div>
           <div class="scenario-scroll" aria-label="Complaint scenarios">
             <article class="scenario-card">
               <span>07:10 am</span>
@@ -259,10 +255,6 @@
         </section>
 
         <section class="experience-section" data-reveal>
-          <div class="section-intro centered">
-            <p class="eyebrow dark">App experience</p>
-            <h2>Three live surfaces, one calmer reporting flow.</h2>
-          </div>
           <div class="device-stack">
             <article id="reportWorkspace" class="device-panel device-left screen-card">
               <div class="screen-header">
@@ -440,10 +432,6 @@
         </section>
 
         <section class="diary-section" data-reveal>
-          <div class="section-intro">
-            <p class="eyebrow dark">Diary notes</p>
-            <h2>What this platform is built to make easier.</h2>
-          </div>
           <div class="diary-grid">
             <article class="diary-card tilt-left">
               <p>“A citizen should be able to report a problem, attach evidence, and generate a formal authority-ready document without switching platforms.”</p>
@@ -488,6 +476,46 @@
       <span class="chatbot-launcher-core"></span>
       <span class="chatbot-launcher-ring"></span>
     </button>
+
+    <section id="postSubmitOverlay" class="post-submit-overlay" hidden aria-label="Complaint actions">
+      <div class="post-submit-modal screen-card">
+        <div
+          class="liquid-ether-host liquid-ether-auth"
+          data-liquid-ether
+          data-colors="#ffb7b2,#ff9f7a,#e8efe8"
+          data-strength="0.2"
+          aria-hidden="true"
+        ></div>
+        <div class="post-submit-top">
+          <div>
+            <p class="eyebrow dark">Complaint submitted</p>
+            <h2>Report actions</h2>
+          </div>
+          <button type="button" id="closePostSubmitBtn" class="chip-button post-submit-close" aria-label="Close complaint actions">×</button>
+        </div>
+        <div id="postSubmitSummary" class="post-submit-summary"></div>
+        <div class="post-submit-actions">
+          <button type="button" id="modalGeneratePdfBtn" class="secondary-button">Generate PDF</button>
+          <button type="button" id="modalEmailBbmpBtn" class="secondary-button">Email BBMP</button>
+          <button type="button" id="informClosedOnesBtn" class="light-beam-button">Inform closed ones</button>
+        </div>
+        <form id="closeContactsForm" class="close-contacts-form" hidden>
+          <p class="helper-text">Enter up to 5 email IDs to notify people close to you about this issue.</p>
+          <div class="close-contact-grid">
+            <input type="email" name="contactEmail" placeholder="Email ID 1" autocomplete="email" />
+            <input type="email" name="contactEmail" placeholder="Email ID 2" autocomplete="email" />
+            <input type="email" name="contactEmail" placeholder="Email ID 3" autocomplete="email" />
+            <input type="email" name="contactEmail" placeholder="Email ID 4" autocomplete="email" />
+            <input type="email" name="contactEmail" placeholder="Email ID 5" autocomplete="email" />
+          </div>
+          <div class="post-submit-actions">
+            <button type="submit" id="sendCloseContactsBtn" class="light-beam-button">Send warning</button>
+            <button type="button" id="cancelCloseContactsBtn" class="chip-button">Cancel</button>
+          </div>
+        </form>
+        <p id="closeContactsMessage" class="helper-text post-submit-message"></p>
+      </div>
+    </section>
 
     <section id="chatbotPanel" class="chatbot-panel" hidden aria-label="Community assistant">
       <header id="chatbotHeader" class="chatbot-header">

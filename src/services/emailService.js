@@ -108,8 +108,69 @@ async function sendBbmpComplaintEmail({ subject, report, pdfBase64, filename }) 
   };
 }
 
+function getSeverityWarning(severity) {
+  const level = String(severity || "Low").trim().toLowerCase();
+
+  if (level === "critical") {
+    return "Warning: This complaint has been marked CRITICAL. Please stay alert, avoid the affected area if needed, and take immediate precautions.";
+  }
+
+  if (level === "high") {
+    return "Warning: This complaint has been marked HIGH severity. Please be careful around the affected area and act quickly if it impacts your safety.";
+  }
+
+  if (level === "medium") {
+    return "Warning: This complaint has been marked MEDIUM severity. Please remain cautious and keep an eye on the issue until it is resolved.";
+  }
+
+  return "Warning: This complaint has been marked LOW severity, but it still needs attention. Please stay aware and avoid ignoring the issue.";
+}
+
+async function sendCloseContactsComplaintEmail({ emails, report, reporter }) {
+  const transporter = createTransporter();
+  const safeEmails = Array.isArray(emails) ? emails.map((email) => String(email || "").trim()).filter(Boolean) : [];
+  const safeReporter = String(reporter || report?.reporter || "Citizen").trim() || "Citizen";
+  const severity = report?.priority || report?.severity || "Low";
+
+  if (!safeEmails.length) {
+    throw new Error("At least one contact email is required.");
+  }
+
+  const bodyLines = [
+    "Hello,",
+    "",
+    "This is an important community safety update from the AI Powered Smart Community Problem Detection System.",
+    "",
+    getSeverityWarning(severity),
+    "",
+    `Complaint from: ${safeReporter}`,
+    `Severity: ${severity}`,
+    "",
+    "Complaint Description:",
+    report?.textComplaint || "No complaint description was provided.",
+    "",
+    "Please take care of this issue and stay safe until it is resolved.",
+    "",
+    "Regards,",
+    "AI Powered Smart Community Problem Detection System"
+  ];
+
+  const info = await transporter.sendMail({
+    from: env.smtpFrom,
+    to: safeEmails,
+    subject: `Community issue warning: ${severity} severity complaint`,
+    text: bodyLines.join("\n")
+  });
+
+  return {
+    messageId: info.messageId,
+    accepted: info.accepted || []
+  };
+}
+
 module.exports = {
   isEmailConfigured,
   sendBbmpComplaintEmail,
+  sendCloseContactsComplaintEmail,
   sendRegistrationOtpEmail
 };

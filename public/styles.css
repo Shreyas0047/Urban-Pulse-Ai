@@ -1630,6 +1630,117 @@ select:focus {
   display: none !important;
 }
 
+.post-submit-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(253, 252, 248, 0.52);
+  backdrop-filter: blur(18px);
+}
+
+.post-submit-overlay[hidden] {
+  display: none !important;
+}
+
+.post-submit-modal {
+  position: relative;
+  isolation: isolate;
+  width: min(660px, 100%);
+  max-height: min(88vh, 860px);
+  overflow: auto;
+  padding: 24px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.86);
+  box-shadow: var(--shadow-lift);
+  backdrop-filter: blur(22px);
+}
+
+.post-submit-modal > :not(.liquid-ether-host) {
+  position: relative;
+  z-index: 1;
+}
+
+.post-submit-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.post-submit-top h2 {
+  margin: 0;
+  font-size: clamp(2.2rem, 7vw, 3.6rem);
+  line-height: 0.96;
+  font-weight: 700;
+}
+
+.post-submit-close {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.post-submit-summary {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.post-submit-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(231, 229, 228, 0.92);
+}
+
+.post-submit-summary-row span {
+  color: var(--stone-600);
+}
+
+.post-submit-summary-row strong {
+  text-align: right;
+}
+
+.post-submit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.post-submit-actions button {
+  flex: 1 1 150px;
+}
+
+.close-contacts-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 16px;
+  border-radius: 2rem;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(231, 229, 228, 0.95);
+}
+
+.close-contact-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.post-submit-message {
+  min-height: 1.3em;
+  margin: 14px 0 0;
+}
+
 #authEmailField[hidden],
 #authOtpField[hidden],
 #sendOtpBtn[hidden] {
@@ -1852,6 +1963,7 @@ select:focus {
   .conversion-surface,
   .page-footer,
   .auth-screen,
+  .post-submit-modal,
   .faq-modal {
     border-radius: 2rem;
   }
@@ -1867,8 +1979,17 @@ select:focus {
   .form-actions button,
   .voice-actions button,
   .audio-upload-group button,
+  .post-submit-actions button,
   .admin-action-btn {
     width: 100%;
+  }
+
+  .post-submit-summary-row {
+    display: grid;
+  }
+
+  .post-submit-summary-row strong {
+    text-align: left;
   }
 }
 
