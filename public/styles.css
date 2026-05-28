@@ -1809,15 +1809,15 @@ select:focus {
 
 .captcha-stack {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .captcha-question {
   position: relative;
   display: grid;
   place-items: center;
-  min-height: 108px;
-  padding: 18px 20px;
+  min-height: 62px;
+  padding: 8px 14px;
   overflow: hidden;
   border-radius: 2px;
   border: 1px solid rgba(120, 113, 108, 0.34);
@@ -1825,11 +1825,11 @@ select:focus {
     linear-gradient(90deg, rgba(41, 37, 36, 0.08) 1px, transparent 1px),
     linear-gradient(rgba(41, 37, 36, 0.07) 1px, transparent 1px),
     #fbfaf7;
-  background-size: 22px 22px;
+  background-size: 18px 18px;
   color: #12091c;
   text-align: center;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2.5rem, 10vw, 4rem);
+  font-size: clamp(1.85rem, 7vw, 2.7rem);
   font-style: italic;
   font-weight: 800;
   letter-spacing: -0.08em;
@@ -1864,7 +1864,7 @@ select:focus {
 
 .captcha-helper {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
 }
 
 .captcha-inline {
@@ -2071,7 +2071,7 @@ select:focus {
 
   .captcha-question {
     width: 100%;
-    min-height: 92px;
+    min-height: 58px;
   }
 }
 
