@@ -10,7 +10,7 @@ const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
-const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_TTL_MS = 90 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
 const LOGIN_LOCK_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_LOCK_THRESHOLD = 6;
@@ -295,7 +295,7 @@ async function requestRegistrationOtp(req, res, next) {
 
     res.json({
       message: `An OTP has been sent to ${email}. Enter it to complete registration.`,
-      expiresInMinutes: OTP_TTL_MS / 60000
+      expiresInSeconds: OTP_TTL_MS / 1000
     });
   } catch (error) {
     next(formatAuthError(error));

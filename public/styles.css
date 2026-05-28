@@ -1905,6 +1905,19 @@ select:focus {
   font-weight: 600;
 }
 
+.otp-timer-message {
+  margin: 0;
+  font-weight: 600;
+}
+
+.otp-timer-message[data-state="active"] {
+  color: #166534;
+}
+
+.otp-timer-message[data-state="expired"] {
+  color: #b45309;
+}
+
 [data-reveal] {
   opacity: 0;
   transform: translateY(30px);

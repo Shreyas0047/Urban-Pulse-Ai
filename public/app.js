@@ -57,6 +57,7 @@ const authEmailInput = document.getElementById("authEmail");
 const authOtpField = document.getElementById("authOtpField");
 const authOtpInput = document.getElementById("authOtp");
 const sendOtpBtn = document.getElementById("sendOtpBtn");
+const otpTimerMessage = document.getElementById("otpTimerMessage");
 const mobileMenuToggle = document.getElementById("mobileMenuToggle");
 const siteNav = document.getElementById("siteNav");
 const showLoginBtn = document.getElementById("showLoginBtn");
@@ -119,6 +120,8 @@ let captchaAnswer = "";
 let captchaVerified = false;
 let loginAttemptsRemaining = 4;
 let loginLockTimer = null;
+let otpTimer = null;
+let otpSecondsRemaining = 0;
 
 function emitAuthStateChange() {
   window.dispatchEvent(
@@ -273,6 +276,51 @@ function recordClientLoginFailure() {
   }
 
   startLoginRetryCounter();
+}
+
+function clearOtpTimer() {
+  if (otpTimer) {
+    window.clearInterval(otpTimer);
+    otpTimer = null;
+  }
+  otpSecondsRemaining = 0;
+}
+
+function setOtpTimerMessage(message, state = "") {
+  if (!otpTimerMessage) {
+    return;
+  }
+
+  otpTimerMessage.hidden = !message;
+  otpTimerMessage.textContent = message;
+  otpTimerMessage.dataset.state = state;
+}
+
+function startOtpCountdown(email) {
+  clearOtpTimer();
+  otpSecondsRemaining = 90;
+  sendOtpBtn.disabled = true;
+  sendOtpBtn.textContent = "OTP sent";
+
+  const updateOtpCountdown = () => {
+    setOtpTimerMessage(`OTP sent to ${email}. Verify within ${otpSecondsRemaining}s.`, "active");
+  };
+
+  updateOtpCountdown();
+  otpTimer = window.setInterval(() => {
+    otpSecondsRemaining -= 1;
+    if (otpSecondsRemaining <= 0) {
+      clearOtpTimer();
+      registrationOtpIssued = false;
+      sendOtpBtn.disabled = false;
+      sendOtpBtn.textContent = "Resend OTP";
+      setOtpTimerMessage("OTP expired. Verify captcha again, then press Resend OTP.", "expired");
+      generateCaptcha();
+      return;
+    }
+
+    updateOtpCountdown();
+  }, 1000);
 }
 
 function hasSeenIntroThisSession() {
@@ -659,6 +707,10 @@ function openAuthOverlay(mode = "login") {
   authUsernameInput.placeholder = isRegisterMode ? "Enter username" : "Enter username or email";
   authUsernameInput.autocomplete = isRegisterMode ? "username" : "username";
   registrationOtpIssued = false;
+  clearOtpTimer();
+  sendOtpBtn.disabled = false;
+  sendOtpBtn.textContent = "Send OTP";
+  setOtpTimerMessage("");
   generateCaptcha();
   if (mode === "login" && !loginLockTimer) {
     authSubmitBtn.disabled = false;
@@ -959,15 +1011,19 @@ async function requestRegistrationOtp() {
     });
     registrationOtpIssued = true;
     generateCaptcha();
-    authMessage.textContent = data.message;
-    setDashboardMessage(data.message, "success");
+    startOtpCountdown(payload.email);
+    authMessage.textContent = `${data.message} Verify the OTP within 90 seconds.`;
+    setDashboardMessage(authMessage.textContent, "success");
     authOtpInput.focus();
   } catch (error) {
     generateCaptcha();
     authMessage.textContent = error.message;
     setDashboardMessage(error.message, "error");
   } finally {
-    sendOtpBtn.disabled = false;
+    if (!otpTimer) {
+      sendOtpBtn.disabled = false;
+      sendOtpBtn.textContent = registrationOtpIssued ? "Resend OTP" : "Send OTP";
+    }
     authSubmitBtn.disabled = false;
   }
 }
@@ -2601,6 +2657,9 @@ authForm.addEventListener("submit", async (event) => {
     authMessage.textContent = successMessage;
     setDashboardMessage(successMessage, "success");
     registrationOtpIssued = false;
+    clearOtpTimer();
+    setOtpTimerMessage("");
+    sendOtpBtn.textContent = "Send OTP";
     authForm.reset();
     closeAuthOverlay();
     goToMainDashboard();
