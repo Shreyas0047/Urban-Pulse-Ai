@@ -70,19 +70,6 @@
             Password
             <input type="password" id="authPassword" name="password" placeholder="Enter password" />
           </label>
-          <label class="captcha-field">
-            Captcha
-            <div class="captcha-stack">
-              <div id="authCaptchaQuestion" class="captcha-question" aria-label="Captcha word">CAPTCHA</div>
-              <p class="helper-text captcha-helper">Type the above word</p>
-              <div class="auth-inline-field captcha-inline">
-                <input type="text" id="authCaptchaAnswer" name="captchaAnswer" placeholder="Enter captcha" autocomplete="off" inputmode="text" />
-                <button type="button" id="verifyCaptchaBtn" class="secondary-button captcha-verify">Verify</button>
-                <button type="button" id="refreshCaptchaBtn" class="chip-button captcha-refresh" aria-label="Refresh captcha">New</button>
-              </div>
-              <p id="captchaVerifyMessage" class="helper-text captcha-verify-message"></p>
-            </div>
-          </label>
           <label id="authEmailField" hidden>
             Email ID
             <div class="auth-inline-field">
@@ -195,6 +182,7 @@
           <div class="nav-actions">
             <button type="button" id="audioToggleBtn" class="chip-button">Sound On</button>
             <button type="button" id="issueTokenBtn" class="login-button light-beam-button">Login</button>
+            <button type="button" id="logoutBtn" class="chip-button" hidden>Logout</button>
           </div>
         </nav>
       </header>
@@ -441,7 +429,7 @@
 
           <article id="userManagementWorkspace" class="soft-surface screen-card">
             <div class="screen-titlebar">Account Management</div>
-            <p class="helper-text">Admins can remove Citizen or Admin accounts from here.</p>
+            <p class="helper-text">Admins can view emails, edit roles, disable accounts, or delete accounts from here.</p>
             <div id="userManagementList" class="table-list"></div>
           </article>
         </section>
@@ -529,6 +517,19 @@
           </div>
         </form>
         <p id="closeContactsMessage" class="helper-text post-submit-message"></p>
+      </div>
+    </section>
+
+    <section id="complaintDetailOverlay" class="post-submit-overlay" hidden aria-label="Complaint details">
+      <div class="post-submit-modal screen-card complaint-detail-modal">
+        <div class="post-submit-top">
+          <div>
+            <p class="eyebrow dark">Complaint details</p>
+            <h2 id="complaintDetailTitle">Complaint</h2>
+          </div>
+          <button type="button" id="closeComplaintDetailBtn" class="chip-button post-submit-close" aria-label="Close complaint details">×</button>
+        </div>
+        <div id="complaintDetailBody" class="complaint-detail-body"></div>
       </div>
     </section>
 

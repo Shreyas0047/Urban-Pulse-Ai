@@ -9,6 +9,12 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
+      - key: VISION_MODEL_NAME
+        value: sentence-transformers/clip-ViT-B-32
+      - key: VISION_CONFIDENCE_THRESHOLD
+        value: "0.24"
+      - key: VISION_MAX_IMAGE_BYTES
+        value: "2097152"
 
   - name: smart-community-web
     type: web

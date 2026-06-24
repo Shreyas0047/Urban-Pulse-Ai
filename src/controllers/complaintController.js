@@ -2,7 +2,7 @@ const Complaint = require("../models/Complaint");
 const { transcribeAudio } = require("../services/aiClient");
 const { createComplaintFromPayload, createHttpError } = require("../services/complaintService");
 
-const ALLOWED_STATUSES = ["Queued", "In Progress", "Resolved", "Escalated"];
+const ALLOWED_STATUSES = ["Queued", "Needs Review", "In Progress", "Resolved", "Escalated"];
 const ALLOWED_PRIORITIES = ["Low", "Medium", "High", "Critical"];
 
 async function analyzeAndCreateComplaint(req, res, next) {
@@ -18,6 +18,8 @@ async function analyzeAndCreateComplaint(req, res, next) {
       status: analysis.status,
       assignedAuthority: analysis.assignedAuthority,
       mapLocation: analysis.mapLocation,
+      explainability: analysis.explainability,
+      aiMeta: analysis.aiMeta,
       alerts: analysis.alerts,
       notifications: analysis.notifications,
       auth: {
@@ -26,6 +28,28 @@ async function analyzeAndCreateComplaint(req, res, next) {
       },
       complaintId: complaint._id
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getComplaint(req, res, next) {
+  try {
+    const complaint = await Complaint.findById(req.params.id).lean();
+    if (!complaint) {
+      throw createHttpError("Complaint not found", 404);
+    }
+
+    const canViewDashboard = req.auth.permissions.includes("view_dashboard");
+    const ownsComplaint =
+      (req.auth.userId && complaint.reporterUserId === String(req.auth.userId)) ||
+      complaint.reporterUsername === req.auth.username;
+
+    if (!canViewDashboard && !ownsComplaint) {
+      throw createHttpError("Permission denied", 403);
+    }
+
+    res.json({ complaint });
   } catch (error) {
     next(error);
   }
@@ -70,6 +94,15 @@ async function updateComplaintStatus(req, res, next) {
         throw createHttpError("Invalid complaint status.", 400);
       }
       complaint.status = req.body.status;
+      complaint.statusHistory = [
+        ...(complaint.statusHistory || []),
+        {
+          status: req.body.status,
+          changedBy: req.auth.username,
+          changedAt: new Date(),
+          note: String(req.body.alertNote || req.body.note || "").trim()
+        }
+      ];
     }
 
     if (req.body.priority) {
@@ -119,6 +152,7 @@ async function acknowledgeAlert(req, res, next) {
 
 module.exports = {
   analyzeAndCreateComplaint,
+  getComplaint,
   transcribeComplaintAudio,
   updateComplaintStatus,
   acknowledgeAlert

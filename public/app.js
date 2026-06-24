@@ -32,6 +32,7 @@ const emailProgressFill = document.getElementById("emailProgressFill");
 const audioToggleBtn = document.getElementById("audioToggleBtn");
 const dashboardMessage = document.getElementById("dashboardMessage");
 const issueTokenBtn = document.getElementById("issueTokenBtn");
+const logoutBtn = document.getElementById("logoutBtn");
 const authRole = document.getElementById("authRole");
 const authPermissions = document.getElementById("authPermissions");
 const authTokenState = document.getElementById("authTokenState");
@@ -46,11 +47,6 @@ const authSubmitBtn = document.getElementById("authSubmitBtn");
 const authMessage = document.getElementById("authMessage");
 const authUsernameLabel = document.getElementById("authUsernameLabel");
 const authUsernameInput = document.getElementById("authUsername");
-const authCaptchaQuestion = document.getElementById("authCaptchaQuestion");
-const authCaptchaAnswer = document.getElementById("authCaptchaAnswer");
-const verifyCaptchaBtn = document.getElementById("verifyCaptchaBtn");
-const refreshCaptchaBtn = document.getElementById("refreshCaptchaBtn");
-const captchaVerifyMessage = document.getElementById("captchaVerifyMessage");
 const loginAttemptCounter = document.getElementById("loginAttemptCounter");
 const authEmailField = document.getElementById("authEmailField");
 const authEmailInput = document.getElementById("authEmail");
@@ -90,6 +86,10 @@ const closeContactsForm = document.getElementById("closeContactsForm");
 const sendCloseContactsBtn = document.getElementById("sendCloseContactsBtn");
 const cancelCloseContactsBtn = document.getElementById("cancelCloseContactsBtn");
 const closeContactsMessage = document.getElementById("closeContactsMessage");
+const complaintDetailOverlay = document.getElementById("complaintDetailOverlay");
+const closeComplaintDetailBtn = document.getElementById("closeComplaintDetailBtn");
+const complaintDetailTitle = document.getElementById("complaintDetailTitle");
+const complaintDetailBody = document.getElementById("complaintDetailBody");
 
 const storageKey = "smart-community-auth";
 const audioStorageKey = "smart-community-audio-enabled";
@@ -99,6 +99,7 @@ let authMode = "login";
 let currentImageFeatures = null;
 let currentImageInsight = null;
 let currentImageDataUrl = null;
+let currentImageAiPayload = null;
 let lastSubmittedReport = null;
 let audioEnabled = true;
 let audioContext = null;
@@ -116,8 +117,6 @@ let voiceRecordingChunks = [];
 let voiceRecordingStartedAt = 0;
 let isVoiceRecording = false;
 let registrationOtpIssued = false;
-let captchaAnswer = "";
-let captchaVerified = false;
 let loginAttemptsRemaining = 4;
 let loginLockTimer = null;
 let otpTimer = null;
@@ -170,58 +169,6 @@ function updateAudioToggleState() {
   audioToggleBtn.dataset.state = audioEnabled ? "enabled" : "muted";
 }
 
-function generateCaptcha() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz";
-  captchaAnswer = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
-  captchaVerified = false;
-  if (authCaptchaQuestion) {
-    authCaptchaQuestion.textContent = captchaAnswer;
-    authCaptchaQuestion.style.setProperty("--captcha-tilt", `${Math.random() * 5 - 2.5}deg`);
-    authCaptchaQuestion.style.setProperty("--captcha-offset", `${Math.random() * 8 - 4}px`);
-  }
-  if (authCaptchaAnswer) {
-    authCaptchaAnswer.value = "";
-  }
-  if (captchaVerifyMessage) {
-    captchaVerifyMessage.textContent = "";
-    captchaVerifyMessage.dataset.state = "";
-  }
-}
-
-function createCaptchaError(message) {
-  const error = new Error(message);
-  error.isCaptchaError = true;
-  return error;
-}
-
-function verifyCaptchaInput() {
-  if (String(authCaptchaAnswer?.value || "").trim() !== captchaAnswer) {
-    captchaVerified = false;
-    if (captchaVerifyMessage) {
-      captchaVerifyMessage.textContent = "Captcha does not match. Capital letters must be exact.";
-      captchaVerifyMessage.dataset.state = "error";
-    }
-    throw createCaptchaError("Captcha is incorrect. Capital letters must match exactly.");
-  }
-
-  captchaVerified = true;
-  if (captchaVerifyMessage) {
-    captchaVerifyMessage.textContent = "Captcha verified.";
-    captchaVerifyMessage.dataset.state = "success";
-  }
-}
-
-function validateCaptcha() {
-  if (!captchaVerified) {
-    throw createCaptchaError("Verify the captcha before continuing.");
-  }
-
-  if (String(authCaptchaAnswer?.value || "").trim() !== captchaAnswer) {
-    captchaVerified = false;
-    throw createCaptchaError("Captcha changed after verification. Verify it again.");
-  }
-}
-
 function resetLoginAttemptState() {
   loginAttemptsRemaining = 4;
   authSubmitBtn.disabled = false;
@@ -257,7 +204,6 @@ function startLoginRetryCounter() {
       loginAttemptsRemaining = 1;
       authSubmitBtn.disabled = false;
       loginAttemptCounter.textContent = "Extra login attempt available now.";
-      generateCaptcha();
       return;
     }
 
@@ -271,7 +217,6 @@ function recordClientLoginFailure() {
   if (loginAttemptsRemaining > 0) {
     loginAttemptCounter.hidden = false;
     loginAttemptCounter.textContent = `${loginAttemptsRemaining} login attempt${loginAttemptsRemaining === 1 ? "" : "s"} remaining.`;
-    generateCaptcha();
     return;
   }
 
@@ -314,8 +259,7 @@ function startOtpCountdown(email) {
       registrationOtpIssued = false;
       sendOtpBtn.disabled = false;
       sendOtpBtn.textContent = "Resend OTP";
-      setOtpTimerMessage("OTP expired. Verify captcha again, then press Resend OTP.", "expired");
-      generateCaptcha();
+      setOtpTimerMessage("OTP expired. Press Resend OTP to request a new code.", "expired");
       return;
     }
 
@@ -675,6 +619,11 @@ function clearAuthState(message) {
   }
 }
 
+function logoutCurrentUser(message = "Logged out successfully.") {
+  clearAuthState(message);
+  openAuthOverlay("login");
+}
+
 function loadSavedAuthState() {
   authState = null;
   try {
@@ -711,7 +660,6 @@ function openAuthOverlay(mode = "login") {
   sendOtpBtn.disabled = false;
   sendOtpBtn.textContent = "Send OTP";
   setOtpTimerMessage("");
-  generateCaptcha();
   if (mode === "login" && !loginLockTimer) {
     authSubmitBtn.disabled = false;
   }
@@ -728,7 +676,7 @@ function closeAuthOverlay() {
     return;
   }
   authOverlay.hidden = true;
-  if (faqOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false) {
+  if (faqOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
 }
@@ -744,7 +692,7 @@ function openFaqOverlay() {
 
 function closeFaqOverlay() {
   faqOverlay.hidden = true;
-  if (authOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false) {
+  if (authOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
 }
@@ -793,7 +741,7 @@ function closePostSubmitOverlay() {
   closeContactsForm.hidden = true;
   closeContactsForm.reset();
   closeContactsMessage.textContent = "";
-  if (authOverlay?.hidden !== false && faqOverlay?.hidden !== false) {
+  if (authOverlay?.hidden !== false && faqOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
 }
@@ -952,6 +900,8 @@ function applyPermissionState() {
   authRole.textContent = hasToken ? authState.role : "No role authenticated";
   authTokenState.textContent = hasToken ? "JWT session active" : "Press login to continue as Citizen or Admin";
   activeUsername.textContent = hasToken ? authState.username : "No username logged in";
+  issueTokenBtn.hidden = hasToken;
+  logoutBtn.hidden = !hasToken;
   renderPermissions(permissions);
   complaintSubmitBtn.disabled = !permissions.includes("submit_complaint");
   resetDashboardBtn.disabled = !permissions.includes("reset_dashboard");
@@ -998,25 +948,21 @@ function getAuthSuccessMessage(mode, data) {
 
 async function requestRegistrationOtp() {
   try {
-    validateCaptcha();
     sendOtpBtn.disabled = true;
     authSubmitBtn.disabled = true;
     const formData = new FormData(authForm);
     const payload = Object.fromEntries(formData.entries());
     delete payload.otp;
-    delete payload.captchaAnswer;
     const data = await apiRequest("/api/auth/register/request-otp", {
       method: "POST",
       body: JSON.stringify(payload)
     });
     registrationOtpIssued = true;
-    generateCaptcha();
     startOtpCountdown(payload.email);
     authMessage.textContent = `${data.message} Verify the OTP within 90 seconds.`;
     setDashboardMessage(authMessage.textContent, "success");
     authOtpInput.focus();
   } catch (error) {
-    generateCaptcha();
     authMessage.textContent = error.message;
     setDashboardMessage(error.message, "error");
   } finally {
@@ -1034,24 +980,24 @@ function formatDateTime(value) {
 }
 
 function buildGoogleMapsUrl(location, mapLocation) {
-  if (location && String(location).trim()) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`;
-  }
-
   if (mapLocation?.lat && mapLocation?.lng) {
     return `https://www.google.com/maps/search/?api=1&query=${mapLocation.lat},${mapLocation.lng}`;
+  }
+
+  if (location && String(location).trim()) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`;
   }
 
   return "https://www.google.com/maps";
 }
 
 function buildGoogleMapsEmbedUrl(location, mapLocation) {
-  if (location && String(location).trim()) {
-    return `https://www.google.com/maps?q=${encodeURIComponent(location.trim())}&output=embed`;
-  }
-
   if (mapLocation?.lat && mapLocation?.lng) {
     return `https://www.google.com/maps?q=${mapLocation.lat},${mapLocation.lng}&output=embed`;
+  }
+
+  if (location && String(location).trim()) {
+    return `https://www.google.com/maps?q=${encodeURIComponent(location.trim())}&output=embed`;
   }
 
   return "";
@@ -1419,10 +1365,16 @@ function authorityBadge(authority) {
   return `<span class="info-chip authority-chip authority-${formatTokenLabel(label)}">${escapeHtml(label)}</span>`;
 }
 
+function confidenceBadge(complaint) {
+  const label = complaint?.ai?.confidenceLabel || (complaint?.confidence < 52 ? "Needs review" : "AI reviewed");
+  return `<span class="info-chip confidence-chip">${escapeHtml(label)}</span>`;
+}
+
 function renderAnalysis(result) {
+  const reviewText = result.explainability?.reviewRequired ? " It needs admin review because confidence is low." : "";
   setDashboardMessage(
-    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}. Detected issue: ${result.nlp?.issueType || result.cv.detected}.`,
-    "success"
+    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}. Detected issue: ${result.nlp?.issueType || result.cv.detected}.${reviewText}`,
+    result.explainability?.reviewRequired ? "info" : "success"
   );
 }
 
@@ -1447,8 +1399,127 @@ function buildSubmittedReport(payload, result) {
     cvReason: result.cv?.reason || "Local AI matched the uploaded issue against known civic patterns.",
     notifications: Array.isArray(result.notifications) ? result.notifications : [],
     alerts: Array.isArray(result.alerts) ? result.alerts : [],
-    mapLocation: result.mapLocation || null
+    mapLocation: result.mapLocation || null,
+    explainability: result.explainability || null
+    ,
+    aiMeta: result.aiMeta || null
   };
+}
+
+function closeComplaintDetailOverlay() {
+  if (!complaintDetailOverlay) return;
+  complaintDetailOverlay.hidden = true;
+  if (authOverlay?.hidden !== false && faqOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false) {
+    document.body.classList.remove("auth-open");
+  }
+}
+
+function renderStatusHistory(history = []) {
+  if (!history.length) {
+    return `<div class="table-row empty-state"><span>No status history recorded yet.</span></div>`;
+  }
+
+  return history
+    .map(
+      (entry) => `
+        <div class="table-row status-history-row">
+          <div>
+            <strong>${escapeHtml(entry.status)}</strong>
+            <span>${escapeHtml(entry.note || "Status updated.")}</span>
+          </div>
+          <div>
+            <strong>${escapeHtml(entry.changedBy || "system")}</strong>
+            <span>${escapeHtml(formatDateTime(entry.changedAt))}</span>
+          </div>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderVisionCandidates(candidates = []) {
+  if (!candidates.length) {
+    return `<div class="table-row empty-state"><span>No vision candidates recorded.</span></div>`;
+  }
+
+  return candidates
+    .map(
+      (candidate) => `
+        <div class="table-row">
+          <div>
+            <strong>${escapeHtml(candidate.label || candidate.categoryLabel || "Candidate")}</strong>
+            <span>${escapeHtml(candidate.categoryId || candidate.category_id || "")}</span>
+          </div>
+          <div>
+            <strong>${Math.round(Number(candidate.confidence || 0) * 100)}%</strong>
+            <span>${escapeHtml(candidate.source || "vision")}</span>
+          </div>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderComplaintDetail(complaint) {
+  complaintDetailTitle.textContent = complaint.type || "Complaint";
+  const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
+  complaintDetailBody.innerHTML = `
+    <div class="complaint-detail-grid">
+      <div class="detail-block">
+        <span>Location</span>
+        <strong>${escapeHtml(complaint.location || "Unknown")}</strong>
+      </div>
+      <div class="detail-block">
+        <span>Status</span>
+        <strong>${escapeHtml(complaint.status || "Queued")}</strong>
+      </div>
+      <div class="detail-block">
+        <span>Priority</span>
+        <strong>${escapeHtml(complaint.priority || "Low")}</strong>
+      </div>
+      <div class="detail-block">
+        <span>Authority</span>
+        <strong>${escapeHtml(complaint.assignedAuthority || "Gram Panchayat")}</strong>
+      </div>
+    </div>
+    <section class="detail-section">
+      <h3>Complaint Narrative</h3>
+      <p>${escapeHtml(complaint.description || "No complaint description recorded.")}</p>
+    </section>
+    <section class="detail-section">
+      <h3>AI Explanation</h3>
+      <p>${escapeHtml(complaint.ai?.explanation || complaint.ai?.cvReason || "No AI explanation recorded.")}</p>
+      <div class="issue-meta">
+        ${confidenceBadge(complaint)}
+        ${severityBadge(complaint.priority)}
+        ${authorityBadge(complaint.assignedAuthority)}
+      </div>
+      <p class="helper-text">Recommended team: ${escapeHtml(complaint.ai?.recommendedTeam || "Help Desk")} · AI engine: ${escapeHtml(complaint.ai?.engine || "unknown")} · Fallback: ${complaint.ai?.fallbackUsed ? "yes" : "no"} · Geocoding: ${escapeHtml(complaint.ai?.geocodingSource || "unknown")}</p>
+    </section>
+    <section class="detail-section">
+      <h3>Vision Candidates</h3>
+      <div class="table-list">${renderVisionCandidates(complaint.ai?.visionCandidates || [])}</div>
+    </section>
+    <section class="detail-section">
+      <h3>Status History</h3>
+      <div class="table-list">${renderStatusHistory(complaint.statusHistory || [])}</div>
+    </section>
+    <section class="detail-section">
+      <h3>Location</h3>
+      <p><a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noreferrer noopener">Open location in Google Maps</a></p>
+    </section>
+  `;
+  complaintDetailOverlay.hidden = false;
+  document.body.classList.add("auth-open");
+}
+
+async function openComplaintDetail(complaintId) {
+  try {
+    const data = await apiRequest(`/api/complaints/${complaintId}`, { method: "GET" });
+    renderComplaintDetail(data.complaint);
+  } catch (error) {
+    setDashboardMessage(error.message, "error");
+  }
 }
 
 function buildPdfFilename(report) {
@@ -1599,6 +1670,11 @@ async function generatePdfReport(report, options = {}) {
   drawRow("AI Description", report.aiDescription);
   drawRow("Detected Pattern", report.detection);
   drawRow("AI Reasoning", report.cvReason);
+  drawRow("Explainability", report.explainability?.explanation || "No explainability summary recorded.");
+  drawRow("Confidence", report.explainability?.confidenceLabel || report.priority);
+  drawRow("AI Engine", report.aiMeta?.engine || "Not recorded");
+  drawRow("AI Provider", report.aiMeta?.provider || "Not recorded");
+  drawRow("Vision Engine", report.aiMeta?.visionEngine || "Not recorded");
 
   drawSectionTitle("5. Evidence and Location Reference");
   ensureSpace(95);
@@ -1697,13 +1773,16 @@ function renderComplaints(complaints) {
           <div class="issue-meta">
             ${severityBadge(complaint.priority)}
             ${authorityBadge(complaint.assignedAuthority)}
+            ${confidenceBadge(complaint)}
           </div>
+          <button type="button" class="secondary-button view-complaint-btn" data-complaint-id="${complaint._id}">View Details</button>
           ${
             canUpdateStatus
               ? `
             <div class="status-actions">
               <select class="status-select" data-complaint-id="${complaint._id}">
                 <option value="Queued" ${complaint.status === "Queued" ? "selected" : ""}>Pending</option>
+                <option value="Needs Review" ${complaint.status === "Needs Review" ? "selected" : ""}>Needs Review</option>
                 <option value="In Progress" ${complaint.status === "In Progress" ? "selected" : ""}>In Progress</option>
                 <option value="Resolved" ${complaint.status === "Resolved" ? "selected" : ""}>Resolved</option>
                 <option value="Escalated" ${complaint.status === "Escalated" ? "selected" : ""}>Escalated</option>
@@ -1717,6 +1796,10 @@ function renderComplaints(complaints) {
       `
     )
     .join("");
+
+  container.querySelectorAll(".view-complaint-btn").forEach((button) => {
+    button.addEventListener("click", () => openComplaintDetail(button.dataset.complaintId));
+  });
 
   if (canUpdateStatus) {
     container.querySelectorAll(".update-status-btn").forEach((button) => {
@@ -1756,6 +1839,7 @@ function renderAdminTable(complaints) {
             <strong>${escapeHtml(complaint.assignedAuthority || "Gram Panchayat")}</strong>
             <span>${escapeHtml(complaint.status)}</span>
           </div>
+          <button type="button" class="chip-button view-complaint-btn" data-complaint-id="${complaint._id}">Details</button>
         </div>
       `
     )
@@ -1763,6 +1847,10 @@ function renderAdminTable(complaints) {
 
   document.getElementById("adminTable").innerHTML =
     adminMarkup || `<div class="table-row empty-state"><span>No complaints are currently in the admin queue.</span></div>`;
+
+  document.querySelectorAll("#adminTable .view-complaint-btn").forEach((button) => {
+    button.addEventListener("click", () => openComplaintDetail(button.dataset.complaintId));
+  });
 }
 
 function renderAlerts(complaints = []) {
@@ -1841,21 +1929,89 @@ function renderUserManagement(users = []) {
         <article class="table-row user-row">
           <div>
             <strong>${escapeHtml(user.username)}</strong>
-            <span>${escapeHtml(user.role)}</span>
+            <span>${escapeHtml(user.email || "No email recorded")}</span>
+            <span>${user.disabledAt ? `Disabled by ${escapeHtml(user.disabledBy || "admin")}` : "Active account"}</span>
           </div>
-          <button
-            type="button"
-            class="danger-button delete-user-btn"
-            data-user-id="${user._id}"
-            data-username="${user.username}"
-            data-role="${user.role}"
-          >
-            Delete ${user.role}
-          </button>
+          <div class="user-admin-actions">
+            <select class="user-role-select" data-user-id="${user._id}">
+              <option value="Citizen" ${user.role === "Citizen" ? "selected" : ""}>Citizen</option>
+              <option value="Admin" ${user.role === "Admin" ? "selected" : ""}>Admin</option>
+            </select>
+            <button
+              type="button"
+              class="secondary-button save-user-btn"
+              data-user-id="${user._id}"
+            >
+              Save Role
+            </button>
+            <button
+              type="button"
+              class="secondary-button toggle-user-btn"
+              data-user-id="${user._id}"
+              data-disabled="${user.disabledAt ? "true" : "false"}"
+              data-username="${escapeHtml(user.username)}"
+            >
+              ${user.disabledAt ? "Enable" : "Disable"}
+            </button>
+            <button
+              type="button"
+              class="danger-button delete-user-btn"
+              data-user-id="${user._id}"
+              data-username="${escapeHtml(user.username)}"
+              data-role="${escapeHtml(user.role)}"
+            >
+              Delete
+            </button>
+          </div>
         </article>
       `
     )
     .join("");
+
+  userManagementList.querySelectorAll(".save-user-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const userId = button.dataset.userId;
+      const select = userManagementList.querySelector(`.user-role-select[data-user-id="${userId}"]`);
+
+      try {
+        button.disabled = true;
+        const result = await apiRequest(`/api/users/${userId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ role: select.value })
+        });
+        setDashboardMessage(result.message, "success");
+        await loadDashboard();
+      } catch (error) {
+        setDashboardMessage(error.message, "error");
+        button.disabled = false;
+      }
+    });
+  });
+
+  userManagementList.querySelectorAll(".toggle-user-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const disabled = button.dataset.disabled === "true";
+      const action = disabled ? "enable" : "disable";
+      const confirmed = window.confirm(`${action[0].toUpperCase()}${action.slice(1)} account "${button.dataset.username}"?`);
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        button.disabled = true;
+        const result = await apiRequest(`/api/users/${button.dataset.userId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ disabled: !disabled })
+        });
+        setDashboardMessage(result.message, "success");
+        await loadDashboard();
+      } catch (error) {
+        setDashboardMessage(error.message, "error");
+        button.disabled = false;
+      }
+    });
+  });
 
   userManagementList.querySelectorAll(".delete-user-btn").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -2303,7 +2459,8 @@ function resetComposer() {
   aiAccuracyStatus.textContent = "Upload an image to preview AI confidence.";
   currentImageFeatures = null;
   currentImageInsight = null;
-  currentImageDataUrl = null;
+    currentImageDataUrl = null;
+    currentImageAiPayload = null;
   clearEmailProgressTimer();
   emailProgress.hidden = true;
   emailProgressFill.style.width = "0%";
@@ -2336,6 +2493,33 @@ function readFileAsDataUrl(file) {
     reader.onerror = () => reject(new Error("Unable to prepare the uploaded image for PDF export."));
     reader.readAsDataURL(file);
   });
+}
+
+async function prepareImageForAi(file) {
+  if (!file) return null;
+
+  const image = await loadImageElement(file);
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  const maxSide = 768;
+  const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  const mimeType = file.type === "image/png" || file.type === "image/webp" ? file.type : "image/jpeg";
+  const quality = mimeType === "image/jpeg" ? 0.78 : undefined;
+  const dataUrl = canvas.toDataURL(mimeType, quality);
+  const base64 = extractBase64Payload(dataUrl);
+
+  return {
+    base64,
+    mimeType,
+    width: canvas.width,
+    height: canvas.height,
+    bytes: Math.floor((base64.length * 3) / 4)
+  };
 }
 
 async function extractImageFeatures(file) {
@@ -2430,6 +2614,7 @@ function setupImageUpload() {
       currentImageFeatures = null;
       currentImageInsight = null;
       currentImageDataUrl = null;
+      currentImageAiPayload = null;
       return;
     }
 
@@ -2441,6 +2626,7 @@ function setupImageUpload() {
 
     try {
       currentImageDataUrl = await readFileAsDataUrl(file);
+      currentImageAiPayload = await prepareImageForAi(file);
       currentImageFeatures = await extractImageFeatures(file);
       currentImageInsight = describeImageFromFeatures(currentImageFeatures);
       aiImageDescription.value = currentImageInsight.description;
@@ -2449,6 +2635,7 @@ function setupImageUpload() {
       currentImageFeatures = null;
       currentImageInsight = null;
       currentImageDataUrl = null;
+      currentImageAiPayload = null;
       aiImageDescription.value = "AI could not inspect this image.";
       aiAccuracyStatus.textContent = error.message;
     }
@@ -2467,22 +2654,8 @@ showAiAccuracyBtn.addEventListener("click", () => {
 showLoginBtn.addEventListener("click", () => openAuthOverlay("login"));
 showRegisterBtn.addEventListener("click", () => openAuthOverlay("register"));
 sendOtpBtn?.addEventListener("click", requestRegistrationOtp);
-verifyCaptchaBtn?.addEventListener("click", () => {
-  try {
-    verifyCaptchaInput();
-  } catch (error) {
-    authMessage.textContent = error.message;
-  }
-});
-refreshCaptchaBtn?.addEventListener("click", generateCaptcha);
-authCaptchaAnswer?.addEventListener("input", () => {
-  captchaVerified = false;
-  if (captchaVerifyMessage) {
-    captchaVerifyMessage.textContent = "";
-    captchaVerifyMessage.dataset.state = "";
-  }
-});
 issueTokenBtn.addEventListener("click", () => openAuthOverlay("login"));
+logoutBtn?.addEventListener("click", () => logoutCurrentUser());
 closeAuthBtn.addEventListener("click", closeAuthOverlay);
 openFaqLink?.addEventListener("click", (event) => {
   event.preventDefault();
@@ -2490,6 +2663,7 @@ openFaqLink?.addEventListener("click", (event) => {
 });
 closeFaqBtn?.addEventListener("click", closeFaqOverlay);
 closePostSubmitBtn?.addEventListener("click", closePostSubmitOverlay);
+closeComplaintDetailBtn?.addEventListener("click", closeComplaintDetailOverlay);
 modalGeneratePdfBtn?.addEventListener("click", () => generatePdfBtn.click());
 modalEmailBbmpBtn?.addEventListener("click", () => emailBbmpBtn.click());
 informClosedOnesBtn?.addEventListener("click", () => {
@@ -2633,11 +2807,9 @@ authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   try {
-    validateCaptcha();
     authSubmitBtn.disabled = true;
     const formData = new FormData(authForm);
     const payload = Object.fromEntries(formData.entries());
-    delete payload.captchaAnswer;
 
     if (authMode === "register" && !registrationOtpIssued) {
       throw new Error("Send the OTP to your email before completing registration.");
@@ -2665,10 +2837,8 @@ authForm.addEventListener("submit", async (event) => {
     goToMainDashboard();
     await loadDashboard();
   } catch (error) {
-    if (authMode === "login" && !error.isCaptchaError) {
+    if (authMode === "login") {
       recordClientLoginFailure();
-    } else {
-      generateCaptcha();
     }
     authMessage.textContent = error.message;
     setDashboardMessage(error.message, "error");
@@ -2697,6 +2867,11 @@ form.addEventListener("submit", async (event) => {
     payload.complaintInputMode = complaintPayload.complaintInputMode;
     payload.iotTriggered = false;
     payload.imageFeatures = currentImageFeatures || (await extractImageFeatures(imageFile));
+    const imageAiPayload = currentImageAiPayload || (imageFile ? await prepareImageForAi(imageFile) : null);
+    if (imageAiPayload) {
+      payload.imageBase64 = imageAiPayload.base64;
+      payload.imageMimeType = imageAiPayload.mimeType;
+    }
     payload.imageHint = aiImageDescription.value.trim();
     showTypedLocationOnMap();
 

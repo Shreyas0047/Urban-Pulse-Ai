@@ -8,6 +8,50 @@ from pipeline import run_hybrid_pipeline
 def compact_spaces(value):
     return " ".join(str(value or "").replace("\n", " ").split()).strip()
 
+
+FILLER_PHRASES = [
+    "um",
+    "uh",
+    "please note that",
+    "i want to say",
+    "i would like to report",
+    "i want to report",
+    "this is a complaint about",
+]
+
+
+TRANSCRIPT_REPLACEMENTS = {
+    "water logging": "waterlogging",
+    "street light": "streetlight",
+    "garbage bin": "garbage bin",
+    "bbmp": "BBMP",
+}
+
+
+def normalize_complaint_transcript(transcript):
+    cleaned = compact_spaces(transcript)
+    lowered = cleaned.lower()
+
+    for phrase in FILLER_PHRASES:
+        lowered = lowered.replace(phrase, " ")
+
+    lowered = compact_spaces(lowered)
+    for source, target in TRANSCRIPT_REPLACEMENTS.items():
+        lowered = lowered.replace(source, target)
+
+    if not lowered:
+        return "", ""
+
+    normalized = lowered[:1].upper() + lowered[1:]
+    if normalized and normalized[-1] not in ".!?":
+        normalized = f"{normalized}."
+
+    summary = normalized
+    if len(summary) > 420:
+        summary = summary[:417].rsplit(" ", 1)[0].rstrip(".,;:") + "..."
+
+    return normalized, summary
+
 app = Flask(__name__)
 CORS(app)
 
@@ -31,16 +75,15 @@ def process_transcript():
     if not transcript:
         return jsonify({"error": "Transcript text is required."}), 400
 
-    normalized = transcript[:1].upper() + transcript[1:] if transcript else transcript
-    if normalized and normalized[-1] not in ".!?":
-        normalized = f"{normalized}."
+    normalized, summary = normalize_complaint_transcript(transcript)
 
     return jsonify(
         {
             "transcript": transcript,
             "normalizedTranscript": normalized,
-            "summary": normalized,
+            "summary": summary,
             "language": payload.get("language") or "unknown",
+            "provider": "flask-transcript-normalizer-v2",
         }
     )
 

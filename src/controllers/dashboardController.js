@@ -27,7 +27,7 @@ async function getDashboard(req, res, next) {
     const [complaints, users] = await Promise.all([
       Complaint.find(complaintFilter).sort({ createdAt: -1 }).lean(),
       canDeleteUsers
-        ? User.find({}, { username: 1, role: 1, createdAt: 1 }).sort({ role: 1, username: 1 }).lean()
+        ? User.find({}, { username: 1, email: 1, role: 1, disabledAt: 1, disabledBy: 1, lastLoginAt: 1, createdAt: 1 }).sort({ role: 1, username: 1 }).lean()
         : Promise.resolve([])
     ]);
 

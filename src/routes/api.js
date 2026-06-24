@@ -1,10 +1,10 @@
 const express = require("express");
 const { getRoles, issueToken, requestRegistrationOtp, register, login } = require("../controllers/authController");
 const { getDashboard, resetDashboard } = require("../controllers/dashboardController");
-const { analyzeAndCreateComplaint, transcribeComplaintAudio, updateComplaintStatus, acknowledgeAlert } = require("../controllers/complaintController");
+const { analyzeAndCreateComplaint, getComplaint, transcribeComplaintAudio, updateComplaintStatus, acknowledgeAlert } = require("../controllers/complaintController");
 const { getChatHistory, postChatMessage, clearChatHistory } = require("../controllers/chatbotController");
 const { emailBbmpComplaint, informCloseContacts } = require("../controllers/emailController");
-const { deleteUser } = require("../controllers/userController");
+const { deleteUser, updateUser } = require("../controllers/userController");
 const { authenticate, requirePermission } = require("../middleware/auth");
 
 const router = express.Router();
@@ -25,9 +25,11 @@ router.delete("/chatbot/history", requirePermission("submit_complaint"), clearCh
 router.post("/chatbot/message", requirePermission("submit_complaint"), postChatMessage);
 router.post("/email-bbmp", requirePermission("submit_complaint"), emailBbmpComplaint);
 router.post("/inform-close-contacts", requirePermission("submit_complaint"), informCloseContacts);
+router.get("/complaints/:id", requirePermission("submit_complaint"), getComplaint);
 router.patch("/complaints/:id/status", requirePermission("update_complaint_status"), updateComplaintStatus);
 router.post("/complaints/:id/alerts/acknowledge", requirePermission("manage_alerts"), acknowledgeAlert);
 router.post("/reset-dashboard", requirePermission("reset_dashboard"), resetDashboard);
+router.patch("/users/:id", requirePermission("delete_users"), updateUser);
 router.delete("/users/:id", requirePermission("delete_users"), deleteUser);
 
 module.exports = router;

@@ -1,72 +1,134 @@
 # Urban Pulse Ai
 
-Urban Pulse Ai is an AI-powered smart community complaint detection and escalation system.
+<p align="center">
+  <strong>AI-powered civic complaint intake, classification, review, and escalation platform.</strong>
+</p>
 
-Current stack:
+<p align="center">
+  <img alt="Node.js" src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white" />
+  <img alt="Flask" src="https://img.shields.io/badge/Flask-AI_Service-000000?style=for-the-badge&logo=flask&logoColor=white" />
+  <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb&logoColor=white" />
+  <img alt="AI Vision" src="https://img.shields.io/badge/Vision-CLIP_Ready-5B5FC7?style=for-the-badge" />
+  <img alt="GitHub Mermaid" src="https://img.shields.io/badge/GitHub-Mermaid_Diagrams-0969DA?style=for-the-badge&logo=github&logoColor=white" />
+</p>
 
-- `Node.js + Express` for the main web app, auth, complaint APIs, dashboard, and email
-- `Flask` AI microservice for complaint understanding, transcript post-processing, and chatbot intent handling
-- `MongoDB Atlas` for users, complaints, chat sessions, and pending OTP registrations
-- `Deepgram` for speech-to-text
-- `SMTP` for OTP and BBMP email delivery
+Urban Pulse Ai helps citizens submit civic complaints with text, images, or voice, then uses a production-oriented AI pipeline to classify the issue, estimate severity, explain the decision, and route the complaint for review or escalation.
 
-## Core Features
+The README uses GitHub-visible components only: badges, Mermaid diagrams, tables, and collapsible sections. GitHub does not run custom JavaScript or CSS animations inside README files, so the architecture visuals below are rendered natively by GitHub.
 
-- text, image, and voice complaint submission
-- Deepgram-based live voice transcription
-- AI-assisted complaint categorization, sentiment, severity, and priority analysis
-- chatbot with complaint status lookup, complaint creation assistance, FAQ help, and navigation help
-- theme-matched floating AI helper bot with context-aware tips and voice/chat state animations
-- PDF complaint report generation
-- BBMP email forwarding with attachment
-- Admin dashboard for alerts, status updates, resets, and account management
+## Current System
 
-## Project Structure
+| Layer | Component | Responsibility |
+| --- | --- | --- |
+| Frontend | `public/` | Citizen/admin dashboard, complaint form, image preparation, voice UI, chatbot, PDF export, account actions |
+| API | `src/` | Express routes, auth, validation, complaint workflow, geocoding, email, AI orchestration |
+| Database | MongoDB | Users, complaints, status history, chat sessions, registration OTPs |
+| AI service | `ai_service/` | Flask `/analyze`, `/transcript/process`, `/chat`, `/health` endpoints |
+| Shared AI data | `shared/aiCategories.json` | Single source of truth for complaint categories across Node and Flask |
+| Evaluation | `scripts/evaluateAi.js`, `scripts/evaluateVision.py` | Deterministic category evaluation and optional local vision evaluation |
+| Speech | Deepgram | Live speech-to-text with transcript cleanup through the AI service |
+| Email | SMTP | OTP delivery and BBMP complaint forwarding |
 
-- `public/`
-  Frontend dashboard, complaint form, chatbot UI, and static assets
-- `src/`
-  Express backend with routes, controllers, models, middleware, and services
-- `ai_service/`
-  Flask AI service for `/analyze`, `/transcript/process`, `/chat`, and `/health`
+## Architecture
 
-## Current AI Flow
+```mermaid
+flowchart LR
+    Citizen[Citizen Browser] --> Frontend[Frontend Dashboard]
+    Admin[Admin Browser] --> Frontend
+    Frontend --> Express[Express API]
+    Express --> Mongo[(MongoDB)]
+    Express --> Flask[Flask AI Service]
+    Flask --> Catalog[Shared Category Catalog]
+    Flask --> TextAI[Text Classifier]
+    Flask --> VisionAI[Local CLIP Vision]
+    Flask --> VisionFallback[Feature Fallback]
+    Express --> Deepgram[Deepgram STT]
+    Express --> SMTP[SMTP Email]
+    Express --> Geo[Nominatim Geocoding]
+```
 
-Complaint flow:
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant API as Express API
+    participant AI as Flask AI
+    participant DB as MongoDB
+    participant Mail as SMTP
 
-1. Frontend collects text, image-derived hints/features, and optional voice transcript
-2. Express enriches the request with prior complaints from the same user and recent complaints in the same area
-3. Flask runs a hybrid AI pipeline:
-   - preprocessing and normalization
-   - semantic similarity using `sentence-transformers`
-   - keyword extraction with n-gram support
-   - multi-label category scoring
-   - sentiment and severity analysis
-   - context-aware repeat complaint analysis
-   - image-text fusion
-   - explainable priority reasoning
-4. Express stores the result in MongoDB
+    U->>FE: Submit text, image, or voice complaint
+    FE->>FE: Resize image and prepare AI payload
+    FE->>API: POST complaint
+    API->>API: Validate auth, image size, MIME type
+    API->>AI: Analyze complaint and optional image
+    AI->>AI: Score text, vision, context, severity
+    AI-->>API: Category, confidence, explanation, provenance
+    API->>API: Calibrate confidence and geocode location
+    API->>DB: Store complaint, status history, AI metadata
+    API->>Mail: Optional BBMP forwarding
+    API-->>FE: Complaint result and review state
+```
 
-Voice flow:
+## Updated AI Service
 
-1. Frontend records audio
-2. Express sends audio to Deepgram
-3. Deepgram returns transcript text
-4. Express sends transcript to Flask `/transcript/process`
-5. Flask normalizes the transcript
-6. Frontend fills the voice complaint summary box
+The AI service is now broader, more explainable, and easier to evaluate. It no longer depends on separate category definitions in different runtimes, and image classification now supports every shared complaint category through CLIP-style local vision when available, with deterministic fallback behavior when it is not.
 
-Chatbot flow:
+| Area | Old AI Service | New AI Service |
+| --- | --- | --- |
+| Category source | Python and Node logic could drift separately | `shared/aiCategories.json` drives Flask and Express fallback |
+| Image input | Mostly frontend-derived hints and narrow image signals | Browser sends resized `imageBase64` plus MIME type to the AI pipeline |
+| Vision range | Limited image mapping for a small set of visual issues | All shared categories can receive image candidates |
+| Vision model | No local zero-shot vision model path | Optional local CLIP model: `sentence-transformers/clip-ViT-B-32` |
+| Vision fallback | Implicit and difficult to inspect | Explicit feature fallback with `provider`, `model`, and `fallbackUsed` metadata |
+| Precision | One dominant category with limited decision context | Top candidates, confidence breakdown, label, explanation, and review flag |
+| Low-confidence handling | Less explicit review routing | Low-confidence complaints become `Needs Review` |
+| Auditability | Limited AI provenance on stored complaints | Provider, engine, model, fallback state, category ID, vision candidates, geocoding source, and evaluation version are stored |
+| Evaluation | No focused local AI regression command | `npm run evaluate:ai` plus optional `AI_EVAL_WITH_VISION=true npm run evaluate:ai` |
+| Logs | General application logs | Structured `ai_complaint_decision` JSON logs |
+| Transcript handling | Basic transcript pass-through | Filler cleanup, civic-term normalization, summaries, and provider metadata |
 
-1. Frontend sends user message and userId to Express
-2. Express forwards the message/history to Flask `/chat`
-3. Flask returns intent + response suggestion
-4. Express resolves complaint status or complaint creation when needed
-5. Frontend renders chat history and assistant messages
+## AI Capabilities
 
-## Environment Variables
+| Capability | Status | Notes |
+| --- | --- | --- |
+| Text classification | Production-ready baseline | Semantic similarity, keyword signals, category aliases, severity, sentiment, priority |
+| Image classification | Broadened | Local CLIP model when available, feature fallback when unavailable |
+| Voice complaints | Integrated | Deepgram STT with Flask transcript post-processing |
+| Context awareness | Integrated | Prior user complaints and nearby/recent issues influence urgency |
+| Explainability | Integrated | Explanation, confidence label, confidence breakdown, and candidates are returned |
+| Review routing | Integrated | Uncertain cases are assigned `Needs Review` |
+| Evaluation | Integrated | Deterministic local evaluation with optional vision checks |
 
-Create a `.env` file from `.env.example` and set:
+## Product And User Experience
+
+| Area | Current Behavior |
+| --- | --- |
+| Authentication | Email OTP registration, standard login, no captcha, no demo login route |
+| Citizen workflow | Submit text, image, or voice complaints and review generated summaries |
+| Admin workflow | Review complaints, update statuses, inspect details, manage accounts |
+| Complaint detail | Modal detail view with AI metadata, status, and user context |
+| Status tracking | Complaint status history is persisted |
+| AI helper | Floating chatbot supports status lookup, complaint guidance, FAQ, and navigation help |
+| Reporting | PDF complaint reports and BBMP email forwarding |
+| Safety | Low-confidence AI classifications require review instead of being silently trusted |
+
+## Run Locally
+
+Install Node dependencies:
+
+```bash
+npm install
+```
+
+Install Python dependencies:
+
+```bash
+pip install -r ai_service/requirements.txt
+```
+
+Use Python 3.11 for the full AI model stack. The Render blueprint pins `PYTHON_VERSION=3.11.11`; newer local Python versions can still run the Flask service in deterministic fallback mode, but skip the `torch` and `sentence-transformers` model packages.
+
+Create `.env` in the project root:
 
 ```bash
 PORT=3000
@@ -86,44 +148,26 @@ CORS_ORIGIN=http://localhost:3000
 ALLOW_ROLE_TOKEN_ISSUE=false
 ```
 
-Flask AI environment variables:
+AI-specific environment variables:
 
 ```bash
 EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+VISION_MODEL_NAME=sentence-transformers/clip-ViT-B-32
+VISION_CONFIDENCE_THRESHOLD=0.24
+VISION_MAX_IMAGE_BYTES=2097152
 VISION_IMAGE_WEIGHT=0.38
 TEXT_CONFIDENCE_THRESHOLD=0.26
 CONTEXT_REPEAT_HIGH=5
 CONTEXT_REPEAT_MEDIUM=3
 MAX_EXPLANATION_KEYWORDS=4
+AI_EVAL_MIN_ACCURACY=0.65
 ```
 
-## Install
-
-Node dependencies:
-
-```bash
-npm install
-```
-
-Python dependencies:
-
-```bash
-pip install -r ai_service/requirements.txt
-```
-
-Seed demo data:
+Optional database seed:
 
 ```bash
 npm run seed
 ```
-
-Wipe and reseed:
-
-```bash
-npm run seed:fresh
-```
-
-## Run Locally
 
 Start the Flask AI service:
 
@@ -131,150 +175,144 @@ Start the Flask AI service:
 npm run start:ai
 ```
 
-Start the Express app:
+Start the Express app in another terminal:
 
 ```bash
 npm start
 ```
 
-Open:
+Open the app:
 
-```bash
+```text
 http://localhost:3000
 ```
 
-## Deploy
+The first Python 3.11 vision run may download or load the configured `sentence-transformers/clip-ViT-B-32` model. If the model cannot load, the AI service still returns deterministic feature-fallback image candidates.
+
+## Evaluation
+
+Run the deterministic AI category evaluation:
+
+```bash
+npm run evaluate:ai
+```
+
+Run category evaluation plus optional real image vision evaluation:
+
+```bash
+AI_EVAL_WITH_VISION=true npm run evaluate:ai
+```
+
+The default minimum accuracy threshold is controlled by:
+
+```bash
+AI_EVAL_MIN_ACCURACY=0.65
+```
+
+## API And Workflow Components
+
+<details>
+<summary>Complaint Intake</summary>
+
+- Validates authenticated users.
+- Accepts complaint text, location, optional image, and optional voice transcript.
+- Compresses browser image input before sending it for AI analysis.
+- Validates AI image payload size and MIME type on the server.
+- Runs AI analysis through Flask when available.
+- Falls back to local deterministic analysis if the AI service is unavailable.
+- Stores AI provenance and status history with the complaint.
+
+</details>
+
+<details>
+<summary>AI Decision Metadata</summary>
+
+Stored complaint AI metadata includes:
+
+- `provider`
+- `engine`
+- `model`
+- `fallbackUsed`
+- `categoryId`
+- `visionEngine`
+- `visionProvider`
+- `visionFallbackUsed`
+- `visionCandidates`
+- `confidenceBreakdown`
+- `evaluationVersion`
+- `geocodingSource`
+- `explanation`
+- `confidenceLabel`
+- `reviewRequired`
+
+</details>
+
+<details>
+<summary>Authentication Notes</summary>
+
+- Captcha has been removed from the login page.
+- Demo login has been removed.
+- Registration uses email OTP verification.
+- Seed scripts may create local seed users for development databases; replace or remove seeded credentials before production use.
+
+</details>
+
+## Project Structure
+
+```text
+Urban-Pulse-Ai/
+|-- ai_service/              # Flask AI service
+|   |-- app.py               # AI HTTP endpoints
+|   |-- pipeline.py          # Complaint analysis pipeline
+|   |-- vision_analysis.py   # CLIP vision and feature fallback
+|   |-- category_catalog.py  # Shared category loader
+|   `-- requirements.txt
+|-- public/                  # Browser UI
+|   |-- app.js               # Complaint, auth, admin, image preparation
+|   |-- chatbot.js           # AI helper bot
+|   |-- audio-transcriber.js # Voice recording/transcription UI
+|   `-- styles.css
+|-- scripts/
+|   |-- evaluateAi.js        # Main AI evaluation runner
+|   |-- evaluateVision.py    # Optional image evaluation
+|   `-- seedDatabase.js
+|-- shared/
+|   `-- aiCategories.json    # Shared complaint category catalog
+|-- src/
+|   |-- controllers/         # Express controllers
+|   |-- middleware/          # Auth and security middleware
+|   |-- models/              # MongoDB models
+|   |-- routes/              # API routes
+|   `-- services/            # AI, complaint, email, OTP, seed services
+|-- dataset/                 # Local category evaluation images/data
+|-- render.yaml              # Render deployment blueprint
+|-- package.json
+`-- README.md
+```
+
+## Deployment
 
 Recommended production layout:
 
-- `MongoDB Atlas` for the database
-- `Render` Node web service for the main app
-- `Render` Python web service for the Flask AI service
-- `Deepgram` for STT
+| Service | Runtime | Notes |
+| --- | --- | --- |
+| Main app | Node.js on Render | Runs Express, frontend, auth, complaints, email, and AI orchestration |
+| AI service | Python on Render | Runs Flask AI endpoints and loads text/vision models |
+| Database | MongoDB Atlas | Stores users, complaints, chat sessions, OTPs, and AI metadata |
+| Speech | Deepgram | Provides speech-to-text for voice complaints |
+| Email | SMTP provider | Sends OTPs and complaint forwarding emails |
 
-### 1. Deploy the Flask AI Service on Render
+Use `render.yaml` as the deployment starting point. Configure production secrets in the Render dashboard instead of committing them.
 
-Create a Python web service with:
+## Production Checklist
 
-- Root Directory: `ai_service`
-- Build Command:
-
-```bash
-pip install -r requirements.txt
-```
-
-- Start Command:
-
-```bash
-gunicorn app:app
-```
-
-Recommended Render env vars:
-
-```bash
-PYTHON_VERSION=3.11.11
-EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
-VISION_IMAGE_WEIGHT=0.38
-TEXT_CONFIDENCE_THRESHOLD=0.26
-CONTEXT_REPEAT_HIGH=5
-CONTEXT_REPEAT_MEDIUM=3
-MAX_EXPLANATION_KEYWORDS=4
-```
-
-### 2. Deploy the Node App on Render
-
-Create a Node web service with:
-
-- Root Directory: project root
-- Build Command:
-
-```bash
-npm install
-```
-
-- Start Command:
-
-```bash
-npm start
-```
-
-Recommended Node env vars:
-
-```bash
-MONGODB_URI=your_atlas_uri
-JWT_SECRET=your_strong_secret
-AI_SERVICE_URL=https://your-flask-service.onrender.com
-DEEPGRAM_API_KEY=your_deepgram_api_key
-DEEPGRAM_MODEL=nova-3
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER=your_email@example.com
-SMTP_PASS=your_app_password
-SMTP_FROM=your_email@example.com
-BBMP_EMAIL_TO=comm@bbmp.gov.in
-CORS_ORIGIN=https://your-node-service.onrender.com
-ALLOW_ROLE_TOKEN_ISSUE=false
-```
-
-### 3. Important Deployment Notes
-
-- Deploy the Flask AI service first, then the Node service
-- Re-login after deployment because JWT payloads now include `userId`
-- Do not set `PORT` manually on Render
-- Use `Clear build cache & deploy` on the Flask service when Python dependencies change
-- Speech-to-text is handled by Deepgram from the Node service, not by Flask
-
-## Main API Surface
-
-Express:
-
-- `/api/auth/register/request-otp`
-- `/api/auth/register`
-- `/api/auth/login`
-- `/api/dashboard`
-- `/api/analyze-complaint`
-- `/api/transcribe-audio`
-- `/api/chatbot/history`
-- `/api/chatbot/message`
-- `/api/email-bbmp`
-
-Flask:
-
-- `/health`
-- `/analyze`
-- `/transcript/process`
-- `/chat`
-
-## Important Files
-
-- `src/server.js`
-  Express bootstrap and MongoDB startup
-- `src/routes/api.js`
-  Main API routing
-- `src/controllers/complaintController.js`
-  Complaint submission and transcription endpoints
-- `public/chatbot.js`
-  Chatbot panel behavior and state events
-- `public/ai-helper-bot.js`
-  Theme-aware assistant robot behavior and contextual UI tips
-- `src/controllers/chatbotController.js`
-  Chat history, chat actions, and complaint creation through chat
-- `src/services/complaintService.js`
-  Shared complaint creation pipeline used by form and chatbot
-- `src/services/aiClient.js`
-  Node -> Flask and Node -> Deepgram integration
-- `ai_service/app.py`
-  Flask entrypoint
-- `ai_service/pipeline.py`
-  Hybrid complaint analysis pipeline
-- `public/chatbot.js`
-  Floating chatbot UI
-
-## Notes
-
-- The frontend is served by Express; there is no separate frontend deployment requirement.
-- Complaint analysis still has a Node-side fallback path if Flask is unavailable, but the primary path is Flask.
-- Chatbot history is stored per user in MongoDB.
-- OTP verification is required only for registration, not login.
-- SMTP sends both OTP messages and BBMP complaint emails.
+| Item | Why It Matters |
+| --- | --- |
+| Strong `JWT_SECRET` | Protects session tokens |
+| Production MongoDB URI | Keeps local and production data separate |
+| Real SMTP credentials | Enables OTP and escalation emails |
+| Deepgram API key | Enables voice complaint transcription |
+| AI service URL | Connects Express to Flask in production |
+| Vision model cache planning | Prevents slow cold starts for the local CLIP model |
+| Evaluation in CI | Catches category regressions before deploy |
+| Seed credential cleanup | Prevents development credentials from reaching production |

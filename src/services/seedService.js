@@ -14,12 +14,24 @@ const initialComplaints = [
     mapLocation: { lat: 12.973, lng: 77.588 },
     description: "Large pothole causing traffic disruption near the main entrance.",
     alerts: ["Admin notified", "Residents near North Gate alerted"],
+    statusHistory: [
+      {
+        status: "In Progress",
+        changedBy: "demo_admin",
+        changedAt: new Date("2026-03-30T08:25:00.000Z"),
+        note: "Demo complaint seeded for operations review."
+      }
+    ],
     ai: {
       nlpCategory: "Infrastructure",
       cvDetection: "Pothole / surface crack",
       cvReason: "Seeded demo record",
       mlPriorityScore: 0.91,
-      recommendedTeam: "Maintenance Team"
+      recommendedTeam: "Maintenance Team",
+      explanation: "Road damage terms, location context, and image evidence indicate a high-priority infrastructure complaint.",
+      confidenceLabel: "High confidence",
+      reviewRequired: false,
+      geocodingSource: "seed"
     },
     createdAt: new Date("2026-03-30T08:25:00.000Z")
   },
@@ -36,12 +48,24 @@ const initialComplaints = [
     mapLocation: { lat: 12.966, lng: 77.603 },
     description: "Dustbins are overflowing and attracting stray animals.",
     alerts: ["Sanitation supervisor notified"],
+    statusHistory: [
+      {
+        status: "Queued",
+        changedBy: "demo_admin",
+        changedAt: new Date("2026-03-31T04:10:00.000Z"),
+        note: "Demo sanitation complaint queued for triage."
+      }
+    ],
     ai: {
       nlpCategory: "Sanitation",
       cvDetection: "No image uploaded",
       cvReason: "Seeded demo record",
       mlPriorityScore: 0.67,
-      recommendedTeam: "Sanitation Team"
+      recommendedTeam: "Sanitation Team",
+      explanation: "Complaint wording points to garbage overflow and sanitation response.",
+      confidenceLabel: "Medium confidence",
+      reviewRequired: false,
+      geocodingSource: "seed"
     },
     createdAt: new Date("2026-03-31T04:10:00.000Z")
   },
@@ -58,12 +82,24 @@ const initialComplaints = [
     mapLocation: { lat: 12.978, lng: 77.612 },
     description: "Gas concentration crossed the safe threshold for 3 consecutive readings.",
     alerts: ["Emergency admin alert", "Nearby users warned to avoid kitchen area"],
+    statusHistory: [
+      {
+        status: "Escalated",
+        changedBy: "demo_admin",
+        changedAt: new Date("2026-03-31T06:40:00.000Z"),
+        note: "Critical sensor-triggered complaint escalated immediately."
+      }
+    ],
     ai: {
       nlpCategory: "Safety",
       cvDetection: "Sensor-triggered issue",
       cvReason: "Seeded demo record",
       mlPriorityScore: 0.98,
-      recommendedTeam: "Emergency Response"
+      recommendedTeam: "Emergency Response",
+      explanation: "Gas concentration and emergency context indicate a critical safety escalation.",
+      confidenceLabel: "High confidence",
+      reviewRequired: false,
+      geocodingSource: "seed"
     },
     createdAt: new Date("2026-03-31T06:40:00.000Z")
   }

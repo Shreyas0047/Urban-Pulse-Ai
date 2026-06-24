@@ -1,4 +1,8 @@
 const env = require("../config/env");
+const aiCategories = require("../../shared/aiCategories.json");
+
+const CATEGORY_ID_BY_ISSUE_TYPE = new Map(aiCategories.map((category) => [category.label, category.id]));
+const AI_EVALUATION_VERSION = "urban-pulse-ai-v2";
 
 const ISSUE_PROFILES = [
   {
@@ -165,6 +169,9 @@ const ISSUE_PROFILES = [
       ["overflow", 0.55],
       ["litter", 0.65],
       ["dump", 0.82],
+      ["dirty common area", 0.92],
+      ["common area", 0.52],
+      ["dirty", 0.48],
       ["unclean", 0.44],
       ["sanitation", 0.74]
     ],
@@ -295,11 +302,16 @@ const ISSUE_PROFILES = [
     cvLabel: "Cracked wall, ceiling damage, or structural surface defect",
     textTerms: [
       ["wall crack", 1.0],
+      ["cracked wall", 1.0],
       ["ceiling", 0.62],
       ["ceiling crack", 0.94],
       ["building crack", 1.0],
       ["plaster", 0.58],
       ["plaster fallen", 0.82],
+      ["masonry", 0.86],
+      ["masonry deterioration", 0.98],
+      ["deterioration", 0.72],
+      ["wear", 0.46],
       ["structural", 0.88],
       ["collapse", 0.92],
       ["collapsed wall", 0.96],
@@ -349,6 +361,11 @@ const ISSUE_PROFILES = [
       ["robbery", 0.94],
       ["intruder", 0.98],
       ["security", 0.72],
+      ["open gate", 1.0],
+      ["open gates", 1.0],
+      ["unsecured entryway", 1.02],
+      ["entryway", 0.62],
+      ["access", 0.46],
       ["unsafe", 0.4],
       ["trespass", 0.82]
     ],
@@ -379,6 +396,11 @@ const ISSUE_PROFILES = [
       ["street light off", 1.05],
       ["streetlight not working", 1.05],
       ["streetlight off", 1.05],
+      ["switchboard", 0.92],
+      ["switchboard wiring", 1.04],
+      ["wiring", 0.74],
+      ["exposed wire", 0.98],
+      ["exposed wires", 0.98],
       ["electric", 0.72],
       ["wire", 0.46],
       ["live wire", 0.96],
@@ -434,6 +456,7 @@ const ISSUE_PROFILES = [
       ["overflowing tank", 0.92],
       ["water line", 0.66],
       ["pipeline", 0.58],
+      ["leak evidence", 0.92],
       ["seepage", 0.74],
       ["leakage", 0.52]
     ],
@@ -777,7 +800,26 @@ function buildCvResult(payload) {
     result: {
       detected: top.cvLabel,
       score: Number(top.visualScore.toFixed(2)),
-      reason: reasons[top.id] || "Visual signals were matched against issue patterns."
+      reason: reasons[top.id] || "Visual signals were matched against issue patterns.",
+      candidates: scoredProfiles
+        .filter((profile) => profile.visualScore > 0)
+        .sort((left, right) => right.visualScore - left.visualScore)
+        .slice(0, 5)
+        .map((profile) => ({
+          label: profile.cvLabel,
+          category_id: profile.id,
+          category_label: profile.issueType,
+          confidence: Number(profile.visualScore.toFixed(2)),
+          source: "feature"
+        })),
+      model: "feature-signals",
+      provider: "feature-fallback",
+      fallbackUsed: true,
+      confidenceBreakdown: {
+        featureTop: Number(top.visualScore.toFixed(2)),
+        clipTop: 0,
+        fusedTop: Number(top.visualScore.toFixed(2))
+      }
     }
   };
 }
@@ -997,6 +1039,18 @@ function analyzeComplaintLocally(payload) {
       priority.level === "Critical" ? "Residents received safety warning" : "Users subscribed to the zone were notified"
     ],
     imageUpload: "Processed by local multimodal analyzer"
+    ,
+    aiMeta: {
+      provider: "express",
+      engine: "local-keyword-feature-fusion-v2",
+      model: "deterministic-rules",
+      fallbackUsed: true,
+      categoryId: fusedIssue.id || CATEGORY_ID_BY_ISSUE_TYPE.get(fusedIssue.issueType) || "general",
+      visionEngine: "browser-feature-signals-v2",
+      visionProvider: "feature-fallback",
+      visionFallbackUsed: true,
+      evaluationVersion: AI_EVALUATION_VERSION
+    }
   };
 }
 
@@ -1019,7 +1073,20 @@ async function analyzeComplaint(payload) {
       throw new Error(data.error || "AI microservice request failed");
     }
 
-    return data;
+    return {
+      ...data,
+      aiMeta: {
+        provider: data.aiMeta?.provider || "flask",
+        engine: data.aiMeta?.engine || "hybrid-semantic-feature-v2",
+        model: data.aiMeta?.model || "sentence-transformers-or-hash-fallback",
+        fallbackUsed: false,
+        categoryId: data.aiMeta?.categoryId || CATEGORY_ID_BY_ISSUE_TYPE.get(data.nlp?.issueType) || data.category || "general",
+        visionEngine: data.aiMeta?.visionEngine || "shared-feature-signals-v2",
+        visionProvider: data.aiMeta?.visionProvider || data.cv?.provider || "feature-fallback",
+        visionFallbackUsed: Boolean(data.aiMeta?.visionFallbackUsed || data.cv?.fallbackUsed),
+        evaluationVersion: data.aiMeta?.evaluationVersion || AI_EVALUATION_VERSION
+      }
+    };
   } catch (_error) {
     return analyzeComplaintLocally(payload);
   } finally {
@@ -1048,14 +1115,51 @@ async function processTranscriptWithAi(payload) {
 
     return data;
   } catch (_error) {
+    const transcript = normalizeComplaintTranscript(payload.transcript);
     return {
       transcript: String(payload.transcript || "").trim(),
-      normalizedTranscript: String(payload.transcript || "").trim(),
-      summary: String(payload.transcript || "").trim()
+      normalizedTranscript: transcript.normalizedTranscript,
+      summary: transcript.summary,
+      provider: "express-transcript-normalizer-v2"
     };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function normalizeComplaintTranscript(value) {
+  let text = normalizeText(value);
+  const fillerPhrases = [
+    "um",
+    "uh",
+    "please note that",
+    "i want to say",
+    "i would like to report",
+    "i want to report",
+    "this is a complaint about"
+  ];
+
+  fillerPhrases.forEach((phrase) => {
+    text = text.replaceAll(phrase, " ");
+  });
+  text = text
+    .replaceAll("water logging", "waterlogging")
+    .replaceAll("street light", "streetlight")
+    .replaceAll("bbmp", "BBMP")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) {
+    return { normalizedTranscript: "", summary: "" };
+  }
+
+  const normalizedTranscript = `${text.charAt(0).toUpperCase()}${text.slice(1)}${/[.!?]$/.test(text) ? "" : "."}`;
+  const summary =
+    normalizedTranscript.length > 420
+      ? `${normalizedTranscript.slice(0, 417).replace(/\s+\S*$/, "").replace(/[.,;:]$/, "")}...`
+      : normalizedTranscript;
+
+  return { normalizedTranscript, summary };
 }
 
 function detectIntentLocally(message, history = []) {
@@ -1282,5 +1386,6 @@ module.exports = {
   analyzeComplaint,
   transcribeAudio,
   processTranscriptWithAi,
-  resolveChatIntent
+  resolveChatIntent,
+  _analyzeComplaintLocally: analyzeComplaintLocally
 };

@@ -1,4 +1,4 @@
-from category_catalog import COMPLAINT_CATEGORIES
+from category_catalog import CATEGORY_BY_ID
 from context_analysis import context_features
 from reasoning import build_explanation, merge_multi_modal_categories, predict_priority
 from text_processing import analyze_sentiment_and_severity, keyword_extract, normalize_text, semantic_multi_label_classification
@@ -10,24 +10,13 @@ def clamp01(value):
 
 
 def category_to_team(category_id):
-    mapping = {
-        "plumbing": "Water Supply and Maintenance Team",
-        "electrical": "Electrical Team",
-        "road_damage": "Maintenance Team",
-        "garbage": "Sanitation Team",
-        "waterlogging": "Sanitation and Drainage Team",
-        "fire_hazard": "Emergency Response",
-        "structural_damage": "Civil Maintenance Team",
-    }
-    return mapping.get(category_id, "Help Desk")
+    return CATEGORY_BY_ID.get(category_id, {}).get("team", "Help Desk")
 
 
 def category_to_authority(priority, category_id):
     if priority == "HIGH":
         return "Municipality"
-    if category_id in {"electrical", "fire_hazard", "road_damage"}:
-        return "Municipality"
-    return "Gram Panchayat"
+    return CATEGORY_BY_ID.get(category_id, {}).get("authority", "Gram Panchayat")
 
 
 def build_alerts(priority, category_label, location):
@@ -70,7 +59,12 @@ def run_hybrid_pipeline(payload):
     ).strip()
     normalized_text = normalize_text(text)
     semantic_result = semantic_multi_label_classification(text)
-    vision_result = detect_objects_from_features(payload.get("imageFeatures"), payload.get("imageHint"))
+    vision_result = detect_objects_from_features(
+        payload.get("imageFeatures"),
+        payload.get("imageHint"),
+        payload.get("imageBase64"),
+        payload.get("imageMimeType"),
+    )
     final_categories = merge_multi_modal_categories(semantic_result["labels"], vision_result)
     sentiment_bundle = analyze_sentiment_and_severity(text, final_categories)
     context_bundle = context_features(payload, semantic_result)
@@ -110,8 +104,13 @@ def run_hybrid_pipeline(payload):
         "cv": {
             "detected": vision_result["top_detection"]["label"] if vision_result["top_detection"] else "No image uploaded",
             "score": vision_result["top_detection"]["confidence"] if vision_result["top_detection"] else 0.18,
-            "reason": "Image and text were fused for hybrid inference." if vision_result["detections"] else "No strong visual detection available.",
+            "reason": "Local vision model and image features were fused for hybrid inference." if vision_result["detections"] else "No strong visual detection available.",
             "detections": vision_result["detections"],
+            "candidates": vision_result.get("candidates", []),
+            "model": vision_result.get("model", "feature-signals"),
+            "provider": vision_result.get("provider", "feature-fallback"),
+            "fallbackUsed": vision_result.get("fallbackUsed", True),
+            "confidenceBreakdown": vision_result.get("confidenceBreakdown", {}),
         },
         "status": build_status(priority),
         "assignedAuthority": category_to_authority(priority, primary_category_id),
@@ -122,4 +121,14 @@ def run_hybrid_pipeline(payload):
             "Users subscribed to the zone were notified" if priority != "HIGH" else "Residents received a high-priority warning",
         ],
         "imageUpload": "Processed by modular hybrid AI pipeline",
+        "aiMeta": {
+            "provider": "flask",
+            "engine": "hybrid-semantic-feature-v2",
+            "model": "sentence-transformers-or-hash-fallback",
+            "fallbackUsed": False,
+            "categoryId": primary_category_id,
+            "visionEngine": vision_result.get("model", "shared-feature-signals-v2"),
+            "visionProvider": vision_result.get("provider", "feature-fallback"),
+            "visionFallbackUsed": vision_result.get("fallbackUsed", True),
+        },
     }

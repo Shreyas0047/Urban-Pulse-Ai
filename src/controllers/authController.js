@@ -132,6 +132,18 @@ function formatAuthError(error) {
   return error;
 }
 
+function buildAuthResponse(user) {
+  const token = issueRoleToken(user.role, user.username, user._id);
+  return {
+    token,
+    role: user.role,
+    userId: String(user._id),
+    username: user.username,
+    permissions: rolePermissions[user.role],
+    expiresInSeconds: env.tokenTtlSeconds
+  };
+}
+
 async function getRoles(_req, res) {
   res.json({
     roles: Object.keys(rolePermissions),
@@ -150,9 +162,8 @@ async function issueToken(req, res, next) {
     validateRole(role);
     validateUsername(username);
 
-    const token = issueRoleToken(role, username);
     res.json({
-      token,
+      token: issueRoleToken(role, username),
       role,
       userId: "",
       username,
@@ -227,15 +238,7 @@ async function register(req, res, next) {
     });
     await RegistrationOtp.deleteOne({ _id: pendingRegistration._id });
 
-    const token = issueRoleToken(role, username, user._id);
-    res.json({
-      token,
-      role,
-      userId: String(user._id),
-      username,
-      permissions: rolePermissions[role],
-      expiresInSeconds: env.tokenTtlSeconds
-    });
+    res.json(buildAuthResponse(user));
   } catch (error) {
     next(formatAuthError(error));
   }
@@ -325,17 +328,14 @@ async function login(req, res, next) {
       recordLoginFailure(req, identifier);
       throw createHttpError("Invalid username/email, password, or role.", 401);
     }
+    if (user.disabledAt) {
+      throw createHttpError("This account is disabled. Contact an administrator.", 403);
+    }
     clearLoginFailures(req, identifier);
+    user.lastLoginAt = new Date();
+    await user.save();
 
-    const token = issueRoleToken(user.role, user.username, user._id);
-    res.json({
-      token,
-      role: user.role,
-      userId: String(user._id),
-      username: user.username,
-      permissions: rolePermissions[user.role],
-      expiresInSeconds: env.tokenTtlSeconds
-    });
+    res.json(buildAuthResponse(user));
   } catch (error) {
     next(error);
   }

@@ -1,0 +1,134 @@
+[
+  {
+    "id": "safety_fire",
+    "label": "Gas Leak / Fire Risk",
+    "group": "Safety",
+    "team": "Emergency Response",
+    "authority": "Municipality",
+    "aliases": ["fire", "smoke", "gas leak", "burning wire", "sparking", "short circuit", "transformer blast"],
+    "keywords": [["gas leak", 1.05], ["gas", 0.95], ["smoke", 0.9], ["fire", 1.0], ["flame", 0.9], ["short circuit", 0.98], ["burning wire", 0.96], ["explosion", 1.0], ["emergency", 0.8]],
+    "critical_keywords": ["gas leak", "explosion", "fire", "smoke", "people trapped", "hospital"],
+    "base_priority": 0.82
+  },
+  {
+    "id": "road_damage",
+    "label": "Road Damage",
+    "group": "Infrastructure",
+    "team": "Maintenance Team",
+    "authority": "Municipality",
+    "aliases": ["pothole", "road crack", "damaged road", "sinkhole", "broken road", "road collapse"],
+    "keywords": [["pothole", 1.0], ["road crack", 0.94], ["damaged road", 0.9], ["broken road", 0.92], ["sinkhole", 1.0], ["cave in", 0.94], ["road collapse", 0.96], ["crater", 0.7]],
+    "critical_keywords": ["ambulance route", "school bus", "main road", "junction"],
+    "base_priority": 0.58
+  },
+  {
+    "id": "tree_obstruction",
+    "label": "Tree / Obstruction on Road",
+    "group": "Infrastructure",
+    "team": "Horticulture and Maintenance Team",
+    "authority": "Municipality",
+    "aliases": ["fallen tree", "tree on road", "fallen branch", "blocked road", "obstruction"],
+    "keywords": [["fallen tree", 1.08], ["tree", 1.0], ["branch", 0.84], ["uprooted", 0.88], ["road blocked", 1.0], ["obstruction", 0.86], ["fallen branch", 0.98]],
+    "critical_keywords": ["main road", "blocked road", "school", "ambulance"],
+    "base_priority": 0.64
+  },
+  {
+    "id": "garbage",
+    "label": "Garbage Overflow",
+    "group": "Sanitation",
+    "team": "Sanitation Team",
+    "authority": "Gram Panchayat",
+    "aliases": ["garbage overflow", "trash pile", "waste dump", "overflowing bin", "litter accumulation"],
+    "keywords": [["garbage", 1.0], ["trash", 0.82], ["waste", 0.76], ["overflowing bin", 0.9], ["dump", 0.84], ["litter", 0.7], ["dirty common area", 0.92], ["common area", 0.52], ["dirty", 0.48], ["unclean", 0.48]],
+    "critical_keywords": ["hospital", "school", "food area", "market"],
+    "base_priority": 0.46
+  },
+  {
+    "id": "sewage_overflow",
+    "label": "Sewage / Manhole Overflow",
+    "group": "Sanitation",
+    "team": "Sanitation and Drainage Team",
+    "authority": "Gram Panchayat",
+    "aliases": ["sewage", "open manhole", "drain overflow", "dirty water", "gutter", "sludge"],
+    "keywords": [["sewage", 1.0], ["manhole", 0.95], ["open manhole", 1.05], ["drain overflow", 0.92], ["dirty water", 0.74], ["foul smell", 0.82], ["gutter", 0.76], ["sewer", 0.84]],
+    "critical_keywords": ["open manhole", "school", "hospital", "children"],
+    "base_priority": 0.61
+  },
+  {
+    "id": "water_drainage",
+    "label": "Drainage / Waterlogging",
+    "group": "Infrastructure",
+    "team": "Maintenance Team",
+    "authority": "Gram Panchayat",
+    "aliases": ["water logging", "waterlogged", "stagnant water", "flooded street", "blocked drainage"],
+    "keywords": [["water logging", 1.0], ["waterlogged", 1.0], ["water stagnation", 0.92], ["stagnant water", 0.92], ["blocked drainage", 0.94], ["drain overflow", 0.88], ["flooded street", 0.9]],
+    "critical_keywords": ["mosquito", "hospital", "school", "main road"],
+    "base_priority": 0.52
+  },
+  {
+    "id": "wall_damage",
+    "label": "Wall / Building Damage",
+    "group": "Infrastructure",
+    "team": "Civil Maintenance Team",
+    "authority": "Gram Panchayat",
+    "aliases": ["wall crack", "cracked wall", "ceiling crack", "building damage", "plaster fallen", "structural damage", "masonry deterioration"],
+    "keywords": [["wall crack", 1.0], ["cracked wall", 1.0], ["ceiling crack", 0.96], ["building crack", 1.0], ["plaster fallen", 0.82], ["masonry", 0.86], ["masonry deterioration", 0.98], ["deterioration", 0.72], ["wear", 0.46], ["collapse", 0.9], ["damaged wall", 0.84], ["structural", 0.72]],
+    "critical_keywords": ["collapse", "people inside", "school building", "ceiling falling"],
+    "base_priority": 0.57
+  },
+  {
+    "id": "security",
+    "label": "Security Concern",
+    "group": "Security",
+    "team": "Security Team",
+    "authority": "Municipality",
+    "aliases": ["intruder", "theft", "robbery", "suspicious person", "trespass", "unsafe area", "open gate", "unsecured entryway"],
+    "keywords": [["intruder", 1.0], ["theft", 0.9], ["robbery", 0.96], ["suspicious", 0.78], ["open gate", 1.0], ["open gates", 1.0], ["unsecured entryway", 1.02], ["entryway", 0.62], ["access", 0.46], ["trespass", 0.84], ["unsafe", 0.58]],
+    "critical_keywords": ["attack", "robbery", "weapon", "child"],
+    "base_priority": 0.62
+  },
+  {
+    "id": "utility_fault",
+    "label": "Utility Fault",
+    "group": "Infrastructure",
+    "team": "Electrical Team",
+    "authority": "Municipality",
+    "aliases": ["power outage", "streetlight not working", "live wire", "hanging wire", "transformer issue", "electrical fault"],
+    "keywords": [["power outage", 1.0], ["streetlight", 0.85], ["street light", 0.85], ["switchboard", 0.92], ["switchboard wiring", 1.04], ["wiring", 0.74], ["exposed wire", 0.98], ["exposed wires", 0.98], ["live wire", 1.0], ["hanging wire", 0.9], ["transformer", 0.84], ["no power", 0.82], ["short circuit", 0.98]],
+    "critical_keywords": ["fire", "spark", "smoke", "live wire", "transformer"],
+    "base_priority": 0.48
+  },
+  {
+    "id": "water_leakage",
+    "label": "Water Leakage / Pipe Burst",
+    "group": "Infrastructure",
+    "team": "Water Supply and Maintenance Team",
+    "authority": "Gram Panchayat",
+    "aliases": ["water leakage", "pipe burst", "burst pipe", "leakage", "seepage", "tap leak", "overflowing tank"],
+    "keywords": [["water leakage", 1.0], ["pipe burst", 1.0], ["burst pipe", 1.0], ["water leak", 0.92], ["pipe leak", 0.92], ["leak evidence", 0.92], ["leakage", 0.7], ["seepage", 0.68], ["tank overflow", 0.88]],
+    "critical_keywords": ["electrical panel", "short circuit", "transformer", "exposed wire"],
+    "base_priority": 0.54
+  },
+  {
+    "id": "animal_intrusion",
+    "label": "Stray Animal / Animal Menace",
+    "group": "Public Health",
+    "team": "Animal Control and Sanitation Team",
+    "authority": "Gram Panchayat",
+    "aliases": ["stray dog", "stray animal", "cattle", "monkey", "animal menace"],
+    "keywords": [["stray dog", 1.0], ["dog", 0.82], ["animal", 0.76], ["cow", 0.74], ["cattle", 0.74], ["monkey", 0.78], ["animal menace", 0.94]],
+    "critical_keywords": ["bite", "school", "children", "attack"],
+    "base_priority": 0.5
+  },
+  {
+    "id": "vehicle_obstruction",
+    "label": "Vehicle Obstruction / Illegal Parking",
+    "group": "Traffic",
+    "team": "Traffic and Enforcement Team",
+    "authority": "Municipality",
+    "aliases": ["illegal parking", "vehicle obstruction", "blocked driveway", "blocked entrance", "abandoned vehicle"],
+    "keywords": [["illegal parking", 1.0], ["vehicle obstruction", 1.0], ["blocked driveway", 0.95], ["blocked entrance", 0.95], ["abandoned vehicle", 0.88], ["parking", 0.56]],
+    "critical_keywords": ["ambulance", "fire lane", "hospital", "school"],
+    "base_priority": 0.56
+  }
+]

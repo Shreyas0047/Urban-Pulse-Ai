@@ -1,5 +1,5 @@
 from ai_config import CONTEXT_REPEAT_HIGH, CONTEXT_REPEAT_MEDIUM, MAX_EXPLANATION_KEYWORDS, VISION_IMAGE_WEIGHT
-from category_catalog import COMPLAINT_CATEGORIES
+from category_catalog import COMPLAINT_CATEGORIES, CATEGORY_BY_ID
 from text_processing import keyword_extract, normalize_text
 from vision_analysis import map_visual_labels_to_categories
 
@@ -26,7 +26,7 @@ def predict_priority(text, sentiment_bundle, categories, repeat_count):
     if any(keyword in normalized for keyword in ["urgent", "immediately", "danger", "critical", "emergency"]):
         score += 0.2
 
-    if top_category in {"fire_hazard", "electrical"}:
+    if top_category in {"safety_fire", "utility_fault"}:
         score += 0.16
 
     if score >= 0.82:
@@ -43,7 +43,7 @@ def merge_multi_modal_categories(text_categories, vision_result):
         if category_id in merged:
             merged[category_id]["confidence"] = round(min(1.0, merged[category_id]["confidence"] + VISION_IMAGE_WEIGHT * 0.18), 3)
         else:
-            category = next((item for item in COMPLAINT_CATEGORIES if item["id"] == category_id), None)
+            category = CATEGORY_BY_ID.get(category_id) or next((item for item in COMPLAINT_CATEGORIES if item["id"] == category_id), None)
             if category:
                 merged[category_id] = {
                     "id": category["id"],
@@ -82,4 +82,3 @@ def build_explanation(text, final_categories, sentiment_bundle, priority, contex
 
     reason_parts.append(f"predicted priority is {priority}")
     return ". ".join(reason_parts) + "."
-

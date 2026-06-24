@@ -18,12 +18,42 @@ const complaintSchema = new mongoose.Schema(
     },
     description: { type: String, required: true },
     alerts: [{ type: String }],
+    statusHistory: [
+      {
+        status: { type: String, required: true },
+        changedBy: { type: String, default: "system" },
+        changedAt: { type: Date, default: Date.now },
+        note: { type: String, default: "" }
+      }
+    ],
     ai: {
       nlpCategory: String,
       cvDetection: String,
       cvReason: String,
       mlPriorityScore: Number,
-      recommendedTeam: String
+      recommendedTeam: String,
+      explanation: String,
+      confidenceLabel: String,
+      reviewRequired: { type: Boolean, default: false },
+      geocodingSource: String,
+      provider: String,
+      engine: String,
+      model: String,
+      fallbackUsed: { type: Boolean, default: false },
+      categoryId: String,
+      visionEngine: String,
+      visionProvider: String,
+      visionFallbackUsed: { type: Boolean, default: false },
+      visionCandidates: [
+        {
+          label: String,
+          categoryId: String,
+          confidence: Number,
+          source: String
+        }
+      ],
+      confidenceBreakdown: mongoose.Schema.Types.Mixed,
+      evaluationVersion: String
     }
   },
   {

@@ -2,7 +2,10 @@ import os
 
 
 EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "sentence-transformers/all-MiniLM-L6-v2")
+VISION_MODEL_NAME = os.getenv("VISION_MODEL_NAME", "sentence-transformers/clip-ViT-B-32")
 VISION_IMAGE_WEIGHT = float(os.getenv("VISION_IMAGE_WEIGHT", "0.38"))
+VISION_CONFIDENCE_THRESHOLD = float(os.getenv("VISION_CONFIDENCE_THRESHOLD", "0.24"))
+VISION_MAX_IMAGE_BYTES = int(os.getenv("VISION_MAX_IMAGE_BYTES", str(2 * 1024 * 1024)))
 TEXT_CONFIDENCE_THRESHOLD = float(os.getenv("TEXT_CONFIDENCE_THRESHOLD", "0.26"))
 CONTEXT_REPEAT_HIGH = int(os.getenv("CONTEXT_REPEAT_HIGH", "5"))
 CONTEXT_REPEAT_MEDIUM = int(os.getenv("CONTEXT_REPEAT_MEDIUM", "3"))

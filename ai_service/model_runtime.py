@@ -2,7 +2,7 @@ from functools import lru_cache
 
 import numpy as np
 
-from ai_config import EMBEDDING_MODEL_NAME
+from ai_config import EMBEDDING_MODEL_NAME, VISION_MODEL_NAME
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -14,7 +14,20 @@ except ImportError:  # pragma: no cover
 def get_embedding_model():
     if SentenceTransformer is None:
         return None
-    return SentenceTransformer(EMBEDDING_MODEL_NAME)
+    try:
+        return SentenceTransformer(EMBEDDING_MODEL_NAME)
+    except Exception:
+        return None
+
+
+@lru_cache(maxsize=1)
+def get_vision_model():
+    if SentenceTransformer is None:
+        return None
+    try:
+        return SentenceTransformer(VISION_MODEL_NAME)
+    except Exception:
+        return None
 
 
 def cosine_similarity(left, right):

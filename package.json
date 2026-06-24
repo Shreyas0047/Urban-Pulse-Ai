@@ -8,7 +8,8 @@
     "start:ai": "python ai_service/app.py",
     "start:stt": "python stt_service/app.py",
     "seed": "node scripts/seedDatabase.js",
-    "seed:fresh": "node scripts/seedDatabase.js --fresh"
+    "seed:fresh": "node scripts/seedDatabase.js --fresh",
+    "evaluate:ai": "node scripts/evaluateAi.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
