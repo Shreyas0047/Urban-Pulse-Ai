@@ -44,17 +44,16 @@
             </select>
           </label>
           <label>
-            <span id="authUsernameLabel">Username or Email</span>
-            <input type="text" id="authUsername" name="username" placeholder="Enter username or email" autocomplete="username" />
+            <span id="authIdentityLabel">Email ID</span>
+            <input type="email" id="authIdentity" name="email" placeholder="Enter email address" autocomplete="email" />
           </label>
           <label>
             Password
             <input type="password" id="authPassword" name="password" placeholder="Enter password" />
           </label>
-          <label id="authEmailField" hidden>
-            Email ID
+          <label id="authOtpEmailField" hidden>
+            Email verification
             <div class="auth-inline-field">
-              <input type="email" id="authEmail" name="email" placeholder="Enter email address" autocomplete="email" />
               <button type="button" id="sendOtpBtn" class="secondary-button" hidden>Send OTP</button>
             </div>
           </label>
@@ -68,7 +67,7 @@
           </div>
           <p id="loginAttemptCounter" class="helper-text login-attempt-counter" hidden></p>
         </form>
-        <p id="authMessage" class="helper-text">Choose Admin or Citizen, then login or register.</p>
+        <p id="authMessage" class="helper-text">Choose Admin or Citizen, then login or register with your email and password.</p>
       </div>
     </div>
 
@@ -234,7 +233,7 @@
           <div class="session-surface">
             <p class="eyebrow dark">Current user</p>
             <strong>Active account</strong>
-            <p id="activeUsername">No username logged in</p>
+            <p id="activeUsername">No account logged in</p>
           </div>
         </section>
 

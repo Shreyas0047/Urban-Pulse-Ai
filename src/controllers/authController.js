@@ -6,7 +6,6 @@ const RegistrationOtp = require("../models/RegistrationOtp");
 const { sendRegistrationOtpEmail } = require("../services/emailService");
 const crypto = require("crypto");
 
-const USERNAME_PATTERN = /^[A-Za-z0-9_.-]{3,32}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
@@ -36,12 +35,6 @@ function validateRole(role) {
   }
 }
 
-function validateUsername(username) {
-  if (!USERNAME_PATTERN.test(username)) {
-    throw createHttpError("Username must be 3-32 characters and use only letters, numbers, dot, underscore, or dash.", 400);
-  }
-}
-
 function validatePassword(password) {
   if (typeof password !== "string") {
     throw createHttpError("Password is required.", 400);
@@ -58,28 +51,18 @@ function validateEmail(email) {
   }
 }
 
-function normalizeLoginIdentifier(value) {
-  const identifier = normalizeValue(value);
-  return identifier.includes("@") ? identifier.toLowerCase() : identifier;
+function buildUsernameFromEmail(email) {
+  return normalizeEmail(email);
 }
 
-function validateLoginIdentifier(identifier) {
-  if (identifier.includes("@")) {
-    validateEmail(identifier);
-    return;
-  }
-
-  validateUsername(identifier);
-}
-
-function getLoginAttemptKey(req, username) {
+function getLoginAttemptKey(req, email) {
   const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   const ip = forwarded || req.ip || req.socket?.remoteAddress || "unknown";
-  return `${ip}:${username}`;
+  return `${ip}:${email}`;
 }
 
-function assertLoginNotLocked(req, username) {
-  const key = getLoginAttemptKey(req, username);
+function assertLoginNotLocked(req, email) {
+  const key = getLoginAttemptKey(req, email);
   const bucket = loginFailureBuckets.get(key);
 
   if (!bucket) {
@@ -94,8 +77,8 @@ function assertLoginNotLocked(req, username) {
   throw createHttpError("Too many failed login attempts. Please wait a few minutes and try again.", 429);
 }
 
-function recordLoginFailure(req, username) {
-  const key = getLoginAttemptKey(req, username);
+function recordLoginFailure(req, email) {
+  const key = getLoginAttemptKey(req, email);
   const now = Date.now();
   const bucket = loginFailureBuckets.get(key);
 
@@ -110,8 +93,8 @@ function recordLoginFailure(req, username) {
   }
 }
 
-function clearLoginFailures(req, username) {
-  loginFailureBuckets.delete(getLoginAttemptKey(req, username));
+function clearLoginFailures(req, email) {
+  loginFailureBuckets.delete(getLoginAttemptKey(req, email));
 }
 
 function generateOtpCode() {
@@ -120,10 +103,6 @@ function generateOtpCode() {
 
 function formatAuthError(error) {
   if (error?.code === 11000) {
-    if (error.keyPattern?.username || error.keyValue?.username) {
-      return createHttpError("Username already exists.", 409);
-    }
-
     if (error.keyPattern?.email || error.keyValue?.email || String(error.message || "").includes("email_1")) {
       return createHttpError("Email is already registered.", 409);
     }
@@ -158,15 +137,15 @@ async function issueToken(req, res, next) {
     }
 
     const role = normalizeValue(req.body.role);
-    const username = normalizeValue(req.body.username);
+    const email = normalizeEmail(req.body.email);
     validateRole(role);
-    validateUsername(username);
+    validateEmail(email);
 
     res.json({
-      token: issueRoleToken(role, username),
+      token: issueRoleToken(role, buildUsernameFromEmail(email)),
       role,
       userId: "",
-      username,
+      username: buildUsernameFromEmail(email),
       permissions: rolePermissions[role],
       expiresInSeconds: env.tokenTtlSeconds
     });
@@ -177,35 +156,26 @@ async function issueToken(req, res, next) {
 
 async function register(req, res, next) {
   try {
-    const username = normalizeValue(req.body.username);
     const email = normalizeEmail(req.body.email);
     const password = req.body.password;
     const role = normalizeValue(req.body.role);
     const otp = normalizeValue(req.body.otp);
+    const username = buildUsernameFromEmail(email);
 
-    if (!username || !email || !password || !role || !otp) {
-      throw createHttpError("Username, email, password, role, and OTP are required.", 400);
+    if (!email || !password || !role || !otp) {
+      throw createHttpError("Email, password, role, and OTP are required.", 400);
     }
 
     validateRole(role);
-    validateUsername(username);
     validateEmail(email);
     validatePassword(password);
 
-    const [existingUsername, existingEmail] = await Promise.all([
-      User.findOne({ username }),
-      User.findOne({ email })
-    ]);
-
-    if (existingUsername) {
-      throw createHttpError("Username already exists.", 409);
-    }
-
+    const existingEmail = await User.findOne({ email });
     if (existingEmail) {
       throw createHttpError("Email is already registered.", 409);
     }
 
-    const pendingRegistration = await RegistrationOtp.findOne({ username, email, role });
+    const pendingRegistration = await RegistrationOtp.findOne({ email, role });
     if (!pendingRegistration) {
       throw createHttpError("Request an OTP before completing registration.", 400);
     }
@@ -246,29 +216,20 @@ async function register(req, res, next) {
 
 async function requestRegistrationOtp(req, res, next) {
   try {
-    const username = normalizeValue(req.body.username);
     const email = normalizeEmail(req.body.email);
     const password = req.body.password;
     const role = normalizeValue(req.body.role);
+    const username = buildUsernameFromEmail(email);
 
-    if (!username || !email || !password || !role) {
-      throw createHttpError("Username, email, password, and role are required.", 400);
+    if (!email || !password || !role) {
+      throw createHttpError("Email, password, and role are required.", 400);
     }
 
     validateRole(role);
-    validateUsername(username);
     validateEmail(email);
     validatePassword(password);
 
-    const [existingUsername, existingEmail] = await Promise.all([
-      User.findOne({ username }),
-      User.findOne({ email })
-    ]);
-
-    if (existingUsername) {
-      throw createHttpError("Username already exists.", 409);
-    }
-
+    const existingEmail = await User.findOne({ email });
     if (existingEmail) {
       throw createHttpError("Email is already registered.", 409);
     }
@@ -277,7 +238,7 @@ async function requestRegistrationOtp(req, res, next) {
     const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 
     await RegistrationOtp.findOneAndUpdate(
-      { $or: [{ username }, { email }] },
+      { email, role },
       {
         username,
         email,
@@ -307,31 +268,31 @@ async function requestRegistrationOtp(req, res, next) {
 
 async function login(req, res, next) {
   try {
-    const identifier = normalizeLoginIdentifier(req.body.username);
+    const email = normalizeEmail(req.body.email);
     const password = req.body.password;
     const role = normalizeValue(req.body.role);
 
-    if (!identifier || !password || !role) {
-      throw createHttpError("Username/email, password, and role are required.", 400);
+    if (!email || !password || !role) {
+      throw createHttpError("Email, password, and role are required.", 400);
     }
 
     validateRole(role);
-    validateLoginIdentifier(identifier);
+    validateEmail(email);
     validatePassword(password);
-    assertLoginNotLocked(req, identifier);
+    assertLoginNotLocked(req, email);
 
     const user = await User.findOne({
       role,
-      $or: [{ username: identifier }, { email: identifier.toLowerCase() }]
+      email
     });
     if (!user || !verifyPassword(password, user.passwordHash)) {
-      recordLoginFailure(req, identifier);
-      throw createHttpError("Invalid username/email, password, or role.", 401);
+      recordLoginFailure(req, email);
+      throw createHttpError("Invalid email, password, or role.", 401);
     }
     if (user.disabledAt) {
       throw createHttpError("This account is disabled. Contact an administrator.", 403);
     }
-    clearLoginFailures(req, identifier);
+    clearLoginFailures(req, email);
     user.lastLoginAt = new Date();
     await user.save();
 

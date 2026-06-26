@@ -45,11 +45,10 @@ const closeFaqBtn = document.getElementById("closeFaqBtn");
 const authForm = document.getElementById("authForm");
 const authSubmitBtn = document.getElementById("authSubmitBtn");
 const authMessage = document.getElementById("authMessage");
-const authUsernameLabel = document.getElementById("authUsernameLabel");
-const authUsernameInput = document.getElementById("authUsername");
+const authIdentityLabel = document.getElementById("authIdentityLabel");
+const authIdentityInput = document.getElementById("authIdentity");
 const loginAttemptCounter = document.getElementById("loginAttemptCounter");
-const authEmailField = document.getElementById("authEmailField");
-const authEmailInput = document.getElementById("authEmail");
+const authOtpEmailField = document.getElementById("authOtpEmailField");
 const authOtpField = document.getElementById("authOtpField");
 const authOtpInput = document.getElementById("authOtp");
 const sendOtpBtn = document.getElementById("sendOtpBtn");
@@ -558,17 +557,16 @@ function openAuthOverlay(mode = "login") {
   showLoginBtn.classList.toggle("is-active", mode === "login");
   showRegisterBtn.classList.toggle("is-active", mode === "register");
   const isRegisterMode = mode === "register";
-  authEmailField.hidden = !isRegisterMode;
+  authOtpEmailField.hidden = !isRegisterMode;
   authOtpField.hidden = !isRegisterMode;
   sendOtpBtn.hidden = !isRegisterMode;
-  authEmailField.style.display = isRegisterMode ? "" : "none";
+  authOtpEmailField.style.display = isRegisterMode ? "" : "none";
   authOtpField.style.display = isRegisterMode ? "" : "none";
   sendOtpBtn.style.display = isRegisterMode ? "" : "none";
-  authEmailInput.disabled = !isRegisterMode;
   authOtpInput.disabled = !isRegisterMode;
-  authUsernameLabel.textContent = isRegisterMode ? "Username" : "Username or Email";
-  authUsernameInput.placeholder = isRegisterMode ? "Enter username" : "Enter username or email";
-  authUsernameInput.autocomplete = isRegisterMode ? "username" : "username";
+  authIdentityLabel.textContent = "Email ID";
+  authIdentityInput.placeholder = "Enter email address";
+  authIdentityInput.autocomplete = "email";
   registrationOtpIssued = false;
   clearOtpTimer();
   sendOtpBtn.disabled = false;
@@ -580,8 +578,8 @@ function openAuthOverlay(mode = "login") {
   authSubmitBtn.textContent = mode === "login" ? "Login" : "Verify OTP & Register";
   authMessage.textContent =
     mode === "login"
-      ? "Choose Admin or Citizen, then login with your username/email and password."
-      : "Choose Admin or Citizen, enter username, email, and password, then request an OTP to complete registration.";
+      ? "Choose Admin or Citizen, then login with your email and password."
+      : "Choose Admin or Citizen, enter your email and password, then request an OTP to complete registration.";
 }
 
 function closeAuthOverlay() {
@@ -813,7 +811,7 @@ function applyPermissionState() {
 
   authRole.textContent = hasToken ? authState.role : "No role authenticated";
   authTokenState.textContent = hasToken ? "JWT session active" : "Press login to continue as Citizen or Admin";
-  activeUsername.textContent = hasToken ? authState.username : "No username logged in";
+  activeUsername.textContent = hasToken ? authState.username : "No account logged in";
   issueTokenBtn.hidden = hasToken;
   logoutBtn.hidden = !hasToken;
   renderPermissions(permissions);
