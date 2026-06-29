@@ -57,6 +57,7 @@ const sendOtpBtn = document.getElementById("sendOtpBtn");
 const otpTimerMessage = document.getElementById("otpTimerMessage");
 const mobileMenuToggle = document.getElementById("mobileMenuToggle");
 const siteNav = document.getElementById("siteNav");
+const navTubelight = document.getElementById("navTubelight");
 const showLoginBtn = document.getElementById("showLoginBtn");
 const showRegisterBtn = document.getElementById("showRegisterBtn");
 const openFaqLink = document.getElementById("openFaqLink");
@@ -875,6 +876,32 @@ function getViewNameFromHash(hashValue) {
   return matched ? matched[0] : "home";
 }
 
+function updateTubelightNav() {
+  if (!siteNav || !navTubelight) {
+    return;
+  }
+
+  if (window.innerWidth <= 920) {
+    navTubelight.style.opacity = "0";
+    return;
+  }
+
+  const activeLink = siteNav.querySelector(".nav-link.is-active:not([hidden])");
+  if (!activeLink) {
+    navTubelight.style.opacity = "0";
+    return;
+  }
+
+  const navRect = siteNav.getBoundingClientRect();
+  const linkRect = activeLink.getBoundingClientRect();
+  const width = Math.max(34, Math.round(linkRect.width + 18));
+  const x = Math.round(linkRect.left - navRect.left + linkRect.width / 2 - width / 2);
+
+  navTubelight.style.width = `${width}px`;
+  navTubelight.style.transform = `translateX(${x}px)`;
+  navTubelight.style.opacity = "1";
+}
+
 function activateAppView(viewName = "home", options = {}) {
   const { updateHash = true, message = "", scroll = true } = options;
   const nextView = viewTargets[viewName] ? viewName : "home";
@@ -920,6 +947,8 @@ function activateAppView(viewName = "home", options = {}) {
       link.removeAttribute("aria-current");
     }
   });
+
+  updateTubelightNav();
 
   if (updateHash) {
     const nextHash = `#${viewTargets[nextView].hash}`;
@@ -971,6 +1000,7 @@ function setupMobileMenu() {
     if (window.innerWidth > 720) {
       toggleMobileMenu(false);
     }
+    updateTubelightNav();
   });
 }
 
@@ -1209,6 +1239,7 @@ function applyPermissionState() {
     link.hidden = !hasToken;
   });
 
+  updateTubelightNav();
 }
 
 function getAuthSuccessMessage(mode, data) {
