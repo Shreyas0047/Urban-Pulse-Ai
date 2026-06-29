@@ -111,7 +111,6 @@ function calibrateConfidence(rawConfidence, analysis, payload) {
   const evidenceCount = [
     payload.textComplaint,
     payload.voiceTranscript,
-    payload.imageHint,
     payload.imageFeatures
   ].filter(Boolean).length;
   let confidence = Number.isFinite(rawConfidence) ? rawConfidence : 0;
@@ -128,6 +127,18 @@ function calibrateConfidence(rawConfidence, analysis, payload) {
     confidence -= 0.03;
   }
 
+  if (!payload.textComplaint && !payload.voiceTranscript && analysis.aiMeta?.visionFallbackUsed) {
+    confidence = Math.min(confidence, 0.58);
+  }
+
+  const topVisionCategory =
+    analysis.cv?.candidates?.[0]?.category_id ||
+    analysis.cv?.candidates?.[0]?.categoryId ||
+    analysis.explainability?.visionCandidates?.[0]?.category_id;
+  if (topVisionCategory && analysis.aiMeta?.categoryId && topVisionCategory !== analysis.aiMeta.categoryId) {
+    confidence -= 0.08;
+  }
+
   if (analysis.cv?.detected === "No image uploaded" && !payload.textComplaint && !payload.voiceTranscript) {
     confidence = Math.min(confidence, 0.45);
   }
@@ -141,7 +152,7 @@ function buildAiExplanation(analysis, payload, reviewRequired, confidenceScore) 
   const textSources = [
     payload.textComplaint ? "text complaint" : "",
     payload.voiceTranscript ? "voice transcript" : "",
-    payload.imageHint || payload.imageFeatures ? "image evidence" : "",
+    payload.imageFeatures ? "image evidence" : "",
     payload.location ? "location context" : ""
   ].filter(Boolean);
   const priority = analysis.priority?.level || "Low";
@@ -203,7 +214,7 @@ async function createComplaintFromPayload(auth, payload) {
   const analysis = await analyzeComplaint({
     textComplaint,
     voiceTranscript,
-    imageHint,
+    machineImageHint: imageHint,
     imageFeatures: payload.imageFeatures || null,
     imageBase64: imagePayload.imageBase64,
     imageMimeType: imagePayload.imageMimeType,

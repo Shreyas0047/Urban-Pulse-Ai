@@ -37,6 +37,8 @@ const authRole = document.getElementById("authRole");
 const authPermissions = document.getElementById("authPermissions");
 const authTokenState = document.getElementById("authTokenState");
 const activeUsername = document.getElementById("activeUsername");
+const draftStatus = document.getElementById("draftStatus");
+const clearDraftBtn = document.getElementById("clearDraftBtn");
 const complaintSubmitBtn = document.getElementById("complaintSubmitBtn");
 const authOverlay = document.getElementById("authOverlay");
 const faqOverlay = document.getElementById("faqOverlay");
@@ -60,17 +62,33 @@ const showRegisterBtn = document.getElementById("showRegisterBtn");
 const openFaqLink = document.getElementById("openFaqLink");
 const userManagementList = document.getElementById("userManagementList");
 const mainDashboard = document.getElementById("mainDashboard");
+const aboutView = document.getElementById("aboutView");
+const reportView = document.getElementById("reportView");
 const reportWorkspace = document.getElementById("reportWorkspace");
 const reportFormWorkspace = document.getElementById("reportFormWorkspace");
 const complaintsWorkspace = document.getElementById("complaintsWorkspace");
+const adminView = document.getElementById("adminView");
 const adminWorkspace = document.getElementById("adminWorkspace");
 const adminActionCenter = document.getElementById("adminActionCenter");
 const alertsWorkspace = document.getElementById("alertsWorkspace");
 const alertsList = document.getElementById("alertsList");
+const alertSearchInput = document.getElementById("alertSearchInput");
+const alertPriorityFilter = document.getElementById("alertPriorityFilter");
+const clearAlertFiltersBtn = document.getElementById("clearAlertFiltersBtn");
+const mapView = document.getElementById("mapView");
 const mapWorkspace = document.getElementById("mapWorkspace");
 const userManagementWorkspace = document.getElementById("userManagementWorkspace");
+const userSearchInput = document.getElementById("userSearchInput");
+const userStateFilter = document.getElementById("userStateFilter");
+const clearUserFiltersBtn = document.getElementById("clearUserFiltersBtn");
+const complaintSearchInput = document.getElementById("complaintSearchInput");
+const complaintStatusFilter = document.getElementById("complaintStatusFilter");
+const complaintSortSelect = document.getElementById("complaintSortSelect");
+const clearComplaintFiltersBtn = document.getElementById("clearComplaintFiltersBtn");
+const adminInsights = document.getElementById("adminInsights");
 const locationMapFrame = document.getElementById("locationMapFrame");
 const liveLocationStatus = document.getElementById("liveLocationStatus");
+const pageFooter = document.querySelector(".page-footer");
 const postSubmitOverlay = document.getElementById("postSubmitOverlay");
 const closePostSubmitBtn = document.getElementById("closePostSubmitBtn");
 const postSubmitSummary = document.getElementById("postSubmitSummary");
@@ -88,6 +106,7 @@ const complaintDetailBody = document.getElementById("complaintDetailBody");
 
 const storageKey = "smart-community-auth";
 const audioStorageKey = "smart-community-audio-enabled";
+const draftStorageKey = "smart-community-report-draft-v1";
 let authState = null;
 let authMode = "login";
 let currentImageFeatures = null;
@@ -115,6 +134,9 @@ let loginAttemptsRemaining = 4;
 let loginLockTimer = null;
 let otpTimer = null;
 let otpSecondsRemaining = 0;
+let dashboardDataCache = { complaints: [], users: [] };
+let draftSaveTimer = null;
+let dashboardReloadTimer = null;
 
 function emitAuthStateChange() {
   window.dispatchEvent(
@@ -125,13 +147,13 @@ function emitAuthStateChange() {
 }
 
 const permissionMeta = {
-  submit_complaint: { label: "Submit Complaint", target: () => reportFormWorkspace },
-  view_personal_updates: { label: "View Personal Updates", target: () => complaintsWorkspace },
-  view_dashboard: { label: "View Dashboard", target: () => adminWorkspace },
+  submit_complaint: { label: "Submit Complaint", target: () => reportFormWorkspace, view: "report" },
+  view_personal_updates: { label: "View Personal Updates", target: () => complaintsWorkspace, view: "complaints" },
+  view_dashboard: { label: "View Dashboard", target: () => adminWorkspace, view: "admin" },
   reset_dashboard: { label: "Reset Dashboard", action: () => resetDashboardBtn.click() },
-  manage_alerts: { label: "Manage Alerts", target: () => alertsWorkspace },
-  update_complaint_status: { label: "Update Complaint Status", target: () => complaintsWorkspace },
-  delete_users: { label: "Delete Users", target: () => userManagementWorkspace }
+  manage_alerts: { label: "Manage Alerts", target: () => alertsWorkspace, view: "alerts" },
+  update_complaint_status: { label: "Update Complaint Status", target: () => complaintsWorkspace, view: "complaints" },
+  delete_users: { label: "Delete Users", target: () => userManagementWorkspace, view: "users" }
 };
 
 function setDashboardMessage(message, type = "info") {
@@ -155,6 +177,137 @@ function saveAudioPreference() {
     localStorage.setItem(audioStorageKey, String(audioEnabled));
   } catch (_error) {
     // ignore localStorage failures
+  }
+}
+
+function normalizeSearchValue(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function priorityRank(priority) {
+  const order = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+  return order[priority] || 0;
+}
+
+function buildDashboardQueryParams() {
+  const params = new URLSearchParams();
+  const complaintSearch = complaintSearchInput?.value?.trim();
+  const complaintStatus = complaintStatusFilter?.value || "";
+  const complaintSort = complaintSortSelect?.value || "newest";
+  const alertSearch = alertSearchInput?.value?.trim();
+  const alertPriority = alertPriorityFilter?.value || "";
+  const userSearch = userSearchInput?.value?.trim();
+  const userState = userStateFilter?.value || "";
+
+  if (complaintSearch) params.set("complaintSearch", complaintSearch);
+  if (complaintStatus) params.set("complaintStatus", complaintStatus);
+  if (complaintSort && complaintSort !== "newest") params.set("complaintSort", complaintSort);
+  if (alertSearch) params.set("alertSearch", alertSearch);
+  if (alertPriority) params.set("alertPriority", alertPriority);
+  if (userSearch) params.set("userSearch", userSearch);
+  if (userState) params.set("userState", userState);
+
+  return params.toString();
+}
+
+function scheduleDashboardReload() {
+  if (!authState?.token) {
+    return;
+  }
+
+  if (dashboardReloadTimer) {
+    window.clearTimeout(dashboardReloadTimer);
+  }
+
+  dashboardReloadTimer = window.setTimeout(() => {
+    dashboardReloadTimer = null;
+    loadDashboard().catch((error) => {
+      setDashboardMessage(error.message, "error");
+    });
+  }, 180);
+}
+
+function updateDraftStatus(message, state = "") {
+  if (!draftStatus) {
+    return;
+  }
+
+  draftStatus.textContent = message;
+  draftStatus.dataset.state = state;
+}
+
+function buildReportDraftPayload() {
+  return {
+    location: reportLocationInput?.value || "",
+    complaintInputMode: complaintInputMode?.value || "text",
+    typedComplaint: typedComplaintInput?.value || "",
+    voiceTranscript: voiceTranscriptInput?.value || "",
+    imageHint: aiImageDescription?.value || ""
+  };
+}
+
+function saveReportDraft() {
+  try {
+    localStorage.setItem(draftStorageKey, JSON.stringify(buildReportDraftPayload()));
+    updateDraftStatus("Draft saved locally.", "saved");
+  } catch (_error) {
+    updateDraftStatus("Unable to save draft in this browser.", "error");
+  }
+}
+
+function scheduleDraftSave() {
+  if (draftSaveTimer) {
+    window.clearTimeout(draftSaveTimer);
+  }
+
+  updateDraftStatus("Saving draft...", "saving");
+  draftSaveTimer = window.setTimeout(() => {
+    draftSaveTimer = null;
+    saveReportDraft();
+  }, 250);
+}
+
+function clearReportDraft(updateMessage = true) {
+  if (draftSaveTimer) {
+    window.clearTimeout(draftSaveTimer);
+    draftSaveTimer = null;
+  }
+
+  try {
+    localStorage.removeItem(draftStorageKey);
+    if (updateMessage) {
+      updateDraftStatus("Draft cleared.", "cleared");
+    }
+  } catch (_error) {
+    if (updateMessage) {
+      updateDraftStatus("Unable to clear draft in this browser.", "error");
+    }
+  }
+}
+
+function restoreReportDraft() {
+  try {
+    const saved = localStorage.getItem(draftStorageKey);
+    if (!saved) {
+      updateDraftStatus("Draft saving is ready.", "");
+      return;
+    }
+
+    const draft = JSON.parse(saved);
+    if (!draft || typeof draft !== "object") {
+      updateDraftStatus("Draft saving is ready.", "");
+      return;
+    }
+
+    reportLocationInput.value = String(draft.location || "");
+    complaintInputMode.value = draft.complaintInputMode === "voice" ? "voice" : "text";
+    typedComplaintInput.value = String(draft.typedComplaint || "");
+    voiceTranscriptInput.value = String(draft.voiceTranscript || "");
+    aiImageDescription.value = String(draft.imageHint || "");
+    setComplaintInputMode(complaintInputMode.value);
+    updateDraftStatus("Saved draft restored.", "restored");
+  } catch (_error) {
+    updateDraftStatus("Draft saving is ready.", "");
   }
 }
 
@@ -540,7 +693,17 @@ function logoutCurrentUser(message = "Logged out successfully.") {
 function loadSavedAuthState() {
   authState = null;
   try {
-    localStorage.removeItem(storageKey);
+    const saved = localStorage.getItem(storageKey);
+    if (!saved) {
+      return;
+    }
+
+    const parsed = JSON.parse(saved);
+    if (parsed && typeof parsed === "object" && parsed.token) {
+      authState = parsed;
+    } else {
+      localStorage.removeItem(storageKey);
+    }
   } catch (_error) {
     authState = null;
   }
@@ -617,7 +780,7 @@ function renderPostSubmitSummary(report) {
   postSubmitSummary.innerHTML = [
     ["Complaint ID", report.complaintId || "Pending"],
     ["Severity", report.priority || "Low"],
-    ["Issue", report.issueType || "Civic Complaint"],
+    ["Issue", report.issueType || "Complaint"],
     ["Location", report.location || "Unknown"]
   ]
     .map(
@@ -658,17 +821,124 @@ function closePostSubmitOverlay() {
   }
 }
 
+const viewTargets = {
+  home: { hash: "heroStage", section: () => document.getElementById("heroStage") },
+  about: { hash: "aboutView", section: () => aboutView },
+  report: { hash: "reportFormWorkspace", section: () => reportView },
+  complaints: { hash: "complaintsWorkspace", section: () => reportView },
+  admin: { hash: "adminWorkspace", section: () => adminView },
+  alerts: { hash: "alertsWorkspace", section: () => adminView },
+  map: { hash: "mapWorkspace", section: () => mapView },
+  users: { hash: "userManagementWorkspace", section: () => mapView }
+};
+
+function getViewNameFromElement(element) {
+  if (!element) {
+    return "home";
+  }
+
+  if (element === reportWorkspace || element === reportFormWorkspace) {
+    return "report";
+  }
+
+  if (element === complaintsWorkspace) {
+    return "complaints";
+  }
+
+  if (element === adminWorkspace) {
+    return "admin";
+  }
+
+  if (element === alertsWorkspace) {
+    return "alerts";
+  }
+
+  if (element === mapWorkspace) {
+    return "map";
+  }
+
+  if (element === userManagementWorkspace) {
+    return "users";
+  }
+
+  return "home";
+}
+
+function getViewNameFromHash(hashValue) {
+  const normalizedHash = String(hashValue || "").replace(/^#/, "");
+  const matched = Object.entries(viewTargets).find(([, config]) => config.hash === normalizedHash);
+  return matched ? matched[0] : "home";
+}
+
+function activateAppView(viewName = "home", options = {}) {
+  const { updateHash = true, message = "", scroll = true } = options;
+  const nextView = viewTargets[viewName] ? viewName : "home";
+  const aboutVisible = nextView === "about";
+  const reportGroupVisible = nextView === "report" || nextView === "complaints";
+  const adminGroupVisible = nextView === "admin" || nextView === "alerts";
+  const mapGroupVisible = nextView === "map" || nextView === "users";
+
+  document.body.dataset.appView = nextView;
+
+  const heroStage = viewTargets.home.section();
+  if (heroStage) {
+    heroStage.hidden = nextView !== "home";
+  }
+
+  if (aboutView) {
+    aboutView.hidden = !aboutVisible;
+  }
+
+  if (reportView) {
+    reportView.hidden = !reportGroupVisible;
+  }
+
+  if (adminView) {
+    adminView.hidden = !adminGroupVisible;
+  }
+
+  if (mapView) {
+    mapView.hidden = !mapGroupVisible;
+  }
+
+  if (pageFooter) {
+    pageFooter.hidden = nextView !== "home" && nextView !== "about";
+  }
+
+  document.querySelectorAll(".nav-link").forEach((link) => {
+    const href = link.getAttribute("href");
+    const isActive = href === `#${viewTargets[nextView].hash}`;
+    link.classList.toggle("is-active", isActive);
+    if (isActive) {
+      link.setAttribute("aria-current", "page");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+
+  if (updateHash) {
+    const nextHash = `#${viewTargets[nextView].hash}`;
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, "", nextHash);
+    }
+  }
+
+  if (scroll) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  if (message) {
+    setDashboardMessage(message, "success");
+  }
+}
+
 function goToMainDashboard() {
-  window.location.hash = "mainDashboard";
-  mainDashboard.scrollIntoView({ behavior: "smooth", block: "start" });
+  activateAppView("home");
 }
 
 function scrollToWorkspace(element, message) {
   if (!element) return;
-  element.scrollIntoView({ behavior: "smooth", block: "start" });
-  if (message) {
-    setDashboardMessage(message, "success");
-  }
+  activateAppView(getViewNameFromElement(element), { message });
 }
 
 function toggleMobileMenu(forceState) {
@@ -723,6 +993,85 @@ function setupRevealAnimations() {
   );
 
   revealElements.forEach((element) => observer.observe(element));
+}
+
+function setupHeroStorytelling() {
+  const storySection = document.querySelector(".hero-story");
+  if (!storySection) {
+    return;
+  }
+
+  const storyBeats = Array.from(storySection.querySelectorAll("[data-story-beat]"));
+  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+  let frameRequested = false;
+
+  const applyStoryState = (progress) => {
+    const clampedProgress = Math.min(Math.max(progress, 0), 1);
+    const stepIndex = Math.min(storyBeats.length - 1, Math.floor(clampedProgress * storyBeats.length));
+
+    storySection.style.setProperty("--story-progress", clampedProgress.toFixed(4));
+    storySection.dataset.storyStep = String(stepIndex);
+    storyBeats.forEach((beat, index) => {
+      beat.classList.toggle("is-active", index === stepIndex);
+    });
+  };
+
+  const updateStoryProgress = () => {
+    frameRequested = false;
+
+    if (reducedMotionQuery.matches) {
+      applyStoryState(0);
+      return;
+    }
+
+    const totalScrollableDistance = Math.max(storySection.offsetHeight - window.innerHeight, 1);
+    const sectionTop = storySection.getBoundingClientRect().top;
+    const scrolledDistance = Math.min(Math.max(-sectionTop, 0), totalScrollableDistance);
+    applyStoryState(scrolledDistance / totalScrollableDistance);
+  };
+
+  const requestStoryFrame = () => {
+    if (frameRequested) {
+      return;
+    }
+
+    frameRequested = true;
+    window.requestAnimationFrame(updateStoryProgress);
+  };
+
+  updateStoryProgress();
+  window.addEventListener("scroll", requestStoryFrame, { passive: true });
+  window.addEventListener("resize", requestStoryFrame);
+  if (typeof reducedMotionQuery.addEventListener === "function") {
+    reducedMotionQuery.addEventListener("change", requestStoryFrame);
+  } else if (typeof reducedMotionQuery.addListener === "function") {
+    reducedMotionQuery.addListener(requestStoryFrame);
+  }
+}
+
+function setupAppNavigation() {
+  const navigationLinks = Array.from(
+    document.querySelectorAll('.brand-lockup[href^="#"], .site-nav a[href^="#"], .hero-actions a[href^="#"]')
+  );
+
+  navigationLinks.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const href = link.getAttribute("href");
+      if (!href) {
+        return;
+      }
+
+      event.preventDefault();
+      activateAppView(getViewNameFromHash(href));
+      toggleMobileMenu(false);
+    });
+  });
+
+  window.addEventListener("hashchange", () => {
+      activateAppView(getViewNameFromHash(window.location.hash), { updateHash: false });
+  });
+
+  activateAppView(getViewNameFromHash(window.location.hash), { updateHash: false, scroll: false });
 }
 
 function setupGooeyInteractions() {
@@ -847,6 +1196,13 @@ function applyPermissionState() {
   if (!permissions.includes("manage_alerts")) {
     alertsList.innerHTML = `<div class="table-row"><span>Login as Admin to manage alerts.</span></div>`;
   }
+
+  document.querySelectorAll('.nav-link[href="#adminWorkspace"], .nav-link[href="#alertsWorkspace"]').forEach((link) => {
+    link.hidden = !permissions.includes("view_dashboard");
+  });
+  document.querySelectorAll('.nav-link[href="#mapWorkspace"]').forEach((link) => {
+    link.hidden = !hasToken;
+  });
 
 }
 
@@ -1051,7 +1407,7 @@ function showTypedLocationOnMap() {
     return;
   }
 
-  mapWorkspace.scrollIntoView({ behavior: "smooth", block: "start" });
+  activateAppView("map");
 }
 
 function useLiveLocation() {
@@ -1109,6 +1465,19 @@ function describeImageFromFeatures(features) {
     };
   }
 
+  const vegetationStrength =
+    features.greenRatio * 0.72 +
+    features.averageSaturation * 0.16 +
+    features.edgeDensity * 0.14 +
+    features.contrast * 0.1 -
+    features.blueRatio * 0.12;
+  const pooledWaterStrength =
+    features.blueRatio * 0.46 +
+    features.neutralRatio * 0.18 +
+    (1 - features.averageSaturation) * 0.12 +
+    features.averageBrightness * 0.06 -
+    features.greenRatio * 0.24;
+
   const candidates = [
     {
       label: "Possible fire, smoke, gas leak, or burn-risk area",
@@ -1129,12 +1498,12 @@ function describeImageFromFeatures(features) {
     {
       label: "Likely fallen tree, branch, or vegetation blocking the road",
       score:
-        features.greenRatio * 0.58 +
-        features.averageSaturation * 0.12 +
-        features.edgeDensity * 0.16 +
-        features.contrast * 0.12 +
-        (1 - features.blueRatio) * 0.08 +
-        (1 - features.neutralRatio) * 0.04
+        Math.max(
+          0,
+          vegetationStrength +
+            features.contrast * 0.12 +
+            (1 - features.neutralRatio) * 0.04
+        )
     },
     {
       label: "Likely garbage, waste overflow, or clutter accumulation",
@@ -1161,7 +1530,7 @@ function describeImageFromFeatures(features) {
     },
     {
       label: "Likely waterlogging, drainage overflow, or wet surface",
-      score: features.blueRatio * 0.42 + features.neutralRatio * 0.2 + (1 - features.averageSaturation) * 0.18 + features.averageBrightness * 0.08
+      score: Math.max(0, pooledWaterStrength)
     },
     {
       label: "Likely water leakage, pipe seepage, or burst-line issue",
@@ -1192,7 +1561,7 @@ function describeImageFromFeatures(features) {
 
   const best = candidates[0];
   const second = candidates[1];
-  const accuracy = Math.max(58, Math.min(97, Math.round(57 + best.score * 38 + (best.score - second.score) * 32)));
+  const accuracy = Math.max(46, Math.min(92, Math.round(45 + best.score * 34 + (best.score - second.score) * 26)));
 
   return {
     description: best.label,
@@ -1260,6 +1629,124 @@ function renderMetrics(metrics) {
   document.getElementById("resolvedCount").textContent = Math.max(0, metrics.totalComplaints - metrics.openComplaints);
 }
 
+function getFilteredComplaints(complaints = []) {
+  const search = normalizeSearchValue(complaintSearchInput?.value);
+  const statusFilter = complaintStatusFilter?.value || "";
+  const sortMode = complaintSortSelect?.value || "newest";
+
+  const filtered = complaints.filter((complaint) => {
+    const matchesSearch =
+      !search ||
+      [complaint.type, complaint.location, complaint.status, complaint.assignedAuthority, complaint.description]
+        .some((value) => normalizeSearchValue(value).includes(search));
+    const matchesStatus = !statusFilter || complaint.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  filtered.sort((left, right) => {
+    if (sortMode === "priority") {
+      return priorityRank(right.priority) - priorityRank(left.priority);
+    }
+    if (sortMode === "oldest") {
+      return new Date(left.createdAt || 0) - new Date(right.createdAt || 0);
+    }
+    return new Date(right.createdAt || 0) - new Date(left.createdAt || 0);
+  });
+
+  return filtered;
+}
+
+function getFilteredAlerts(complaints = []) {
+  const search = normalizeSearchValue(alertSearchInput?.value);
+  const priority = alertPriorityFilter?.value || "";
+
+  return complaints
+    .filter((complaint) => (!priority || complaint.priority === priority) && Array.isArray(complaint.alerts) && complaint.alerts.length)
+    .flatMap((complaint) =>
+      complaint.alerts.slice(-2).map((alertText) => ({
+        id: complaint._id,
+        type: complaint.type,
+        location: complaint.location,
+        priority: complaint.priority,
+        text: alertText
+      }))
+    )
+    .filter((alert) => {
+      if (!search) {
+        return true;
+      }
+
+      return [alert.type, alert.location, alert.text, alert.priority].some((value) => normalizeSearchValue(value).includes(search));
+    });
+}
+
+function getFilteredUsers(users = []) {
+  const search = normalizeSearchValue(userSearchInput?.value);
+  const state = userStateFilter?.value || "";
+
+  return users.filter((user) => {
+    const isDisabled = Boolean(user.disabledAt);
+    const matchesSearch =
+      !search || [user.username, user.email, user.role].some((value) => normalizeSearchValue(value).includes(search));
+    const matchesState = !state || (state === "disabled" ? isDisabled : !isDisabled);
+    return matchesSearch && matchesState;
+  });
+}
+
+function renderAdminInsights(complaints = [], analytics = null) {
+  if (!adminInsights) {
+    return;
+  }
+
+  if (!complaints.length) {
+    adminInsights.innerHTML = "";
+    return;
+  }
+
+  const reviewCount = complaints.filter((complaint) => complaint.status === "Needs Review").length;
+  const criticalCount = complaints.filter((complaint) => complaint.priority === "Critical" || complaint.priority === "High").length;
+  const averageConfidence = complaints.length
+    ? Math.round(
+        complaints.reduce((sum, complaint) => sum + Number(complaint.confidence || 0), 0) / complaints.length
+      )
+    : 0;
+  const topIssue = analytics?.topIssue?.label || complaints[0]?.type || "No category";
+  const topAuthority = analytics?.topAuthority?.label || complaints[0]?.assignedAuthority || "No routing";
+
+  adminInsights.innerHTML = `
+    <article class="insight-card">
+      <span>Needs review</span>
+      <strong>${reviewCount}</strong>
+      <p>Complaints that should be checked by an admin before routing.</p>
+    </article>
+    <article class="insight-card">
+      <span>High priority</span>
+      <strong>${criticalCount}</strong>
+      <p>Complaints marked as high or critical.</p>
+    </article>
+    <article class="insight-card">
+      <span>Average confidence</span>
+      <strong>${averageConfidence}%</strong>
+      <p>Current average AI confidence across loaded complaints.</p>
+    </article>
+    <article class="insight-card">
+      <span>Top issue</span>
+      <strong>${escapeHtml(topIssue)}</strong>
+      <p>Most common issue in the current dashboard result set.</p>
+    </article>
+    <article class="insight-card">
+      <span>Main authority</span>
+      <strong>${escapeHtml(topAuthority)}</strong>
+      <p>Most common routing target in the current dashboard result set.</p>
+    </article>
+    <article class="insight-card">
+      <span>Loaded records</span>
+      <strong>${complaints.length}</strong>
+      <p>Items returned after the active filters were applied.</p>
+    </article>
+  `;
+}
+
 function formatTokenLabel(value) {
   return String(value || "")
     .toLowerCase()
@@ -1302,7 +1789,7 @@ function buildSubmittedReport(payload, result) {
     uploadedPhoto: currentImageDataUrl,
     googleMapsUrl: buildGoogleMapsUrl(payload.location, result.mapLocation),
     googleMapsEmbedUrl: buildGoogleMapsEmbedUrl(payload.location, result.mapLocation),
-    issueType: result.nlp?.issueType || "Civic Complaint",
+    issueType: result.nlp?.issueType || "Complaint",
     category: result.nlp?.category || "General",
     priority: result.priority?.level || "Low",
     assignedAuthority: result.assignedAuthority || "Gram Panchayat",
@@ -1667,13 +2154,14 @@ async function generatePdfReport(report, options = {}) {
 function renderComplaints(complaints) {
   const container = document.getElementById("complaintsList");
   const canUpdateStatus = authState?.permissions?.includes("update_complaint_status");
+  const visibleComplaints = getFilteredComplaints(complaints);
 
-  if (!complaints.length) {
+  if (!visibleComplaints.length) {
     container.innerHTML = `<div class="table-row empty-state"><span>No complaints found. The dashboard is currently clear.</span></div>`;
     return;
   }
 
-  container.innerHTML = complaints
+  container.innerHTML = visibleComplaints
     .map(
       (complaint) => `
         <article class="issue-card">
@@ -1773,16 +2261,7 @@ function renderAlerts(complaints = []) {
     return;
   }
 
-  const alertEntries = complaints
-    .filter((complaint) => Array.isArray(complaint.alerts) && complaint.alerts.length)
-    .flatMap((complaint) =>
-      complaint.alerts.slice(-2).map((alertText) => ({
-        id: complaint._id,
-        type: complaint.type,
-        location: complaint.location,
-        text: alertText
-      }))
-    );
+  const alertEntries = getFilteredAlerts(complaints);
 
   if (!alertEntries.length) {
     alertsList.innerHTML = `<div class="table-row empty-state"><span>No active alerts need attention.</span></div>`;
@@ -1824,18 +2303,19 @@ function renderAlerts(complaints = []) {
 
 function renderUserManagement(users = []) {
   const canDeleteUsers = authState?.permissions?.includes("delete_users");
+  const visibleUsers = getFilteredUsers(users);
 
   if (!canDeleteUsers) {
     userManagementList.innerHTML = `<div class="table-row"><span>Login as Admin to manage accounts.</span></div>`;
     return;
   }
 
-  if (!users.length) {
+  if (!visibleUsers.length) {
     userManagementList.innerHTML = `<div class="table-row"><span>No accounts found.</span></div>`;
     return;
   }
 
-  userManagementList.innerHTML = users
+  userManagementList.innerHTML = visibleUsers
     .map(
       (user) => `
         <article class="table-row user-row">
@@ -2330,11 +2810,63 @@ function setupComplaintInputMode() {
 
 function renderLoggedOutState() {
   renderMetrics({ totalComplaints: 0, openComplaints: 0 });
+  renderAdminInsights([]);
   document.getElementById("recentComplaints").innerHTML = `<div class="table-row empty-state"><span>Login to view recent complaints.</span></div>`;
   document.getElementById("complaintsList").innerHTML = `<div class="table-row empty-state"><span>Login to view your complaint history.</span></div>`;
   document.getElementById("adminTable").innerHTML = `<div class="table-row empty-state"><span>Login as Admin to access the command center.</span></div>`;
   alertsList.innerHTML = `<div class="table-row"><span>Login as Admin to manage alerts.</span></div>`;
   userManagementList.innerHTML = `<div class="table-row"><span>Login as Admin to manage accounts.</span></div>`;
+}
+
+function rerenderDashboardViews() {
+  renderComplaints(dashboardDataCache.complaints || []);
+  renderAlerts(dashboardDataCache.complaints || []);
+  renderUserManagement(dashboardDataCache.users || []);
+}
+
+function setupDashboardFilters() {
+  const rerender = () => rerenderDashboardViews();
+  const reload = () => scheduleDashboardReload();
+
+  complaintSearchInput?.addEventListener("input", reload);
+  complaintStatusFilter?.addEventListener("change", reload);
+  complaintSortSelect?.addEventListener("change", reload);
+  clearComplaintFiltersBtn?.addEventListener("click", () => {
+    complaintSearchInput.value = "";
+    complaintStatusFilter.value = "";
+    complaintSortSelect.value = "newest";
+    reload();
+  });
+
+  alertSearchInput?.addEventListener("input", reload);
+  alertPriorityFilter?.addEventListener("change", reload);
+  clearAlertFiltersBtn?.addEventListener("click", () => {
+    alertSearchInput.value = "";
+    alertPriorityFilter.value = "";
+    reload();
+  });
+
+  userSearchInput?.addEventListener("input", reload);
+  userStateFilter?.addEventListener("change", reload);
+  clearUserFiltersBtn?.addEventListener("click", () => {
+    userSearchInput.value = "";
+    userStateFilter.value = "";
+    reload();
+  });
+
+  window.addEventListener("smart-community:auth-changed", rerender);
+}
+
+function setupDraftAutosave() {
+  [reportLocationInput, complaintInputMode, typedComplaintInput, voiceTranscriptInput].forEach((element) => {
+    element?.addEventListener("input", scheduleDraftSave);
+    element?.addEventListener("change", scheduleDraftSave);
+  });
+
+  clearDraftBtn?.addEventListener("click", () => {
+    resetComposer();
+    clearReportDraft();
+  });
 }
 
 async function loadDashboard() {
@@ -2345,10 +2877,17 @@ async function loadDashboard() {
     return;
   }
 
-  const data = await apiRequest("/api/dashboard", { method: "GET" });
+  const query = buildDashboardQueryParams();
+  const path = query ? `/api/dashboard?${query}` : "/api/dashboard";
+  const data = await apiRequest(path, { method: "GET" });
+  dashboardDataCache = {
+    complaints: data.complaints || [],
+    users: data.manageableUsers || []
+  };
   renderMetrics(data.metrics);
   renderRecentComplaints(data.complaints);
   renderComplaints(data.complaints);
+  renderAdminInsights(data.complaints, data.analytics || null);
   renderAdminTable(data.complaints);
   renderAlerts(data.complaints);
   renderMap(data.complaints);
@@ -2382,6 +2921,8 @@ function resetComposer() {
   clearVoiceAudioSelection();
   updateVoiceTranscriptValue("");
   setComplaintInputMode(complaintInputMode.value || "text");
+  clearReportDraft(false);
+  updateDraftStatus("Draft cleared after reset.", "cleared");
 }
 
 function loadImageElement(file) {
@@ -2527,6 +3068,7 @@ function setupImageUpload() {
       currentImageInsight = null;
       currentImageDataUrl = null;
       currentImageAiPayload = null;
+      scheduleDraftSave();
       return;
     }
 
@@ -2543,6 +3085,7 @@ function setupImageUpload() {
       currentImageInsight = describeImageFromFeatures(currentImageFeatures);
       aiImageDescription.value = currentImageInsight.description;
       aiAccuracyStatus.textContent = "AI description ready. Press Show AI Accuracy to view confidence.";
+      scheduleDraftSave();
     } catch (error) {
       currentImageFeatures = null;
       currentImageInsight = null;
@@ -2550,6 +3093,7 @@ function setupImageUpload() {
       currentImageAiPayload = null;
       aiImageDescription.value = "AI could not inspect this image.";
       aiAccuracyStatus.textContent = error.message;
+      scheduleDraftSave();
     }
   });
 }
@@ -2838,12 +3382,19 @@ setupImageUpload();
 setupComplaintInputMode();
 setupMobileMenu();
 setupRevealAnimations();
+setupHeroStorytelling();
+setupAppNavigation();
 setupGooeyInteractions();
 applyPermissionState();
 updateAudioToggleState();
 setPdfButtonState(false);
 resetComposer();
-openAuthOverlay("login");
+restoreReportDraft();
+setupDraftAutosave();
+setupDashboardFilters();
+if (!authState?.token) {
+  openAuthOverlay("login");
+}
 loadDashboard().catch((error) => {
   setDashboardMessage(error.message, "error");
 });

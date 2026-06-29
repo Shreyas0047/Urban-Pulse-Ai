@@ -60,13 +60,25 @@ def decode_image(image_base64):
 def feature_signal_candidates(image_features, image_hint):
     features = image_features or {}
     normalized_hint = normalize_text(image_hint)
+    vegetation_strength = clamp01(
+        features.get("greenRatio", 0) * 1.12
+        + features.get("averageSaturation", 0) * 0.24
+        + features.get("edgeDensity", 0) * 0.18
+        - features.get("blueRatio", 0) * 0.14
+    )
+    pooled_water_strength = clamp01(
+        features.get("blueRatio", 0) * 0.92
+        + features.get("neutralRatio", 0) * 0.34
+        + (1 - features.get("averageSaturation", 0)) * 0.18
+        - features.get("greenRatio", 0) * 0.42
+    )
     signals = [
         ("fire or smoke hazard", "safety_fire", clamp01(features.get("redHeatRatio", 0) * 1.05 + features.get("smokeLikeRatio", 0) * 0.88 + features.get("hotspotRatio", 0) * 0.76)),
         ("road damage", "road_damage", clamp01(features.get("edgeDensity", 0) * 0.72 + features.get("contrast", 0) * 0.54 + features.get("darkRatio", 0) * 0.2 - features.get("greenRatio", 0) * 0.1)),
-        ("tree obstruction", "tree_obstruction", clamp01(features.get("greenRatio", 0) * 0.9 + features.get("averageSaturation", 0) * 0.18 + features.get("edgeDensity", 0) * 0.14)),
+        ("tree obstruction", "tree_obstruction", clamp01(vegetation_strength + features.get("contrast", 0) * 0.12)),
         ("garbage overflow", "garbage", clamp01(features.get("edgeDensity", 0) * 0.34 + features.get("contrast", 0) * 0.26 + features.get("averageSaturation", 0) * 0.2 - features.get("greenRatio", 0) * 0.16)),
         ("sewage or manhole overflow", "sewage_overflow", clamp01(features.get("neutralRatio", 0) * 0.34 + features.get("darkRatio", 0) * 0.3 + (1 - features.get("blueRatio", 0)) * 0.12)),
-        ("waterlogging", "water_drainage", clamp01(features.get("blueRatio", 0) * 0.52 + features.get("neutralRatio", 0) * 0.2 + (1 - features.get("averageSaturation", 0)) * 0.14)),
+        ("waterlogging", "water_drainage", clamp01(pooled_water_strength)),
         ("water leakage", "water_leakage", clamp01(features.get("blueRatio", 0) * 0.36 + features.get("neutralRatio", 0) * 0.18 + features.get("averageBrightness", 0) * 0.12)),
         ("wall or structural damage", "wall_damage", clamp01(features.get("edgeDensity", 0) * 0.46 + features.get("contrast", 0) * 0.3 + features.get("neutralRatio", 0) * 0.2)),
         ("security concern", "security", clamp01(features.get("darkRatio", 0) * 0.34 + features.get("contrast", 0) * 0.18)),
@@ -93,6 +105,12 @@ def feature_signal_candidates(image_features, image_hint):
     for label, category_id, score in signals:
         if any(term in normalized_hint for term in hint_boosts.get(category_id, [])):
             score = max(score, 0.44)
+        if category_id == "tree_obstruction" and vegetation_strength > 0.28:
+            score = clamp01(score + 0.12 + vegetation_strength * 0.12)
+        if category_id == "water_drainage" and features.get("greenRatio", 0) > 0.24:
+            score = clamp01(score - (0.14 + features.get("greenRatio", 0) * 0.18))
+        if category_id == "garbage" and vegetation_strength > 0.28:
+            score = clamp01(score - 0.14)
         if score >= 0.2:
             category = CATEGORY_BY_ID.get(category_id, {})
             candidates.append(

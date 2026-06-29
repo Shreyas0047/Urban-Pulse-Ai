@@ -38,21 +38,46 @@ def predict_priority(text, sentiment_bundle, categories, repeat_count):
 
 def merge_multi_modal_categories(text_categories, vision_result):
     merged = {item["id"]: dict(item) for item in text_categories}
+    detections = vision_result.get("detections") or []
+    top_detection = vision_result.get("top_detection") or {}
+    top_detection_id = top_detection.get("category_id")
+    top_detection_confidence = float(top_detection.get("confidence") or 0)
 
-    for category_id in map_visual_labels_to_categories(vision_result):
+    for detection in detections:
+        category_id = detection.get("category_id")
+        detection_confidence = float(detection.get("confidence") or 0)
+        visual_boost = max(0.08, detection_confidence * VISION_IMAGE_WEIGHT * 0.48)
+
         if category_id in merged:
-            merged[category_id]["confidence"] = round(min(1.0, merged[category_id]["confidence"] + VISION_IMAGE_WEIGHT * 0.18), 3)
+            merged[category_id]["confidence"] = round(min(1.0, merged[category_id]["confidence"] + visual_boost), 3)
         else:
             category = CATEGORY_BY_ID.get(category_id) or next((item for item in COMPLAINT_CATEGORIES if item["id"] == category_id), None)
             if category:
                 merged[category_id] = {
                     "id": category["id"],
                     "label": category["label"],
-                    "confidence": round(0.42 * VISION_IMAGE_WEIGHT, 3),
+                    "confidence": round(max(0.18, detection_confidence * max(0.42, VISION_IMAGE_WEIGHT)), 3),
                     "matched_keywords": [],
                 }
 
+    if top_detection_id and top_detection_id in merged:
+        merged[top_detection_id]["confidence"] = round(
+            min(1.0, merged[top_detection_id]["confidence"] + top_detection_confidence * 0.08),
+            3,
+        )
+
     merged_values = sorted(merged.values(), key=lambda item: item["confidence"], reverse=True)
+
+    if top_detection_id and top_detection_confidence >= 0.4 and merged_values:
+        top_visual_item = next((item for item in merged_values if item["id"] == top_detection_id), None)
+        top_ranked_item = merged_values[0]
+        if (
+            top_visual_item
+            and top_visual_item["id"] != top_ranked_item["id"]
+            and top_visual_item["confidence"] >= top_ranked_item["confidence"] - 0.12
+        ):
+            merged_values = [top_visual_item] + [item for item in merged_values if item["id"] != top_detection_id]
+
     return merged_values
 
 

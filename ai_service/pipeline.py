@@ -48,34 +48,42 @@ def build_map_location(location):
 
 
 def run_hybrid_pipeline(payload):
-    text = " ".join(
+    primary_text = " ".join(
         value
         for value in [
             str(payload.get("textComplaint") or "").strip(),
             str(payload.get("voiceTranscript") or "").strip(),
-            str(payload.get("imageHint") or "").strip(),
         ]
         if value
     ).strip()
-    normalized_text = normalize_text(text)
-    semantic_result = semantic_multi_label_classification(text)
+    visual_context_hint = " ".join(
+        value
+        for value in [
+            str(payload.get("textComplaint") or "").strip(),
+            str(payload.get("voiceTranscript") or "").strip(),
+            str(payload.get("location") or "").strip(),
+        ]
+        if value
+    ).strip()
+    normalized_text = normalize_text(primary_text)
+    semantic_result = semantic_multi_label_classification(primary_text) if primary_text else {"labels": [], "fallback": None, "all_scores": []}
     vision_result = detect_objects_from_features(
         payload.get("imageFeatures"),
-        payload.get("imageHint"),
+        visual_context_hint,
         payload.get("imageBase64"),
         payload.get("imageMimeType"),
     )
     final_categories = merge_multi_modal_categories(semantic_result["labels"], vision_result)
-    sentiment_bundle = analyze_sentiment_and_severity(text, final_categories)
+    sentiment_bundle = analyze_sentiment_and_severity(primary_text, final_categories)
     context_bundle = context_features(payload, semantic_result)
-    priority, priority_score = predict_priority(text, sentiment_bundle, final_categories, context_bundle["repeat_count"])
+    priority, priority_score = predict_priority(primary_text, sentiment_bundle, final_categories, context_bundle["repeat_count"])
 
     top_category = final_categories[0] if final_categories else None
     fallback = semantic_result["fallback"]
     primary_category_id = top_category["id"] if top_category else (fallback["suggested_category"] if fallback else "general")
     primary_category_label = top_category["label"] if top_category else (fallback["suggested_label"] if fallback else "General")
     confidence = top_category["confidence"] if top_category else (fallback["confidence"] if fallback else 0.28)
-    reason = build_explanation(text, final_categories, sentiment_bundle, priority, context_bundle, fallback)
+    reason = build_explanation(primary_text, final_categories, sentiment_bundle, priority, context_bundle, fallback)
 
     return {
         "category": primary_category_id,
@@ -89,11 +97,11 @@ def run_hybrid_pipeline(payload):
         "categories": [item["id"] for item in final_categories] if final_categories else ([fallback["suggested_category"]] if fallback else []),
         "category_labels": [item["label"] for item in final_categories] if final_categories else ([fallback["suggested_label"]] if fallback else []),
         "category_confidence": [item["confidence"] for item in final_categories] if final_categories else ([fallback["confidence"]] if fallback else []),
-        "keywords": keyword_extract(text, limit=6),
+        "keywords": keyword_extract(primary_text, limit=6),
         "vision": vision_result,
         "context": context_bundle,
         "fallback": fallback,
-        "unified_text": text or "No complaint text provided.",
+        "unified_text": primary_text or "Complaint submitted with image evidence.",
         "nlp": {
             "category": primary_category_label,
             "issueType": primary_category_label,
@@ -123,12 +131,13 @@ def run_hybrid_pipeline(payload):
         "imageUpload": "Processed by modular hybrid AI pipeline",
         "aiMeta": {
             "provider": "flask",
-            "engine": "hybrid-semantic-feature-v2",
+            "engine": "hybrid-semantic-feature-v3",
             "model": "sentence-transformers-or-hash-fallback",
             "fallbackUsed": False,
             "categoryId": primary_category_id,
             "visionEngine": vision_result.get("model", "shared-feature-signals-v2"),
             "visionProvider": vision_result.get("provider", "feature-fallback"),
             "visionFallbackUsed": vision_result.get("fallbackUsed", True),
+            "machineHintIgnoredForClassification": True,
         },
     }

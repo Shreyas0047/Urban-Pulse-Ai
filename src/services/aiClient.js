@@ -661,7 +661,7 @@ function scoreVisualProfiles(imageFeatures, imageLabel) {
     if (profile.id === "tree_obstruction" && vegetationStrength > 0.2) {
       return {
         ...profile,
-        visualScore: clamp01(profile.visualScore + 0.14 + vegetationStrength * 0.18)
+        visualScore: clamp01(profile.visualScore + 0.18 + vegetationStrength * 0.22)
       };
     }
 
@@ -690,6 +690,13 @@ function scoreVisualProfiles(imageFeatures, imageLabel) {
       return {
         ...profile,
         visualScore: clamp01(profile.visualScore - 0.08)
+      };
+    }
+
+    if (profile.id === "water_drainage" && imageFeatures.greenRatio > 0.22) {
+      return {
+        ...profile,
+        visualScore: clamp01(profile.visualScore - (0.12 + imageFeatures.greenRatio * 0.16))
       };
     }
 
@@ -744,7 +751,7 @@ function pickTopProfile(scoredProfiles, key, threshold = 0.18) {
 }
 
 function buildNlpResult(payload) {
-  const unifiedText = normalizeText([payload.textComplaint, payload.voiceTranscript, payload.imageHint].filter(Boolean).join(" "));
+  const unifiedText = normalizeText([payload.textComplaint, payload.voiceTranscript].filter(Boolean).join(" "));
   const locationText = normalizeText(payload.location);
   const scoredProfiles = scoreTextProfiles(unifiedText, locationText);
   const top = pickTopProfile(scoredProfiles, "textScore");
@@ -763,7 +770,7 @@ function buildNlpResult(payload) {
 }
 
 function buildCvResult(payload) {
-  const imageLabel = normalizeText(payload.imageHint);
+  const imageLabel = normalizeText([payload.textComplaint, payload.voiceTranscript, payload.location].filter(Boolean).join(" "));
   const scoredProfiles = scoreVisualProfiles(payload.imageFeatures, imageLabel);
   const top = pickTopProfile(scoredProfiles, "visualScore", 0.16);
 
@@ -885,7 +892,7 @@ function fuseIssueDecision(nlpBundle, cvBundle, payload) {
 }
 
 function predictPriority(payload, issueProfile, nlp, cv) {
-  const combinedText = normalizeText([payload.textComplaint, payload.voiceTranscript, payload.imageHint, payload.location].join(" "));
+  const combinedText = normalizeText([payload.textComplaint, payload.voiceTranscript, payload.location].join(" "));
   let score = issueProfile.basePriority || 0.45;
 
   if (["urgent", "immediately", "danger", "emergency", "injury", "critical"].some((word) => combinedText.includes(word))) {
@@ -1013,14 +1020,14 @@ function analyzeComplaintLocally(payload) {
   const alerts = buildAlerts(priority, payload.location, fusedIssue);
   const assignedAuthority = assignAuthority(priority, payload.location, fusedIssue);
   const mapLocation = buildMapLocation(payload.location);
-  const mergedText = [payload.textComplaint, payload.voiceTranscript, payload.imageHint].filter(Boolean).join(" ").trim();
+  const mergedText = [payload.textComplaint, payload.voiceTranscript].filter(Boolean).join(" ").trim();
   const confidence = clamp01(
     Math.max(nlpBundle.result.confidence || 0, cvBundle.result.score || 0, fusedIssue.fusedScore || 0) * 0.74 +
       (nlpBundle.profile.id === cvBundle.profile.id ? 0.18 : 0.08)
   );
 
   return {
-    unifiedText: mergedText || "No complaint text provided.",
+    unifiedText: mergedText || "Complaint submitted with image evidence.",
     nlp: {
       category: fusedIssue.category,
       issueType: fusedIssue.issueType,
@@ -1042,14 +1049,15 @@ function analyzeComplaintLocally(payload) {
     ,
     aiMeta: {
       provider: "express",
-      engine: "local-keyword-feature-fusion-v2",
+      engine: "local-keyword-feature-fusion-v3",
       model: "deterministic-rules",
       fallbackUsed: true,
       categoryId: fusedIssue.id || CATEGORY_ID_BY_ISSUE_TYPE.get(fusedIssue.issueType) || "general",
       visionEngine: "browser-feature-signals-v2",
       visionProvider: "feature-fallback",
       visionFallbackUsed: true,
-      evaluationVersion: AI_EVALUATION_VERSION
+      evaluationVersion: AI_EVALUATION_VERSION,
+      machineHintIgnoredForClassification: true
     }
   };
 }
@@ -1077,14 +1085,15 @@ async function analyzeComplaint(payload) {
       ...data,
       aiMeta: {
         provider: data.aiMeta?.provider || "flask",
-        engine: data.aiMeta?.engine || "hybrid-semantic-feature-v2",
+        engine: data.aiMeta?.engine || "hybrid-semantic-feature-v3",
         model: data.aiMeta?.model || "sentence-transformers-or-hash-fallback",
         fallbackUsed: false,
         categoryId: data.aiMeta?.categoryId || CATEGORY_ID_BY_ISSUE_TYPE.get(data.nlp?.issueType) || data.category || "general",
         visionEngine: data.aiMeta?.visionEngine || "shared-feature-signals-v2",
         visionProvider: data.aiMeta?.visionProvider || data.cv?.provider || "feature-fallback",
         visionFallbackUsed: Boolean(data.aiMeta?.visionFallbackUsed || data.cv?.fallbackUsed),
-        evaluationVersion: data.aiMeta?.evaluationVersion || AI_EVALUATION_VERSION
+        evaluationVersion: data.aiMeta?.evaluationVersion || AI_EVALUATION_VERSION,
+        machineHintIgnoredForClassification: Boolean(data.aiMeta?.machineHintIgnoredForClassification)
       }
     };
   } catch (_error) {
