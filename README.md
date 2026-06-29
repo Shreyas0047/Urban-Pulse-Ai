@@ -106,11 +106,43 @@ The AI service is now broader, more explainable, and easier to evaluate. It no l
 | Authentication | Email OTP registration, standard login, no captcha, no demo login route |
 | Citizen workflow | Submit text, image, or voice complaints and review generated summaries |
 | Admin workflow | Review complaints, update statuses, inspect details, manage accounts |
-| Complaint detail | Modal detail view with AI metadata, status, and user context |
+| Complaint detail | Case-file modal with routing summary, AI decision notes, confidence breakdown, alternatives, alert history, and status timeline |
 | Status tracking | Complaint status history is persisted |
 | AI helper | Floating chatbot supports status lookup, complaint guidance, FAQ, and navigation help |
 | Reporting | PDF complaint reports and BBMP email forwarding |
+| Operations map | Visual marker board, hotspot summary, priority watch, focused complaint preview, and direct case opening |
+| Dashboard insights | Review load, priority load, hotspot, oldest open case, resolution rate, and routing concentration |
 | Safety | Low-confidence AI classifications require review instead of being silently trusted |
+
+## Latest UX And Ops Upgrades
+
+The current production pass focuses on making the system easier to trust, scan, and operate under real complaint volume.
+
+| Upgrade | What Changed | Why It Helps |
+| --- | --- | --- |
+| Case-file complaint detail | Complaint details now open as a structured case view with summary cards, AI explanation, numeric decision breakdown, alternatives, alert notes, and a timeline | Admins can understand and verify a case faster |
+| Operations map | The map area now renders complaint markers from stored coordinates, highlights visible hotspots, and lets operators open a case directly from the map rail | Makes geographic clustering and triage easier |
+| Stronger admin insights | Dashboard insight cards now surface hotspot concentration, oldest open case, and resolution rate in addition to confidence and review load | Gives admins clearer operational priorities |
+| Loading polish | Dashboard panels can show loading placeholders while filtered data reloads | Reduces UI jumpiness and makes the app feel more deliberate |
+| Single-focus navigation | Each top-level workspace keeps attention on one functional area at a time | Reduces clutter and supports task-based usage |
+
+## Main User Journeys
+
+### Citizen Journey
+
+1. Login or register with email and password.
+2. Add a location, complaint text or voice transcript, and optional image.
+3. Review AI-generated description and submit the case.
+4. Generate a PDF, forward the complaint, or notify close contacts.
+5. Track the complaint later from the dedicated complaints view.
+
+### Admin Journey
+
+1. Open the dashboard and inspect review load, hotspot concentration, and open-case pressure.
+2. Open a complaint in the case-file modal to inspect history, alerts, and AI reasoning.
+3. Update status or acknowledge alerts.
+4. Use the operations map to focus on geographic clusters and jump into cases quickly.
+5. Manage roles, account state, and account deletion from the accounts area.
 
 ## Run Locally
 

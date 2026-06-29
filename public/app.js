@@ -77,6 +77,11 @@ const alertPriorityFilter = document.getElementById("alertPriorityFilter");
 const clearAlertFiltersBtn = document.getElementById("clearAlertFiltersBtn");
 const mapView = document.getElementById("mapView");
 const mapWorkspace = document.getElementById("mapWorkspace");
+const complaintsMapCanvas = document.getElementById("complaintsMapCanvas");
+const mapComplaintList = document.getElementById("mapComplaintList");
+const mapVisibleCount = document.getElementById("mapVisibleCount");
+const mapHotspotLabel = document.getElementById("mapHotspotLabel");
+const mapPriorityWatch = document.getElementById("mapPriorityWatch");
 const userManagementWorkspace = document.getElementById("userManagementWorkspace");
 const userSearchInput = document.getElementById("userSearchInput");
 const userStateFilter = document.getElementById("userStateFilter");
@@ -1712,6 +1717,13 @@ function renderAdminInsights(complaints = [], analytics = null) {
     : 0;
   const topIssue = analytics?.topIssue?.label || complaints[0]?.type || "No category";
   const topAuthority = analytics?.topAuthority?.label || complaints[0]?.assignedAuthority || "No routing";
+  const hotspot = summarizeHotspot(complaints);
+  const oldestOpenCase = complaints
+    .filter((complaint) => complaint.status !== "Resolved")
+    .sort((left, right) => new Date(left.createdAt || 0) - new Date(right.createdAt || 0))[0];
+  const resolutionRate = complaints.length
+    ? Math.round((complaints.filter((complaint) => complaint.status === "Resolved").length / complaints.length) * 100)
+    : 0;
 
   adminInsights.innerHTML = `
     <article class="insight-card">
@@ -1740,9 +1752,19 @@ function renderAdminInsights(complaints = [], analytics = null) {
       <p>Most common routing target in the current dashboard result set.</p>
     </article>
     <article class="insight-card">
-      <span>Loaded records</span>
-      <strong>${complaints.length}</strong>
-      <p>Items returned after the active filters were applied.</p>
+      <span>Main hotspot</span>
+      <strong>${escapeHtml(hotspot)}</strong>
+      <p>Location with the highest visible complaint concentration.</p>
+    </article>
+    <article class="insight-card">
+      <span>Oldest open case</span>
+      <strong>${oldestOpenCase ? pluralize(countDaysOpen(oldestOpenCase.createdAt), "day") : "No open case"}</strong>
+      <p>${oldestOpenCase ? escapeHtml(oldestOpenCase.location || oldestOpenCase.type || "Open case") : "All visible complaints are resolved."}</p>
+    </article>
+    <article class="insight-card">
+      <span>Resolution rate</span>
+      <strong>${resolutionRate}%</strong>
+      <p>Share of visible complaints already marked as resolved.</p>
     </article>
   `;
 }
@@ -1752,6 +1774,40 @@ function formatTokenLabel(value) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function pluralize(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function countDaysOpen(value) {
+  const createdAt = new Date(value || Date.now()).getTime();
+  if (Number.isNaN(createdAt)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor((Date.now() - createdAt) / 86400000));
+}
+
+function confidenceTone(complaint) {
+  const confidenceValue = Number(complaint?.confidence || 0);
+  if (confidenceValue >= 80) {
+    return "High confidence";
+  }
+  if (confidenceValue >= 60) {
+    return "Moderate confidence";
+  }
+  return "Needs review";
+}
+
+function summarizeHotspot(complaints = []) {
+  const counts = complaints.reduce((accumulator, complaint) => {
+    const key = String(complaint.location || "Unknown").trim() || "Unknown";
+    accumulator[key] = (accumulator[key] || 0) + 1;
+    return accumulator;
+  }, {});
+
+  const [label, count] = Object.entries(counts).sort((left, right) => right[1] - left[1])[0] || [];
+  return label ? `${label} (${pluralize(count, "case")})` : "No area selected";
 }
 
 function severityBadge(priority) {
@@ -1821,15 +1877,10 @@ function renderStatusHistory(history = []) {
   return history
     .map(
       (entry) => `
-        <div class="table-row status-history-row">
-          <div>
-            <strong>${escapeHtml(entry.status)}</strong>
-            <span>${escapeHtml(entry.note || "Status updated.")}</span>
-          </div>
-          <div>
-            <strong>${escapeHtml(entry.changedBy || "system")}</strong>
-            <span>${escapeHtml(formatDateTime(entry.changedAt))}</span>
-          </div>
+        <div class="timeline-item status-history-row">
+          <strong>${escapeHtml(entry.status)}</strong>
+          <span>${escapeHtml(entry.changedBy || "system")} · ${escapeHtml(formatDateTime(entry.changedAt))}</span>
+          <p>${escapeHtml(entry.note || "Status updated.")}</p>
         </div>
       `
     )
@@ -1859,54 +1910,140 @@ function renderVisionCandidates(candidates = []) {
     .join("");
 }
 
+function renderAlertsHistory(alerts = []) {
+  if (!alerts.length) {
+    return `<div class="table-row empty-state"><span>No alert notes recorded for this complaint.</span></div>`;
+  }
+
+  return alerts
+    .map(
+      (alertText, index) => `
+        <div class="timeline-item">
+          <strong>Alert ${alerts.length - index}</strong>
+          <p>${escapeHtml(alertText)}</p>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderConfidenceBreakdown(confidenceBreakdown = {}) {
+  const entries = Object.entries(confidenceBreakdown || {}).filter(([, value]) => typeof value === "number");
+  if (!entries.length) {
+    return `
+      <article class="detail-diagnostic-card">
+        <strong>No numeric breakdown available</strong>
+        <p>The current AI run did not store separate decision weights for this complaint.</p>
+      </article>
+    `;
+  }
+
+  return entries
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 3)
+    .map(
+      ([label, value]) => `
+        <article class="detail-diagnostic-card">
+          <span>${escapeHtml(label.replace(/([A-Z])/g, " $1").trim())}</span>
+          <strong>${Math.round(Number(value) * 100)}%</strong>
+          <p>Relative weight used in the stored AI decision breakdown.</p>
+        </article>
+      `
+    )
+    .join("");
+}
+
 function renderComplaintDetail(complaint) {
   complaintDetailTitle.textContent = complaint.type || "Complaint";
   const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
+  const ageInDays = countDaysOpen(complaint.createdAt);
+  const alternatives = Array.isArray(complaint.ai?.visionCandidates) ? complaint.ai.visionCandidates.slice(1, 4) : [];
+  const timelineHistory = Array.isArray(complaint.statusHistory) ? [...complaint.statusHistory].reverse() : [];
   complaintDetailBody.innerHTML = `
-    <div class="complaint-detail-grid">
-      <div class="detail-block">
-        <span>Location</span>
-        <strong>${escapeHtml(complaint.location || "Unknown")}</strong>
-      </div>
-      <div class="detail-block">
-        <span>Status</span>
-        <strong>${escapeHtml(complaint.status || "Queued")}</strong>
-      </div>
-      <div class="detail-block">
-        <span>Priority</span>
-        <strong>${escapeHtml(complaint.priority || "Low")}</strong>
-      </div>
-      <div class="detail-block">
-        <span>Authority</span>
-        <strong>${escapeHtml(complaint.assignedAuthority || "Gram Panchayat")}</strong>
+    <div class="detail-case-layout">
+      <section class="detail-hero">
+        <div class="detail-hero-head">
+          <div class="detail-hero-copy">
+            <p class="eyebrow">Case summary</p>
+            <h3>${escapeHtml(complaint.type || "Complaint")}</h3>
+            <p>${escapeHtml(complaint.description || "No complaint description recorded.")}</p>
+          </div>
+          <div class="issue-meta">
+            ${confidenceBadge(complaint)}
+            ${severityBadge(complaint.priority)}
+            ${authorityBadge(complaint.assignedAuthority)}
+          </div>
+        </div>
+
+        <div class="detail-facts-grid">
+          <article class="detail-summary-card">
+            <span>Status</span>
+            <strong>${escapeHtml(complaint.status || "Queued")}</strong>
+          </article>
+          <article class="detail-summary-card">
+            <span>Location</span>
+            <strong>${escapeHtml(complaint.location || "Unknown")}</strong>
+          </article>
+          <article class="detail-summary-card">
+            <span>Case age</span>
+            <strong>${pluralize(ageInDays, "day")}</strong>
+          </article>
+          <article class="detail-summary-card">
+            <span>Decision tone</span>
+            <strong>${escapeHtml(confidenceTone(complaint))}</strong>
+          </article>
+        </div>
+
+        <section class="detail-section">
+          <p class="detail-section-label">AI decision</p>
+          <p>${escapeHtml(complaint.ai?.explanation || complaint.ai?.cvReason || "No AI explanation recorded.")}</p>
+          <p class="helper-text">Recommended team: ${escapeHtml(complaint.ai?.recommendedTeam || "Help Desk")} · AI engine: ${escapeHtml(complaint.ai?.engine || "unknown")} · Fallback: ${complaint.ai?.fallbackUsed ? "yes" : "no"} · Geocoding: ${escapeHtml(complaint.ai?.geocodingSource || "unknown")}</p>
+        </section>
+
+        <section class="detail-section">
+          <p class="detail-section-label">Decision breakdown</p>
+          <div class="detail-diagnostic-grid">
+            ${renderConfidenceBreakdown(complaint.ai?.confidenceBreakdown)}
+          </div>
+        </section>
+
+        <section class="detail-section">
+          <p class="detail-section-label">Vision candidates</p>
+          <div class="table-list">${renderVisionCandidates(complaint.ai?.visionCandidates || [])}</div>
+        </section>
+      </section>
+
+      <div class="detail-support-grid">
+        <section class="detail-support-card">
+          <p class="detail-section-label">Routing</p>
+          <strong>${escapeHtml(complaint.assignedAuthority || "Gram Panchayat")}</strong>
+          <p>Current authority assignment for this complaint.</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Created</p>
+          <strong>${escapeHtml(formatDateTime(complaint.createdAt))}</strong>
+          <p>Stored case creation time in the complaint log.</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Alternative reads</p>
+          <strong>${alternatives.length ? pluralize(alternatives.length, "candidate") : "No alternates"}</strong>
+          <p>${alternatives.length ? escapeHtml(alternatives.map((candidate) => candidate.label || "Candidate").join(" • ")) : "No secondary image candidates were recorded for this complaint."}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Map</p>
+          <strong><a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noreferrer noopener">Open in Google Maps</a></strong>
+          <p>Open the stored location in a full map window.</p>
+        </section>
+        <section class="detail-timeline">
+          <p class="detail-section-label">Status timeline</p>
+          <div class="detail-timeline-list">${renderStatusHistory(timelineHistory)}</div>
+        </section>
+        <section class="detail-timeline">
+          <p class="detail-section-label">Alert notes</p>
+          <div class="detail-timeline-list">${renderAlertsHistory(complaint.alerts || [])}</div>
+        </section>
       </div>
     </div>
-    <section class="detail-section">
-      <h3>Complaint Narrative</h3>
-      <p>${escapeHtml(complaint.description || "No complaint description recorded.")}</p>
-    </section>
-    <section class="detail-section">
-      <h3>AI Explanation</h3>
-      <p>${escapeHtml(complaint.ai?.explanation || complaint.ai?.cvReason || "No AI explanation recorded.")}</p>
-      <div class="issue-meta">
-        ${confidenceBadge(complaint)}
-        ${severityBadge(complaint.priority)}
-        ${authorityBadge(complaint.assignedAuthority)}
-      </div>
-      <p class="helper-text">Recommended team: ${escapeHtml(complaint.ai?.recommendedTeam || "Help Desk")} · AI engine: ${escapeHtml(complaint.ai?.engine || "unknown")} · Fallback: ${complaint.ai?.fallbackUsed ? "yes" : "no"} · Geocoding: ${escapeHtml(complaint.ai?.geocodingSource || "unknown")}</p>
-    </section>
-    <section class="detail-section">
-      <h3>Vision Candidates</h3>
-      <div class="table-list">${renderVisionCandidates(complaint.ai?.visionCandidates || [])}</div>
-    </section>
-    <section class="detail-section">
-      <h3>Status History</h3>
-      <div class="table-list">${renderStatusHistory(complaint.statusHistory || [])}</div>
-    </section>
-    <section class="detail-section">
-      <h3>Location</h3>
-      <p><a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noreferrer noopener">Open location in Google Maps</a></p>
-    </section>
   `;
   complaintDetailOverlay.hidden = false;
   document.body.classList.add("auth-open");
@@ -2444,11 +2581,144 @@ function renderUserManagement(users = []) {
 function markerColor(status) {
   if (status === "Resolved") return "#49d98f";
   if (status === "In Progress") return "#ffb84d";
+  if (status === "Escalated" || status === "Needs Review") return "#ff6b7a";
   return "#ff6b7a";
 }
 
 function renderMap(complaints) {
-  return;
+  if (!complaintsMapCanvas || !mapComplaintList) {
+    return;
+  }
+
+  const mappedComplaints = (complaints || []).filter(
+    (complaint) =>
+      Number.isFinite(Number(complaint?.mapLocation?.lat)) &&
+      Number.isFinite(Number(complaint?.mapLocation?.lng))
+  );
+  const sortedComplaints = [...mappedComplaints].sort((left, right) => {
+    const priorityDelta = priorityRank(right.priority) - priorityRank(left.priority);
+    if (priorityDelta !== 0) {
+      return priorityDelta;
+    }
+    return new Date(right.createdAt || 0) - new Date(left.createdAt || 0);
+  });
+
+  mapVisibleCount.textContent = String(sortedComplaints.length);
+  mapHotspotLabel.textContent = summarizeHotspot(sortedComplaints);
+
+  const watchList = sortedComplaints.filter((complaint) => complaint.priority === "Critical" || complaint.status === "Escalated");
+  mapPriorityWatch.textContent = watchList.length ? pluralize(watchList.length, "critical case") : "No critical cluster";
+
+  if (!sortedComplaints.length) {
+    complaintsMapCanvas.innerHTML = `
+      <div class="map-empty-state">
+        <div>
+          <strong>No mapped complaints yet.</strong>
+          <p>Complaints with resolved coordinates will appear here as soon as they are available.</p>
+        </div>
+      </div>
+    `;
+    mapComplaintList.innerHTML = `<div class="table-row empty-state"><span>No mapped complaints available in the current result set.</span></div>`;
+    return;
+  }
+
+  const latitudes = sortedComplaints.map((complaint) => Number(complaint.mapLocation.lat));
+  const longitudes = sortedComplaints.map((complaint) => Number(complaint.mapLocation.lng));
+  const minLat = Math.min(...latitudes);
+  const maxLat = Math.max(...latitudes);
+  const minLng = Math.min(...longitudes);
+  const maxLng = Math.max(...longitudes);
+  const latSpan = Math.max(maxLat - minLat, 0.02);
+  const lngSpan = Math.max(maxLng - minLng, 0.02);
+  const hotspotGroups = {};
+
+  complaintsMapCanvas.innerHTML = sortedComplaints
+    .map((complaint, index) => {
+      const lat = Number(complaint.mapLocation.lat);
+      const lng = Number(complaint.mapLocation.lng);
+      const x = 10 + ((lng - minLng) / lngSpan) * 80;
+      const y = 12 + (1 - (lat - minLat) / latSpan) * 74;
+      const hotspotKey = String(complaint.location || "Unknown").trim() || "Unknown";
+      hotspotGroups[hotspotKey] = hotspotGroups[hotspotKey] || { x, y, count: 0 };
+      hotspotGroups[hotspotKey].count += 1;
+
+      return `
+        <button
+          type="button"
+          class="map-marker"
+          data-map-complaint-id="${complaint._id}"
+          data-map-location="${escapeHtml(complaint.location || "Unknown")}"
+          style="left:${x}%; top:${y}%; color:${markerColor(complaint.status)}; background:${markerColor(complaint.status)};"
+          aria-label="${escapeHtml(complaint.type)} at ${escapeHtml(complaint.location)}"
+          title="${escapeHtml(complaint.type)} · ${escapeHtml(complaint.location)}"
+        ></button>
+      `;
+    })
+    .join("");
+
+  Object.entries(hotspotGroups)
+    .filter(([, group]) => group.count > 1)
+    .forEach(([label, group]) => {
+      complaintsMapCanvas.insertAdjacentHTML(
+        "beforeend",
+        `<div class="map-cluster-label" style="left:${group.x}%; top:${Math.max(8, group.y - 8)}%;">${escapeHtml(label)} · ${group.count}</div>`
+      );
+    });
+
+  mapComplaintList.innerHTML = sortedComplaints
+    .slice(0, 6)
+    .map(
+      (complaint) => `
+        <article class="map-complaint-item">
+          <div class="issue-card-head">
+            <strong>${escapeHtml(complaint.type)}</strong>
+            <span class="status-pill" data-status="${escapeHtml(complaint.status)}">${escapeHtml(complaint.status)}</span>
+          </div>
+          <p>${escapeHtml(complaint.location)}</p>
+          <div class="issue-meta">
+            ${severityBadge(complaint.priority)}
+            ${confidenceBadge(complaint)}
+          </div>
+          <button type="button" class="secondary-button map-open-btn" data-complaint-id="${complaint._id}">Open case</button>
+        </article>
+      `
+    )
+    .join("");
+
+  const focusComplaint = (complaintId) => {
+    const selectedComplaint = sortedComplaints.find((complaint) => complaint._id === complaintId);
+    if (!selectedComplaint) {
+      return;
+    }
+
+    complaintsMapCanvas.querySelectorAll(".map-marker").forEach((marker) => {
+      marker.classList.toggle("is-active", marker.dataset.mapComplaintId === complaintId);
+    });
+    updateLiveLocationMap(
+      selectedComplaint.location || "Selected complaint location",
+      selectedComplaint.mapLocation ? `${selectedComplaint.mapLocation.lat}, ${selectedComplaint.mapLocation.lng}` : selectedComplaint.location
+    );
+    liveLocationStatus.textContent = `${selectedComplaint.type} · ${selectedComplaint.location} · ${selectedComplaint.status}`;
+  };
+
+  complaintsMapCanvas.querySelectorAll(".map-marker").forEach((marker) => {
+    marker.addEventListener("mouseenter", () => {
+      focusComplaint(marker.dataset.mapComplaintId);
+    });
+    marker.addEventListener("click", () => {
+      focusComplaint(marker.dataset.mapComplaintId);
+      openComplaintDetail(marker.dataset.mapComplaintId);
+    });
+  });
+
+  mapComplaintList.querySelectorAll(".map-open-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      focusComplaint(button.dataset.complaintId);
+      openComplaintDetail(button.dataset.complaintId);
+    });
+  });
+
+  focusComplaint(sortedComplaints[0]._id);
 }
 
 function updateVoiceTranscriptValue(finalText, interimText = "") {
@@ -2816,6 +3086,36 @@ function renderLoggedOutState() {
   document.getElementById("adminTable").innerHTML = `<div class="table-row empty-state"><span>Login as Admin to access the command center.</span></div>`;
   alertsList.innerHTML = `<div class="table-row"><span>Login as Admin to manage alerts.</span></div>`;
   userManagementList.innerHTML = `<div class="table-row"><span>Login as Admin to manage accounts.</span></div>`;
+  if (mapComplaintList) {
+    mapComplaintList.innerHTML = `<div class="table-row empty-state"><span>Login to inspect the operations map.</span></div>`;
+  }
+  if (complaintsMapCanvas) {
+    complaintsMapCanvas.innerHTML = `<div class="map-empty-state"><div><strong>Operations map locked.</strong><p>Login to render complaint markers and hotspot clusters.</p></div></div>`;
+  }
+  if (mapVisibleCount) {
+    mapVisibleCount.textContent = "0";
+  }
+  if (mapHotspotLabel) {
+    mapHotspotLabel.textContent = "No area selected";
+  }
+  if (mapPriorityWatch) {
+    mapPriorityWatch.textContent = "No critical cluster";
+  }
+}
+
+function renderDashboardLoadingState() {
+  const skeleton = `<div class="skeleton-card"></div>`;
+  document.getElementById("recentComplaints").innerHTML = `${skeleton}${skeleton}`;
+  document.getElementById("complaintsList").innerHTML = `${skeleton}${skeleton}${skeleton}`;
+  document.getElementById("adminTable").innerHTML = `${skeleton}${skeleton}`;
+  alertsList.innerHTML = `${skeleton}${skeleton}`;
+  userManagementList.innerHTML = `${skeleton}${skeleton}`;
+  if (mapComplaintList) {
+    mapComplaintList.innerHTML = `${skeleton}${skeleton}`;
+  }
+  if (complaintsMapCanvas) {
+    complaintsMapCanvas.innerHTML = `<div class="map-empty-state"><div><strong>Loading markers...</strong><p>Preparing the visible complaint map for the current dashboard filters.</p></div></div>`;
+  }
 }
 
 function rerenderDashboardViews() {
@@ -2877,6 +3177,7 @@ async function loadDashboard() {
     return;
   }
 
+  renderDashboardLoadingState();
   const query = buildDashboardQueryParams();
   const path = query ? `/api/dashboard?${query}` : "/api/dashboard";
   const data = await apiRequest(path, { method: "GET" });

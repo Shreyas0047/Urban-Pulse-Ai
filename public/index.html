@@ -596,10 +596,39 @@
                 </div>
               </div>
               <div class="live-map-panel">
-                  <div class="live-map-head">
-                    <strong>Live location preview</strong>
-                    <p id="liveLocationStatus" class="helper-text">Type a location in the report form to preview it here.</p>
+                <div class="live-map-head">
+                  <strong>Operations map</strong>
+                  <p id="liveLocationStatus" class="helper-text">Type a location in the report form to preview it here.</p>
+                </div>
+                <div class="map-summary-ribbon">
+                  <article class="map-summary-card">
+                    <span>Visible markers</span>
+                    <strong id="mapVisibleCount">0</strong>
+                  </article>
+                  <article class="map-summary-card">
+                    <span>Main hotspot</span>
+                    <strong id="mapHotspotLabel">No area selected</strong>
+                  </article>
+                  <article class="map-summary-card">
+                    <span>Priority watch</span>
+                    <strong id="mapPriorityWatch">No critical cluster</strong>
+                  </article>
+                </div>
+                <div class="operations-map-layout">
+                  <div class="operations-map-stage">
+                    <div id="complaintsMapCanvas" class="complaints-map-canvas" aria-label="Complaint marker board"></div>
                   </div>
+                  <aside class="map-side-rail">
+                    <div class="map-legend">
+                      <div class="map-legend-row"><span class="map-legend-dot priority-critical"></span><strong>Critical / Escalated</strong></div>
+                      <div class="map-legend-row"><span class="map-legend-dot priority-progress"></span><strong>In progress</strong></div>
+                      <div class="map-legend-row"><span class="map-legend-dot priority-resolved"></span><strong>Resolved</strong></div>
+                    </div>
+                    <div id="mapComplaintList" class="table-list"></div>
+                  </aside>
+                </div>
+                <div class="map-preview-shell">
+                  <p class="eyebrow subtle">Focused location</p>
                 <iframe
                   id="locationMapFrame"
                   class="location-map-frame"
@@ -608,6 +637,7 @@
                   referrerpolicy="no-referrer-when-downgrade"
                   hidden
                 ></iframe>
+                </div>
               </div>
             </article>
 
