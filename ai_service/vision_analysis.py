@@ -88,7 +88,7 @@ def feature_signal_candidates(image_features, image_hint):
     ]
     hint_boosts = {
         "safety_fire": ["fire", "smoke", "gas", "spark"],
-        "road_damage": ["pothole", "road", "crack"],
+        "road_damage": ["pothole", "road crack", "damaged road", "broken road", "sinkhole"],
         "tree_obstruction": ["tree", "branch", "vegetation"],
         "garbage": ["garbage", "waste", "trash"],
         "sewage_overflow": ["sewage", "manhole", "dirty water", "gutter"],
@@ -111,6 +111,15 @@ def feature_signal_candidates(image_features, image_hint):
             score = clamp01(score - (0.14 + features.get("greenRatio", 0) * 0.18))
         if category_id == "garbage" and vegetation_strength > 0.28:
             score = clamp01(score - 0.14)
+        structural_hint = any(term in normalized_hint for term in ["crack", "cracked", "ceiling", "plaster"]) or (
+            "wall" in normalized_hint and not any(term in normalized_hint for term in ["water leakage", "leakage", "leak", "pipe"])
+        )
+        if category_id == "wall_damage" and structural_hint:
+            score = max(score, 0.68)
+        if category_id == "water_leakage" and any(term in normalized_hint for term in ["crack", "cracked", "ceiling", "plaster"]):
+            score = clamp01(score - 0.24)
+        if category_id == "water_leakage" and any(term in normalized_hint for term in ["water leakage", "pipe leak", "burst pipe", "seepage"]):
+            score = max(score, 0.82)
         if score >= 0.2:
             category = CATEGORY_BY_ID.get(category_id, {})
             candidates.append(
@@ -186,7 +195,8 @@ def detect_objects_from_features(image_features, image_hint, image_base64=None, 
     image = decode_image(image_base64)
     clip_items = clip_candidates(image)
     candidates = merge_candidates(clip_items, feature_items) if clip_items else feature_items
-    threshold = VISION_CONFIDENCE_THRESHOLD if clip_items else 0.34
+    has_text_context = bool(normalize_text(image_hint))
+    threshold = VISION_CONFIDENCE_THRESHOLD if clip_items else (0.5 if not has_text_context else 0.34)
     detections = [item for item in candidates if item["confidence"] >= threshold]
     top_detection = detections[0] if detections else None
     fallback_used = not bool(clip_items)

@@ -770,9 +770,10 @@ function buildNlpResult(payload) {
 }
 
 function buildCvResult(payload) {
-  const imageLabel = normalizeText([payload.textComplaint, payload.voiceTranscript, payload.location].filter(Boolean).join(" "));
+  const imageLabel = normalizeText([payload.textComplaint, payload.voiceTranscript].filter(Boolean).join(" "));
   const scoredProfiles = scoreVisualProfiles(payload.imageFeatures, imageLabel);
   const top = pickTopProfile(scoredProfiles, "visualScore", 0.16);
+  const hasComplaintText = Boolean(normalizeText([payload.textComplaint, payload.voiceTranscript].filter(Boolean).join(" ")));
 
   if (!payload.imageFeatures) {
     return {
@@ -800,6 +801,39 @@ function buildCvResult(payload) {
     animal_intrusion: `Texture ${payload.imageFeatures.edgeDensity}, contrast ${payload.imageFeatures.contrast}, green ratio ${payload.imageFeatures.greenRatio}`,
     vehicle_obstruction: `Texture ${payload.imageFeatures.edgeDensity}, contrast ${payload.imageFeatures.contrast}, neutral surface ${payload.imageFeatures.neutralRatio}`
   };
+
+  const isWeakImageOnlyGuess = !hasComplaintText && (!top || top.id === "general" || top.visualScore < 0.34);
+  if (isWeakImageOnlyGuess) {
+    return {
+      profile: createGeneralProfile(),
+      profiles: scoredProfiles.map((profile) => ({ ...profile, visualScore: 0 })),
+      result: {
+        detected: "Visual evidence uploaded; no reliable image-only incident detected",
+        score: 0.18,
+        reason: "The image-only signal was too weak for a specific incident label. Complaint text is required for accurate routing.",
+        candidates: scoredProfiles
+          .filter((profile) => profile.visualScore > 0)
+          .sort((left, right) => right.visualScore - left.visualScore)
+          .slice(0, 5)
+          .map((profile) => ({
+            label: profile.cvLabel,
+            category_id: profile.id,
+            category_label: profile.issueType,
+            confidence: Number(profile.visualScore.toFixed(2)),
+            source: "feature"
+          })),
+        model: "feature-signals",
+        provider: "feature-fallback",
+        fallbackUsed: true,
+        reviewRequired: true,
+        confidenceBreakdown: {
+          featureTop: Number((top?.visualScore || 0).toFixed(2)),
+          clipTop: 0,
+          fusedTop: 0.18
+        }
+      }
+    };
+  }
 
   return {
     profile: top,

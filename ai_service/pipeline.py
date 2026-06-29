@@ -61,7 +61,6 @@ def run_hybrid_pipeline(payload):
         for value in [
             str(payload.get("textComplaint") or "").strip(),
             str(payload.get("voiceTranscript") or "").strip(),
-            str(payload.get("location") or "").strip(),
         ]
         if value
     ).strip()

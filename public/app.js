@@ -1496,112 +1496,14 @@ function useLiveLocation() {
 function describeImageFromFeatures(features) {
   if (!features) {
     return {
-      description: "Upload an image to let AI inspect the issue.",
+      description: "Upload an image to attach visual evidence.",
       accuracy: 0
     };
   }
 
-  const vegetationStrength =
-    features.greenRatio * 0.72 +
-    features.averageSaturation * 0.16 +
-    features.edgeDensity * 0.14 +
-    features.contrast * 0.1 -
-    features.blueRatio * 0.12;
-  const pooledWaterStrength =
-    features.blueRatio * 0.46 +
-    features.neutralRatio * 0.18 +
-    (1 - features.averageSaturation) * 0.12 +
-    features.averageBrightness * 0.06 -
-    features.greenRatio * 0.24;
-
-  const candidates = [
-    {
-      label: "Possible fire, smoke, gas leak, or burn-risk area",
-      score: features.redHeatRatio * 0.42 + features.smokeLikeRatio * 0.3 + features.hotspotRatio * 0.22 + features.darkRatio * 0.06
-    },
-    {
-      label: "Likely road damage, pothole, or cracked surface",
-      score:
-        Math.max(
-          0,
-          features.edgeDensity * 0.42 +
-            features.contrast * 0.22 +
-            features.darkRatio * 0.18 +
-            (1 - features.averageBrightness) * 0.12 -
-            features.greenRatio * 0.16
-        )
-    },
-    {
-      label: "Likely fallen tree, branch, or vegetation blocking the road",
-      score:
-        Math.max(
-          0,
-          vegetationStrength +
-            features.contrast * 0.12 +
-            (1 - features.neutralRatio) * 0.04
-        )
-    },
-    {
-      label: "Likely garbage, waste overflow, or clutter accumulation",
-      score:
-        Math.max(
-          0,
-          features.edgeDensity * 0.22 +
-            features.averageSaturation * 0.2 +
-            features.contrast * 0.16 +
-            features.darkRatio * 0.12 +
-            features.neutralRatio * 0.08 +
-            (1 - features.blueRatio) * 0.06 -
-            features.greenRatio * 0.24
-        )
-    },
-    {
-      label: "Likely sewage overflow, dirty drain water, or open manhole issue",
-      score:
-        features.neutralRatio * 0.28 +
-        features.darkRatio * 0.24 +
-        features.contrast * 0.14 +
-        (1 - features.blueRatio) * 0.16 +
-        (1 - features.averageBrightness) * 0.08
-    },
-    {
-      label: "Likely waterlogging, drainage overflow, or wet surface",
-      score: Math.max(0, pooledWaterStrength)
-    },
-    {
-      label: "Likely water leakage, pipe seepage, or burst-line issue",
-      score: features.blueRatio * 0.3 + features.neutralRatio * 0.18 + features.averageBrightness * 0.18 + features.edgeDensity * 0.08
-    },
-    {
-      label: "Likely wall crack, ceiling damage, or structural surface issue",
-      score:
-        features.edgeDensity * 0.26 +
-        features.contrast * 0.18 +
-        features.neutralRatio * 0.16 +
-        (1 - features.averageSaturation) * 0.1 +
-        features.darkRatio * 0.08
-    },
-    {
-      label: "Likely streetlight, wire, pole, or electrical public asset issue",
-      score: features.edgeDensity * 0.16 + features.hotspotRatio * 0.16 + features.averageBrightness * 0.14 + (1 - features.greenRatio) * 0.1
-    },
-    {
-      label: "Possible vehicle obstruction or access blocked by parking",
-      score: features.edgeDensity * 0.14 + features.contrast * 0.14 + features.neutralRatio * 0.16 + (1 - features.greenRatio) * 0.08
-    },
-    {
-      label: "General civic anomaly detected in the uploaded image",
-      score: features.edgeDensity * 0.18 + features.averageSaturation * 0.12 + features.darkRatio * 0.08
-    }
-  ].sort((left, right) => right.score - left.score);
-
-  const best = candidates[0];
-  const second = candidates[1];
-  const accuracy = Math.max(46, Math.min(92, Math.round(45 + best.score * 34 + (best.score - second.score) * 26)));
-
   return {
-    description: best.label,
-    accuracy
+    description: "Image uploaded as visual evidence. Add the complaint text, then submit for final AI classification.",
+    accuracy: 0
   };
 }
 
@@ -1865,6 +1767,11 @@ function renderAnalysis(result) {
 }
 
 function buildSubmittedReport(payload, result) {
+  const finalAiDescription =
+    result.cv?.detected && result.cv.detected !== "No image uploaded"
+      ? result.cv.detected
+      : result.nlp?.issueType || payload.imageHint || "No AI description generated.";
+
   return {
     complaintId: result.complaintId || "Pending",
     submittedAt: new Date().toISOString(),
@@ -1872,7 +1779,7 @@ function buildSubmittedReport(payload, result) {
     role: authState?.role || "Citizen",
     location: payload.location || "Unknown",
     textComplaint: payload.textComplaint || "No complaint text provided.",
-    aiDescription: payload.imageHint || "No AI description generated.",
+    aiDescription: finalAiDescription,
     uploadedPhoto: currentImageDataUrl,
     googleMapsUrl: buildGoogleMapsUrl(payload.location, result.mapLocation),
     googleMapsEmbedUrl: buildGoogleMapsEmbedUrl(payload.location, result.mapLocation),
@@ -3239,11 +3146,11 @@ function resetComposer() {
   imageName.textContent = "No image selected";
   imageHintText.textContent = "AI visual inspection will appear here after upload.";
   aiImageDescription.value = "";
-  aiAccuracyStatus.textContent = "Upload an image to preview AI confidence.";
-  currentImageFeatures = null;
-  currentImageInsight = null;
-    currentImageDataUrl = null;
-    currentImageAiPayload = null;
+  aiAccuracyStatus.textContent = "Upload an image to attach visual evidence.";
+    currentImageFeatures = null;
+    currentImageInsight = null;
+  currentImageDataUrl = null;
+  currentImageAiPayload = null;
   clearEmailProgressTimer();
   emailProgress.hidden = true;
   emailProgressFill.style.width = "0%";
@@ -3395,7 +3302,7 @@ function setupImageUpload() {
       uploadPreview.hidden = true;
       imagePreview.removeAttribute("src");
       aiImageDescription.value = "";
-      aiAccuracyStatus.textContent = "Upload an image to preview AI confidence.";
+      aiAccuracyStatus.textContent = "Upload an image to attach visual evidence.";
       currentImageFeatures = null;
       currentImageInsight = null;
       currentImageDataUrl = null;
@@ -3416,7 +3323,7 @@ function setupImageUpload() {
       currentImageFeatures = await extractImageFeatures(file);
       currentImageInsight = describeImageFromFeatures(currentImageFeatures);
       aiImageDescription.value = currentImageInsight.description;
-      aiAccuracyStatus.textContent = "AI description ready. Press Show AI Accuracy to view confidence.";
+      aiAccuracyStatus.textContent = "Image evidence ready. Final incident classification runs after submit.";
       scheduleDraftSave();
     } catch (error) {
       currentImageFeatures = null;
@@ -3432,11 +3339,12 @@ function setupImageUpload() {
 
 showAiAccuracyBtn.addEventListener("click", () => {
   if (!currentImageInsight) {
-    aiAccuracyStatus.textContent = "Upload an image first to calculate AI confidence.";
+    aiAccuracyStatus.textContent = "Upload an image first to prepare visual evidence.";
     return;
   }
 
-  aiAccuracyStatus.textContent = `AI accuracy: ${currentImageInsight.accuracy}% confidence for "${currentImageInsight.description}".`;
+  aiAccuracyStatus.textContent =
+    "This upload check does not guess the incident from pixels alone. Submit with complaint text for the final AI decision.";
 });
 
 showLoginBtn.addEventListener("click", () => openAuthOverlay("login"));
