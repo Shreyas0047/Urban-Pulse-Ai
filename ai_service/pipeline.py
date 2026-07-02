@@ -109,7 +109,7 @@ def run_hybrid_pipeline(payload):
             "categories": [item["label"] for item in final_categories] if final_categories else ([fallback["suggested_label"]] if fallback else []),
         },
         "cv": {
-            "detected": vision_result["top_detection"]["label"] if vision_result["top_detection"] else "No image uploaded",
+            "detected": vision_result["top_detection"]["label"] if vision_result["top_detection"] else ("Image uploaded; incident unclear" if vision_result.get("imageAccepted") else "No image uploaded"),
             "score": vision_result["top_detection"]["confidence"] if vision_result["top_detection"] else 0.18,
             "reason": "Local vision model and image features were fused for hybrid inference." if vision_result["detections"] else "No strong visual detection available.",
             "detections": vision_result["detections"],

@@ -1493,17 +1493,169 @@ function useLiveLocation() {
   );
 }
 
+const IMAGE_INCIDENT_PROFILES = [
+  {
+    id: "safety_fire",
+    label: "Potential fire, smoke, or gas hazard",
+    issueType: "Gas Leak / Fire Risk",
+    score(features) {
+      return clampImageScore(features.redHeatRatio * 1.2 + features.smokeLikeRatio * 1.05 + features.hotspotRatio * 0.9 + features.darkRatio * 0.12);
+    }
+  },
+  {
+    id: "road_damage",
+    label: "Road damage, pothole, or crack-like structure",
+    issueType: "Road Damage",
+    score(features) {
+      return clampImageScore(features.edgeDensity * 0.92 + features.contrast * 0.72 + features.darkRatio * 0.32 + (1 - features.averageBrightness) * 0.22 - features.greenRatio * 0.12);
+    }
+  },
+  {
+    id: "tree_obstruction",
+    label: "Tree, branch, or vegetation obstruction on the roadway",
+    issueType: "Tree / Obstruction on Road",
+    score(features) {
+      return clampImageScore(features.greenRatio * 1.36 + features.averageSaturation * 0.22 + features.edgeDensity * 0.22 + features.contrast * 0.14 - features.blueRatio * 0.1);
+    }
+  },
+  {
+    id: "garbage",
+    label: "Garbage, waste, or clutter accumulation",
+    issueType: "Garbage Overflow",
+    score(features) {
+      return clampImageScore(features.edgeDensity * 0.34 + features.averageSaturation * 0.22 + features.contrast * 0.24 + features.darkRatio * 0.14 + features.neutralRatio * 0.12 - features.greenRatio * 0.18);
+    }
+  },
+  {
+    id: "sewage_overflow",
+    label: "Sewage spill, dirty drain overflow, or open manhole hazard",
+    issueType: "Sewage / Manhole Overflow",
+    score(features) {
+      return clampImageScore(features.neutralRatio * 0.34 + features.darkRatio * 0.3 + features.contrast * 0.18 + (1 - features.blueRatio) * 0.18 + (1 - features.averageBrightness) * 0.12);
+    }
+  },
+  {
+    id: "water_drainage",
+    label: "Waterlogging, drainage overflow, or wet surface pattern",
+    issueType: "Drainage / Waterlogging",
+    score(features) {
+      return clampImageScore(features.blueRatio * 0.92 + features.neutralRatio * 0.42 + (1 - features.averageSaturation) * 0.22 + features.averageBrightness * 0.1 - features.greenRatio * 0.42);
+    }
+  },
+  {
+    id: "wall_damage",
+    label: "Cracked wall, ceiling damage, or structural surface defect",
+    issueType: "Wall / Building Damage",
+    score(features) {
+      return clampImageScore(features.edgeDensity * 0.4 + features.contrast * 0.26 + features.neutralRatio * 0.28 + features.darkRatio * 0.14 + (1 - features.averageSaturation) * 0.12);
+    }
+  },
+  {
+    id: "utility_fault",
+    label: "Utility or public asset fault",
+    issueType: "Utility Fault",
+    score(features) {
+      return clampImageScore(features.edgeDensity * 0.22 + features.hotspotRatio * 0.24 + features.averageBrightness * 0.12 + (1 - features.greenRatio) * 0.08);
+    }
+  },
+  {
+    id: "water_leakage",
+    label: "Leakage, pipe burst, or continuous water seepage pattern",
+    issueType: "Water Leakage / Pipe Burst",
+    score(features) {
+      return clampImageScore(features.blueRatio * 0.42 + features.neutralRatio * 0.26 + features.averageBrightness * 0.14 + features.edgeDensity * 0.12 + features.contrast * 0.08);
+    }
+  },
+  {
+    id: "animal_intrusion",
+    label: "Animal intrusion or stray animal obstruction",
+    issueType: "Stray Animal / Animal Menace",
+    score(features) {
+      return clampImageScore(features.contrast * 0.16 + features.edgeDensity * 0.18 + features.darkRatio * 0.08 + features.greenRatio * 0.08);
+    }
+  },
+  {
+    id: "vehicle_obstruction",
+    label: "Vehicle obstruction, illegal parking, or blocked access",
+    issueType: "Vehicle Obstruction / Illegal Parking",
+    score(features) {
+      return clampImageScore(features.edgeDensity * 0.2 + features.contrast * 0.18 + features.darkRatio * 0.12 + features.neutralRatio * 0.1 + (1 - features.greenRatio) * 0.08);
+    }
+  }
+];
+
+function clampImageScore(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
+}
+
+function rankImageIncidentCandidates(features) {
+  if (!features) return [];
+
+  const vegetationStrength = clampImageScore(
+    features.greenRatio * 1.2 + features.averageSaturation * 0.24 + features.edgeDensity * 0.16 - features.blueRatio * 0.08
+  );
+  const structuralStrength = clampImageScore(
+    features.edgeDensity * 0.42 + features.neutralRatio * 0.34 + features.contrast * 0.26 + (1 - features.averageSaturation) * 0.18
+  );
+  const dirtyWaterStrength = clampImageScore(
+    features.neutralRatio * 0.6 + features.darkRatio * 0.44 + (1 - features.blueRatio) * 0.24 + (1 - features.averageBrightness) * 0.18
+  );
+
+  return IMAGE_INCIDENT_PROFILES.map((profile) => {
+    let confidence = profile.score(features);
+
+    if (profile.id === "tree_obstruction" && vegetationStrength > 0.2) {
+      confidence = clampImageScore(confidence + 0.18 + vegetationStrength * 0.22);
+    }
+    if (profile.id === "garbage" && vegetationStrength > 0.2) {
+      confidence = clampImageScore(confidence - (0.12 + vegetationStrength * 0.18));
+    }
+    if (profile.id === "water_drainage" && features.greenRatio > 0.22) {
+      confidence = clampImageScore(confidence - (0.12 + features.greenRatio * 0.16));
+    }
+    if (profile.id === "sewage_overflow" && dirtyWaterStrength > 0.22) {
+      confidence = clampImageScore(confidence + 0.14 + dirtyWaterStrength * 0.16);
+    }
+    if (profile.id === "wall_damage" && structuralStrength > 0.24) {
+      confidence = clampImageScore(confidence + 0.1 + structuralStrength * 0.14);
+    }
+
+    return {
+      ...profile,
+      confidence: Number(confidence.toFixed(2))
+    };
+  })
+    .filter((candidate) => candidate.confidence > 0)
+    .sort((left, right) => right.confidence - left.confidence);
+}
+
 function describeImageFromFeatures(features) {
   if (!features) {
     return {
       description: "Upload an image to attach visual evidence.",
-      accuracy: 0
+      accuracy: 0,
+      candidates: []
+    };
+  }
+
+  const candidates = rankImageIncidentCandidates(features);
+  const top = candidates[0];
+  const runnerUp = candidates[1];
+  const isConfident = top && top.confidence >= 0.32;
+  const isCloseCall = top && runnerUp && top.confidence - runnerUp.confidence < 0.08;
+
+  if (!top || !isConfident) {
+    return {
+      description: "AI image guess: uncertain civic issue. Add a short complaint note if this looks wrong.",
+      accuracy: top ? top.confidence : 0,
+      candidates
     };
   }
 
   return {
-    description: "Image uploaded as visual evidence. Add the complaint text, then submit for final AI classification.",
-    accuracy: 0
+    description: `AI image guess: ${top.label}${isCloseCall ? ` (also possible: ${runnerUp.label})` : ""}.`,
+    accuracy: top.confidence,
+    candidates
   };
 }
 
@@ -3323,7 +3475,9 @@ function setupImageUpload() {
       currentImageFeatures = await extractImageFeatures(file);
       currentImageInsight = describeImageFromFeatures(currentImageFeatures);
       aiImageDescription.value = currentImageInsight.description;
-      aiAccuracyStatus.textContent = "Image evidence ready. Final incident classification runs after submit.";
+      aiAccuracyStatus.textContent = currentImageInsight.accuracy
+        ? `Image-only confidence: ${Math.round(currentImageInsight.accuracy * 100)}%. Submit to create the complaint with this visual evidence.`
+        : "Image uploaded, but the incident is unclear. Add a short note if possible.";
       scheduleDraftSave();
     } catch (error) {
       currentImageFeatures = null;
@@ -3339,12 +3493,16 @@ function setupImageUpload() {
 
 showAiAccuracyBtn.addEventListener("click", () => {
   if (!currentImageInsight) {
-    aiAccuracyStatus.textContent = "Upload an image first to prepare visual evidence.";
+    aiAccuracyStatus.textContent = "Upload an image first to run image-only detection.";
     return;
   }
 
-  aiAccuracyStatus.textContent =
-    "This upload check does not guess the incident from pixels alone. Submit with complaint text for the final AI decision.";
+  const candidates = currentImageInsight.candidates || [];
+  const candidateText = candidates
+    .slice(0, 3)
+    .map((candidate) => `${candidate.label} (${Math.round(candidate.confidence * 100)}%)`)
+    .join(" | ");
+  aiAccuracyStatus.textContent = candidateText || "No reliable image-only candidates found.";
 });
 
 showLoginBtn.addEventListener("click", () => openAuthOverlay("login"));

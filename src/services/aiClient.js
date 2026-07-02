@@ -773,7 +773,6 @@ function buildCvResult(payload) {
   const imageLabel = normalizeText([payload.textComplaint, payload.voiceTranscript].filter(Boolean).join(" "));
   const scoredProfiles = scoreVisualProfiles(payload.imageFeatures, imageLabel);
   const top = pickTopProfile(scoredProfiles, "visualScore", 0.16);
-  const hasComplaintText = Boolean(normalizeText([payload.textComplaint, payload.voiceTranscript].filter(Boolean).join(" ")));
 
   if (!payload.imageFeatures) {
     return {
@@ -801,39 +800,6 @@ function buildCvResult(payload) {
     animal_intrusion: `Texture ${payload.imageFeatures.edgeDensity}, contrast ${payload.imageFeatures.contrast}, green ratio ${payload.imageFeatures.greenRatio}`,
     vehicle_obstruction: `Texture ${payload.imageFeatures.edgeDensity}, contrast ${payload.imageFeatures.contrast}, neutral surface ${payload.imageFeatures.neutralRatio}`
   };
-
-  const isWeakImageOnlyGuess = !hasComplaintText && (!top || top.id === "general" || top.visualScore < 0.34);
-  if (isWeakImageOnlyGuess) {
-    return {
-      profile: createGeneralProfile(),
-      profiles: scoredProfiles.map((profile) => ({ ...profile, visualScore: 0 })),
-      result: {
-        detected: "Visual evidence uploaded; no reliable image-only incident detected",
-        score: 0.18,
-        reason: "The image-only signal was too weak for a specific incident label. Complaint text is required for accurate routing.",
-        candidates: scoredProfiles
-          .filter((profile) => profile.visualScore > 0)
-          .sort((left, right) => right.visualScore - left.visualScore)
-          .slice(0, 5)
-          .map((profile) => ({
-            label: profile.cvLabel,
-            category_id: profile.id,
-            category_label: profile.issueType,
-            confidence: Number(profile.visualScore.toFixed(2)),
-            source: "feature"
-          })),
-        model: "feature-signals",
-        provider: "feature-fallback",
-        fallbackUsed: true,
-        reviewRequired: true,
-        confidenceBreakdown: {
-          featureTop: Number((top?.visualScore || 0).toFixed(2)),
-          clipTop: 0,
-          fusedTop: 0.18
-        }
-      }
-    };
-  }
 
   return {
     profile: top,
@@ -871,13 +837,16 @@ function fuseIssueDecision(nlpBundle, cvBundle, payload) {
   const visualProfiles = new Map((cvBundle.profiles || []).map((profile) => [profile.id, profile]));
   const unifiedText = nlpBundle.unifiedText || "";
   const imageFeatures = payload.imageFeatures || {};
+  const hasText = Boolean(unifiedText);
 
   const scoredProfiles = ISSUE_PROFILES.map((profile) => {
     const textScore = textProfiles.get(profile.id)?.textScore || 0;
     const visualScore = visualProfiles.get(profile.id)?.visualScore || 0;
-    let fusedScore = textScore * (hasImage ? 0.58 : 0.84) + visualScore * (hasImage ? 0.42 : 0.12);
+    let fusedScore = hasImage && !hasText
+      ? visualScore * 0.92
+      : textScore * (hasImage ? 0.58 : 0.84) + visualScore * (hasImage ? 0.42 : 0.12);
 
-    fusedScore += Math.min(textScore, visualScore) * (hasImage ? 0.18 : 0.04);
+    fusedScore += Math.min(textScore, visualScore) * (hasImage && hasText ? 0.18 : 0.04);
 
     if (profile.id === "safety_fire" && payload.iotTriggered) {
       fusedScore += 0.12;
@@ -922,7 +891,8 @@ function fuseIssueDecision(nlpBundle, cvBundle, payload) {
     };
   }).sort((left, right) => right.fusedScore - left.fusedScore);
 
-  return scoredProfiles[0] && scoredProfiles[0].fusedScore >= 0.22 ? scoredProfiles[0] : createGeneralProfile();
+  const minimumFusedScore = hasImage && !hasText ? 0.14 : 0.22;
+  return scoredProfiles[0] && scoredProfiles[0].fusedScore >= minimumFusedScore ? scoredProfiles[0] : createGeneralProfile();
 }
 
 function predictPriority(payload, issueProfile, nlp, cv) {

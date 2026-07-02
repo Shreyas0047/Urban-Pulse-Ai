@@ -196,7 +196,7 @@ def detect_objects_from_features(image_features, image_hint, image_base64=None, 
     clip_items = clip_candidates(image)
     candidates = merge_candidates(clip_items, feature_items) if clip_items else feature_items
     has_text_context = bool(normalize_text(image_hint))
-    threshold = VISION_CONFIDENCE_THRESHOLD if clip_items else (0.5 if not has_text_context else 0.34)
+    threshold = VISION_CONFIDENCE_THRESHOLD if clip_items else (0.28 if not has_text_context else 0.34)
     detections = [item for item in candidates if item["confidence"] >= threshold]
     top_detection = detections[0] if detections else None
     fallback_used = not bool(clip_items)
