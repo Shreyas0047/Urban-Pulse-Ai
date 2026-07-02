@@ -47,8 +47,10 @@ const closeFaqBtn = document.getElementById("closeFaqBtn");
 const authForm = document.getElementById("authForm");
 const authSubmitBtn = document.getElementById("authSubmitBtn");
 const authMessage = document.getElementById("authMessage");
+const authRoleSelect = document.getElementById("authRoleSelect");
 const authIdentityLabel = document.getElementById("authIdentityLabel");
 const authIdentityInput = document.getElementById("authIdentity");
+const authPasswordInput = document.getElementById("authPassword");
 const loginAttemptCounter = document.getElementById("loginAttemptCounter");
 const authOtpEmailField = document.getElementById("authOtpEmailField");
 const authOtpField = document.getElementById("authOtpField");
@@ -60,6 +62,7 @@ const siteNav = document.getElementById("siteNav");
 const navTubelight = document.getElementById("navTubelight");
 const showLoginBtn = document.getElementById("showLoginBtn");
 const showRegisterBtn = document.getElementById("showRegisterBtn");
+const forgotPasswordBtn = document.getElementById("forgotPasswordBtn");
 const openFaqLink = document.getElementById("openFaqLink");
 const userManagementList = document.getElementById("userManagementList");
 const mainDashboard = document.getElementById("mainDashboard");
@@ -136,6 +139,7 @@ let voiceRecordingChunks = [];
 let voiceRecordingStartedAt = 0;
 let isVoiceRecording = false;
 let registrationOtpIssued = false;
+let passwordResetOtpIssued = false;
 let loginAttemptsRemaining = 4;
 let loginLockTimer = null;
 let otpTimer = null;
@@ -394,7 +398,7 @@ function setOtpTimerMessage(message, state = "") {
   otpTimerMessage.dataset.state = state;
 }
 
-function startOtpCountdown(email) {
+function startOtpCountdown(email, purpose = "register") {
   clearOtpTimer();
   otpSecondsRemaining = 90;
   sendOtpBtn.disabled = true;
@@ -409,7 +413,11 @@ function startOtpCountdown(email) {
     otpSecondsRemaining -= 1;
     if (otpSecondsRemaining <= 0) {
       clearOtpTimer();
-      registrationOtpIssued = false;
+      if (purpose === "reset") {
+        passwordResetOtpIssued = false;
+      } else {
+        registrationOtpIssued = false;
+      }
       sendOtpBtn.disabled = false;
       sendOtpBtn.textContent = "Resend OTP";
       setOtpTimerMessage("OTP expired. Press Resend OTP to request a new code.", "expired");
@@ -726,17 +734,28 @@ function openAuthOverlay(mode = "login") {
   showLoginBtn.classList.toggle("is-active", mode === "login");
   showRegisterBtn.classList.toggle("is-active", mode === "register");
   const isRegisterMode = mode === "register";
-  authOtpEmailField.hidden = !isRegisterMode;
-  authOtpField.hidden = !isRegisterMode;
-  sendOtpBtn.hidden = !isRegisterMode;
-  authOtpEmailField.style.display = isRegisterMode ? "" : "none";
-  authOtpField.style.display = isRegisterMode ? "" : "none";
-  sendOtpBtn.style.display = isRegisterMode ? "" : "none";
-  authOtpInput.disabled = !isRegisterMode;
+  const isResetMode = mode === "reset-password";
+  const usesOtp = isRegisterMode || isResetMode;
+  const roleField = authRoleSelect?.closest("label");
+  if (roleField) {
+    roleField.hidden = isResetMode;
+    roleField.style.display = isResetMode ? "none" : "";
+  }
+  authOtpEmailField.hidden = !usesOtp;
+  authOtpField.hidden = !usesOtp;
+  sendOtpBtn.hidden = !usesOtp;
+  authOtpEmailField.style.display = usesOtp ? "" : "none";
+  authOtpField.style.display = usesOtp ? "" : "none";
+  sendOtpBtn.style.display = usesOtp ? "" : "none";
+  authOtpInput.disabled = !usesOtp;
   authIdentityLabel.textContent = "Email ID";
   authIdentityInput.placeholder = "Enter email address";
   authIdentityInput.autocomplete = "email";
+  authPasswordInput.placeholder = isResetMode ? "Enter new password" : "Enter password";
+  forgotPasswordBtn.hidden = mode !== "login";
+  forgotPasswordBtn.style.display = mode === "login" ? "" : "none";
   registrationOtpIssued = false;
+  passwordResetOtpIssued = false;
   clearOtpTimer();
   sendOtpBtn.disabled = false;
   sendOtpBtn.textContent = "Send OTP";
@@ -744,11 +763,13 @@ function openAuthOverlay(mode = "login") {
   if (mode === "login" && !loginLockTimer) {
     authSubmitBtn.disabled = false;
   }
-  authSubmitBtn.textContent = mode === "login" ? "Login" : "Verify OTP & Register";
+  authSubmitBtn.textContent = mode === "login" ? "Login" : isResetMode ? "Reset Password" : "Verify OTP & Register";
   authMessage.textContent =
     mode === "login"
       ? "Choose Admin or Citizen, then login with your email and password."
-      : "Choose Admin or Citizen, enter your email and password, then request an OTP to complete registration.";
+      : isResetMode
+        ? "Enter your registered email and new password, then request an OTP to reset securely."
+        : "Choose Admin or Citizen, enter your email and password, then request an OTP to complete registration.";
 }
 
 function closeAuthOverlay() {
@@ -1276,6 +1297,43 @@ async function requestRegistrationOtp() {
     }
     authSubmitBtn.disabled = false;
   }
+}
+
+async function requestPasswordResetOtp() {
+  try {
+    sendOtpBtn.disabled = true;
+    authSubmitBtn.disabled = true;
+    const formData = new FormData(authForm);
+    const payload = {
+      email: String(formData.get("email") || "").trim()
+    };
+    const data = await apiRequest("/api/auth/password-reset/request-otp", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    passwordResetOtpIssued = true;
+    startOtpCountdown(payload.email, "reset");
+    authMessage.textContent = data.message;
+    setDashboardMessage(data.message, "success");
+    authOtpInput.focus();
+  } catch (error) {
+    authMessage.textContent = error.message;
+    setDashboardMessage(error.message, "error");
+  } finally {
+    if (!otpTimer) {
+      sendOtpBtn.disabled = false;
+      sendOtpBtn.textContent = passwordResetOtpIssued ? "Resend OTP" : "Send OTP";
+    }
+    authSubmitBtn.disabled = false;
+  }
+}
+
+function requestActiveOtp() {
+  if (authMode === "reset-password") {
+    return requestPasswordResetOtp();
+  }
+
+  return requestRegistrationOtp();
 }
 
 function formatDateTime(value) {
@@ -3507,7 +3565,8 @@ showAiAccuracyBtn.addEventListener("click", () => {
 
 showLoginBtn.addEventListener("click", () => openAuthOverlay("login"));
 showRegisterBtn.addEventListener("click", () => openAuthOverlay("register"));
-sendOtpBtn?.addEventListener("click", requestRegistrationOtp);
+forgotPasswordBtn?.addEventListener("click", () => openAuthOverlay("reset-password"));
+sendOtpBtn?.addEventListener("click", requestActiveOtp);
 issueTokenBtn.addEventListener("click", () => openAuthOverlay("login"));
 logoutBtn?.addEventListener("click", () => logoutCurrentUser());
 closeAuthBtn.addEventListener("click", closeAuthOverlay);
@@ -3669,11 +3728,34 @@ authForm.addEventListener("submit", async (event) => {
       throw new Error("Send the OTP to your email before completing registration.");
     }
 
-    const endpoint = authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+    if (authMode === "reset-password" && !passwordResetOtpIssued) {
+      throw new Error("Send the OTP to your email before resetting the password.");
+    }
+
+    const endpoint =
+      authMode === "login"
+        ? "/api/auth/login"
+        : authMode === "reset-password"
+          ? "/api/auth/password-reset"
+          : "/api/auth/register";
     const data = await apiRequest(endpoint, {
       method: "POST",
       body: JSON.stringify(payload)
     });
+
+    if (authMode === "reset-password") {
+      const successMessage = data.message || "Password reset successful. Login with your new password.";
+      authMessage.textContent = successMessage;
+      setDashboardMessage(successMessage, "success");
+      passwordResetOtpIssued = false;
+      clearOtpTimer();
+      setOtpTimerMessage("");
+      sendOtpBtn.textContent = "Send OTP";
+      authForm.reset();
+      openAuthOverlay("login");
+      authMessage.textContent = successMessage;
+      return;
+    }
 
     authState = data;
     saveAuthState();
@@ -3683,6 +3765,7 @@ authForm.addEventListener("submit", async (event) => {
     authMessage.textContent = successMessage;
     setDashboardMessage(successMessage, "success");
     registrationOtpIssued = false;
+    passwordResetOtpIssued = false;
     clearOtpTimer();
     setOtpTimerMessage("");
     sendOtpBtn.textContent = "Send OTP";

@@ -1712,6 +1712,22 @@ textarea {
   margin-top: 18px;
 }
 
+.auth-link-button {
+  justify-self: flex-start;
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  color: var(--primary);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-link-button:hover {
+  color: var(--text);
+}
+
 .auth-form-actions {
   display: flex;
   justify-content: flex-start;

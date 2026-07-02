@@ -1203,7 +1203,7 @@ function detectIntentLocally(message, history = []) {
     const faqResponses = [
       {
         patterns: ["login", "sign in", "register", "sign up", "signup", "otp", "account"],
-        response: "Use the login and registration overlay to sign in as Citizen or Admin. Registration requires email OTP verification before the account is created."
+        response: "Use the login and registration overlay to sign in as Citizen or Admin. Registration requires email OTP verification, and forgot password can reset an existing account by email OTP."
       },
       {
         patterns: ["report", "raise complaint", "submit complaint", "file complaint", "how do i complain"],

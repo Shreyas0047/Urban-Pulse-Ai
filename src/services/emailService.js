@@ -38,7 +38,7 @@ async function sendRegistrationOtpEmail({ email, otp, username }) {
     "",
     code,
     "",
-    "This OTP is valid for 10 minutes. Do not share it with anyone.",
+    "This OTP is valid for 90 seconds. Do not share it with anyone.",
     "",
     "If you did not request this registration, you can ignore this email."
   ];
@@ -47,6 +47,39 @@ async function sendRegistrationOtpEmail({ email, otp, username }) {
     from: env.smtpUser,
     to: safeEmail,
     subject: "Your registration OTP",
+    text: bodyLines.join("\n")
+  });
+
+  return {
+    messageId: info.messageId
+  };
+}
+
+async function sendPasswordResetOtpEmail({ email, otp }) {
+  const transporter = createTransporter();
+  const safeEmail = String(email || "").trim();
+  const code = String(otp || "").trim();
+
+  if (!safeEmail || !code) {
+    throw new Error("Email and OTP are required before sending the password reset mail.");
+  }
+
+  const bodyLines = [
+    "Hello,",
+    "",
+    "Your one-time password for resetting your Urban Pulse AI password is:",
+    "",
+    code,
+    "",
+    "This OTP is valid for 90 seconds. Do not share it with anyone.",
+    "",
+    "If you did not request this password reset, you can ignore this email."
+  ];
+
+  const info = await transporter.sendMail({
+    from: env.smtpUser,
+    to: safeEmail,
+    subject: "Your password reset OTP",
     text: bodyLines.join("\n")
   });
 
@@ -172,5 +205,6 @@ module.exports = {
   isEmailConfigured,
   sendBbmpComplaintEmail,
   sendCloseContactsComplaintEmail,
+  sendPasswordResetOtpEmail,
   sendRegistrationOtpEmail
 };

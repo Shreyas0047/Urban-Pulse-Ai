@@ -1,5 +1,5 @@
 const express = require("express");
-const { getRoles, issueToken, requestRegistrationOtp, register, login } = require("../controllers/authController");
+const { getRoles, issueToken, requestRegistrationOtp, requestPasswordResetOtp, resetPassword, register, login } = require("../controllers/authController");
 const { getDashboard, resetDashboard } = require("../controllers/dashboardController");
 const { analyzeAndCreateComplaint, getComplaint, transcribeComplaintAudio, updateComplaintStatus, acknowledgeAlert } = require("../controllers/complaintController");
 const { getChatHistory, postChatMessage, clearChatHistory } = require("../controllers/chatbotController");
@@ -13,6 +13,8 @@ router.get("/roles", getRoles);
 router.post("/auth/token", issueToken);
 router.post("/auth/register/request-otp", requestRegistrationOtp);
 router.post("/auth/register", register);
+router.post("/auth/password-reset/request-otp", requestPasswordResetOtp);
+router.post("/auth/password-reset", resetPassword);
 router.post("/auth/login", login);
 
 router.use(authenticate);

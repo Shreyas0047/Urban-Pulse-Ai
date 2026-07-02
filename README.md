@@ -22,7 +22,7 @@ The README uses GitHub-visible components only: badges, Mermaid diagrams, tables
 | --- | --- | --- |
 | Frontend | `public/` | Citizen/admin dashboard, complaint form, image preparation, voice UI, chatbot, PDF export, account actions |
 | API | `src/` | Express routes, auth, validation, complaint workflow, geocoding, email, AI orchestration |
-| Database | MongoDB | Users, complaints, status history, chat sessions, registration OTPs |
+| Database | MongoDB | Users, complaints, status history, chat sessions, registration and password reset OTPs |
 | AI service | `ai_service/` | Flask `/analyze`, `/transcript/process`, `/chat`, `/health` endpoints |
 | Shared AI data | `shared/aiCategories.json` | Single source of truth for complaint categories across Node and Flask |
 | Evaluation | `scripts/evaluateAi.js`, `scripts/evaluateVision.py` | Deterministic category evaluation and optional local vision evaluation |
@@ -103,7 +103,7 @@ The AI service is now broader, more explainable, and easier to evaluate. It no l
 
 | Area | Current Behavior |
 | --- | --- |
-| Authentication | Email OTP registration, standard login, no captcha, no demo login route |
+| Authentication | Email OTP registration, forgot-password OTP reset, standard login, no captcha, no demo login route |
 | Citizen workflow | Submit text, image, or voice complaints and review generated summaries |
 | Admin workflow | Review complaints, update statuses, inspect details, manage accounts |
 | Complaint detail | Case-file modal with routing summary, AI decision notes, confidence breakdown, alternatives, alert history, and status timeline |
@@ -285,6 +285,8 @@ Stored complaint AI metadata includes:
 - Captcha has been removed from the login page.
 - Demo login has been removed.
 - Registration uses email OTP verification.
+- Forgot password uses email-only OTP reset. The reset request does not reveal whether an email is registered.
+- Auth OTPs expire after 90 seconds.
 - Seed scripts may create local seed users for development databases; replace or remove seeded credentials before production use.
 
 </details>
@@ -342,7 +344,7 @@ Use `render.yaml` as the deployment starting point. Configure production secrets
 | --- | --- |
 | Strong `JWT_SECRET` | Protects session tokens |
 | Production MongoDB URI | Keeps local and production data separate |
-| Real SMTP credentials | Enables OTP and escalation emails |
+| Real SMTP credentials | Enables registration, password reset, and escalation emails |
 | Deepgram API key | Enables voice complaint transcription |
 | AI service URL | Connects Express to Flask in production |
 | Vision model cache planning | Prevents slow cold starts for the local CLIP model |

@@ -3,7 +3,8 @@ const { rolePermissions } = require("../config/roles");
 const { issueRoleToken, hashPassword, verifyPassword, hashOneTimeCode, verifyOneTimeCode } = require("../utils/auth");
 const User = require("../models/User");
 const RegistrationOtp = require("../models/RegistrationOtp");
-const { sendRegistrationOtpEmail } = require("../services/emailService");
+const PasswordResetOtp = require("../models/PasswordResetOtp");
+const { sendPasswordResetOtpEmail, sendRegistrationOtpEmail } = require("../services/emailService");
 const crypto = require("crypto");
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -11,6 +12,7 @@ const PASSWORD_MIN_LENGTH = 8;
 const PASSWORD_MAX_LENGTH = 128;
 const OTP_TTL_MS = 90 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
+const PASSWORD_RESET_MESSAGE = "If an account exists for this email, an OTP has been sent. Verify it within 90 seconds.";
 const LOGIN_LOCK_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_LOCK_THRESHOLD = 6;
 const loginFailureBuckets = new Map();
@@ -266,6 +268,110 @@ async function requestRegistrationOtp(req, res, next) {
   }
 }
 
+async function requestPasswordResetOtp(req, res, next) {
+  try {
+    const email = normalizeEmail(req.body.email);
+
+    if (!email) {
+      throw createHttpError("Email is required.", 400);
+    }
+
+    validateEmail(email);
+
+    const user = await User.findOne({ email });
+    if (!user || user.disabledAt) {
+      await PasswordResetOtp.deleteOne({ email }).catch(() => {});
+      return res.json({
+        message: PASSWORD_RESET_MESSAGE,
+        expiresInSeconds: OTP_TTL_MS / 1000
+      });
+    }
+
+    const otp = generateOtpCode();
+    const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+    await PasswordResetOtp.findOneAndUpdate(
+      { email },
+      {
+        email,
+        otpHash: hashOneTimeCode(otp),
+        attempts: 0,
+        expiresAt
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    await sendPasswordResetOtpEmail({
+      email,
+      otp
+    });
+
+    res.json({
+      message: PASSWORD_RESET_MESSAGE,
+      expiresInSeconds: OTP_TTL_MS / 1000
+    });
+  } catch (error) {
+    next(formatAuthError(error));
+  }
+}
+
+async function resetPassword(req, res, next) {
+  try {
+    const email = normalizeEmail(req.body.email);
+    const otp = normalizeValue(req.body.otp);
+    const password = req.body.password;
+
+    if (!email || !otp || !password) {
+      throw createHttpError("Email, OTP, and new password are required.", 400);
+    }
+
+    validateEmail(email);
+    validatePassword(password);
+
+    const pendingReset = await PasswordResetOtp.findOne({ email });
+    if (!pendingReset) {
+      throw createHttpError("Request a password reset OTP before continuing.", 400);
+    }
+
+    if (pendingReset.expiresAt.getTime() < Date.now()) {
+      await PasswordResetOtp.deleteOne({ _id: pendingReset._id });
+      throw createHttpError("The OTP has expired. Request a new OTP and try again.", 400);
+    }
+
+    if (!verifyOneTimeCode(otp, pendingReset.otpHash)) {
+      pendingReset.attempts += 1;
+      if (pendingReset.attempts >= OTP_MAX_ATTEMPTS) {
+        await PasswordResetOtp.deleteOne({ _id: pendingReset._id });
+        throw createHttpError("Too many incorrect OTP attempts. Request a new OTP and try again.", 429);
+      }
+
+      await pendingReset.save();
+      throw createHttpError("Incorrect OTP. Check the email and try again.", 400);
+    }
+
+    const user = await User.findOne({ email });
+    if (!user || user.disabledAt) {
+      await PasswordResetOtp.deleteOne({ _id: pendingReset._id });
+      throw createHttpError("Unable to reset this account password.", 400);
+    }
+
+    if (verifyPassword(password, user.passwordHash)) {
+      throw createHttpError("Choose a new password that is different from the current password.", 400);
+    }
+
+    user.passwordHash = hashPassword(password);
+    await user.save();
+    await PasswordResetOtp.deleteOne({ _id: pendingReset._id });
+    clearLoginFailures(req, email);
+
+    res.json({
+      message: "Password reset successful. Login with your new password."
+    });
+  } catch (error) {
+    next(formatAuthError(error));
+  }
+}
+
 async function login(req, res, next) {
   try {
     const email = normalizeEmail(req.body.email);
@@ -306,6 +412,8 @@ module.exports = {
   getRoles,
   issueToken,
   requestRegistrationOtp,
+  requestPasswordResetOtp,
+  resetPassword,
   register,
   login
 };
