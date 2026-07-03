@@ -1,5 +1,6 @@
 from category_catalog import CATEGORY_BY_ID
 from context_analysis import context_features
+from decision_engine import build_structured_decision
 from reasoning import build_explanation, merge_multi_modal_categories, predict_priority
 from text_processing import analyze_sentiment_and_severity, keyword_extract, normalize_text, semantic_multi_label_classification
 from vision_analysis import detect_objects_from_features
@@ -83,6 +84,18 @@ def run_hybrid_pipeline(payload):
     primary_category_label = top_category["label"] if top_category else (fallback["suggested_label"] if fallback else "General")
     confidence = top_category["confidence"] if top_category else (fallback["confidence"] if fallback else 0.28)
     reason = build_explanation(primary_text, final_categories, sentiment_bundle, priority, context_bundle, fallback)
+    decision = build_structured_decision(
+        primary_category_id,
+        primary_category_label,
+        confidence,
+        semantic_result,
+        vision_result,
+        context_bundle,
+        sentiment_bundle,
+        priority,
+        primary_text,
+    )
+    confidence = decision["confidence"]
 
     return {
         "category": primary_category_id,
@@ -100,6 +113,15 @@ def run_hybrid_pipeline(payload):
         "vision": vision_result,
         "context": context_bundle,
         "fallback": fallback,
+        "decision": decision,
+        "textPrediction": decision["textPrediction"],
+        "imagePrediction": decision["imagePrediction"],
+        "conflictDetected": decision["conflictDetected"],
+        "reviewRequired": decision["reviewRequired"],
+        "confidenceLabel": decision["confidenceLabel"],
+        "evidenceUsed": decision["evidenceUsed"],
+        "reasoning": decision["reasoning"],
+        "quality": decision["quality"],
         "unified_text": primary_text or "Complaint submitted with image evidence.",
         "nlp": {
             "category": primary_category_label,
@@ -138,5 +160,9 @@ def run_hybrid_pipeline(payload):
             "visionProvider": vision_result.get("provider", "feature-fallback"),
             "visionFallbackUsed": vision_result.get("fallbackUsed", True),
             "machineHintIgnoredForClassification": True,
+            "evaluationVersion": "ai-service-decision-engine-v4",
+            "confidenceLabel": decision["confidenceLabel"],
+            "reviewRequired": decision["reviewRequired"],
+            "conflictDetected": decision["conflictDetected"],
         },
     }

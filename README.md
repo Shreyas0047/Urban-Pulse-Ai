@@ -71,7 +71,7 @@ sequenceDiagram
 
 ## Updated AI Service
 
-The AI service is now broader, more explainable, and easier to evaluate. It no longer depends on separate category definitions in different runtimes, and image classification now supports every shared complaint category through CLIP-style local vision when available, with deterministic fallback behavior when it is not.
+The AI service now uses a decision-engine v4 layer that fuses text, image, context, severity, and confidence signals into an auditable final decision. It no longer depends on separate category definitions in different runtimes, and image classification supports every shared complaint category through CLIP-style local vision when available, with deterministic fallback behavior when it is not.
 
 | Area | Old AI Service | New AI Service |
 | --- | --- | --- |
@@ -80,10 +80,10 @@ The AI service is now broader, more explainable, and easier to evaluate. It no l
 | Vision range | Limited image mapping for a small set of visual issues | All shared categories can receive image candidates |
 | Vision model | No local zero-shot vision model path | Optional local CLIP model: `sentence-transformers/clip-ViT-B-32` |
 | Vision fallback | Implicit and difficult to inspect | Explicit feature fallback with `provider`, `model`, and `fallbackUsed` metadata |
-| Precision | One dominant category with limited decision context | Top candidates, confidence breakdown, label, explanation, and review flag |
+| Precision | One dominant category with limited decision context | Text prediction, image prediction, final prediction, confidence calibration, conflict detection, and review flag |
 | Low-confidence handling | Less explicit review routing | Low-confidence complaints become `Needs Review` |
-| Auditability | Limited AI provenance on stored complaints | Provider, engine, model, fallback state, category ID, vision candidates, geocoding source, and evaluation version are stored |
-| Evaluation | No focused local AI regression command | `npm run evaluate:ai` plus optional `AI_EVAL_WITH_VISION=true npm run evaluate:ai` |
+| Auditability | Limited AI provenance on stored complaints | Provider, engine, model, fallback state, category ID, evidence used, reasoning, vision candidates, geocoding source, and evaluation version are stored |
+| Evaluation | No focused local AI regression command | `npm run evaluate:ai`, `python scripts/evaluateAiService.py`, plus optional vision evaluation |
 | Logs | General application logs | Structured `ai_complaint_decision` JSON logs |
 | Transcript handling | Basic transcript pass-through | Filler cleanup, civic-term normalization, summaries, and provider metadata |
 
@@ -95,9 +95,10 @@ The AI service is now broader, more explainable, and easier to evaluate. It no l
 | Image classification | Broadened | Local CLIP model when available, feature fallback when unavailable |
 | Voice complaints | Integrated | Deepgram STT with Flask transcript post-processing |
 | Context awareness | Integrated | Prior user complaints and nearby/recent issues influence urgency |
-| Explainability | Integrated | Explanation, confidence label, confidence breakdown, and candidates are returned |
-| Review routing | Integrated | Uncertain cases are assigned `Needs Review` |
-| Evaluation | Integrated | Deterministic local evaluation with optional vision checks |
+| Explainability | Integrated | Structured reasoning includes matched keywords, visual signals, context signals, risk factors, and decision summary |
+| Conflict detection | Integrated | Strong disagreement between text and image evidence is flagged for admin review |
+| Review routing | Integrated | Low-confidence or conflicting cases are assigned `Needs Review` |
+| Evaluation | Integrated | Deterministic local evaluation, AI-service decision evaluation, and optional vision checks |
 
 ## Product And User Experience
 
@@ -235,6 +236,12 @@ Run category evaluation plus optional real image vision evaluation:
 AI_EVAL_WITH_VISION=true npm run evaluate:ai
 ```
 
+Run the Flask AI-service decision-engine evaluation:
+
+```bash
+python scripts/evaluateAiService.py
+```
+
 The default minimum accuracy threshold is controlled by:
 
 ```bash
@@ -274,6 +281,13 @@ Stored complaint AI metadata includes:
 - `evaluationVersion`
 - `geocodingSource`
 - `explanation`
+- `decision`
+- `textPrediction`
+- `imagePrediction`
+- `conflictDetected`
+- `evidenceUsed`
+- `reasoning`
+- `quality`
 - `confidenceLabel`
 - `reviewRequired`
 
@@ -298,6 +312,7 @@ Urban-Pulse-Ai/
 |-- ai_service/              # Flask AI service
 |   |-- app.py               # AI HTTP endpoints
 |   |-- pipeline.py          # Complaint analysis pipeline
+|   |-- decision_engine.py   # Confidence calibration, conflict detection, structured reasoning
 |   |-- vision_analysis.py   # CLIP vision and feature fallback
 |   |-- category_catalog.py  # Shared category loader
 |   `-- requirements.txt
@@ -308,6 +323,7 @@ Urban-Pulse-Ai/
 |   `-- styles.css
 |-- scripts/
 |   |-- evaluateAi.js        # Main AI evaluation runner
+|   |-- evaluateAiService.py # Flask decision-engine evaluation
 |   |-- evaluateVision.py    # Optional image evaluation
 |   `-- seedDatabase.js
 |-- shared/

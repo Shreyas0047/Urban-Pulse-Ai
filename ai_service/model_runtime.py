@@ -30,6 +30,16 @@ def get_vision_model():
         return None
 
 
+def runtime_status():
+    return {
+        "sentenceTransformersInstalled": SentenceTransformer is not None,
+        "embeddingModel": EMBEDDING_MODEL_NAME,
+        "visionModel": VISION_MODEL_NAME,
+        "embeddingModelCached": get_embedding_model.cache_info().currsize > 0,
+        "visionModelCached": get_vision_model.cache_info().currsize > 0,
+    }
+
+
 def cosine_similarity(left, right):
     left_norm = np.linalg.norm(left)
     right_norm = np.linalg.norm(right)

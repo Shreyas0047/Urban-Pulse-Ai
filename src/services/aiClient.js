@@ -1088,6 +1088,7 @@ async function analyzeComplaint(payload) {
     return {
       ...data,
       aiMeta: {
+        ...(data.aiMeta || {}),
         provider: data.aiMeta?.provider || "flask",
         engine: data.aiMeta?.engine || "hybrid-semantic-feature-v3",
         model: data.aiMeta?.model || "sentence-transformers-or-hash-fallback",

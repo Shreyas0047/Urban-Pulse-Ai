@@ -1,7 +1,9 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+from category_catalog import COMPLAINT_CATEGORIES
 from chat_logic import classify_chat_intent
+from model_runtime import runtime_status
 from pipeline import run_hybrid_pipeline
 
 
@@ -58,7 +60,23 @@ CORS(app)
 
 @app.get("/health")
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify(
+        {
+            "status": "ok",
+            "service": "urban-pulse-ai-service",
+            "engine": "ai-service-decision-engine-v4",
+            "categoryCount": len(COMPLAINT_CATEGORIES),
+            "models": runtime_status(),
+            "capabilities": {
+                "semanticTextClassification": True,
+                "imageClassification": True,
+                "confidenceCalibration": True,
+                "textImageConflictDetection": True,
+                "structuredExplainability": True,
+                "transcriptNormalization": True,
+            },
+        }
+    )
 
 
 @app.post("/analyze")
