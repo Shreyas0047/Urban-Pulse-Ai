@@ -1,5 +1,7 @@
 const Complaint = require("../models/Complaint");
 const { analyzeComplaint } = require("./aiClient");
+const { createEmergencyBroadcast } = require("./broadcastService");
+const { canonicalPriority, routeComplaint } = require("./routingService");
 
 const LOW_CONFIDENCE_THRESHOLD = 0.52;
 const GEOCODE_TIMEOUT_MS = 3500;
@@ -165,7 +167,7 @@ function buildAiExplanation(analysis, payload, reviewRequired, confidenceScore) 
   ].join(" ");
 }
 
-function logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired }) {
+function logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired, routing }) {
   const record = {
     event: "ai_complaint_decision",
     provider: analysis.aiMeta?.provider || "unknown",
@@ -176,7 +178,10 @@ function logAiDecision({ auth, location, analysis, confidenceScore, reviewRequir
     priority: analysis.priority?.level || "Low",
     confidence: Number(confidenceScore.toFixed(3)),
     reviewRequired,
-    authority: analysis.assignedAuthority,
+    authority: routing?.authority || analysis.assignedAuthority,
+    department: routing?.department || analysis.nlp?.team,
+    unit: routing?.unit || "",
+    ward: routing?.ward || "",
     location,
     userRole: auth.role,
     username: auth.username
@@ -204,11 +209,15 @@ async function createComplaintFromPayload(auth, payload) {
     ? { reporterUserId: String(auth.userId || "") }
     : { reporterUsername: auth.username };
   const recentAreaFilter = location ? { location: new RegExp(location.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } : {};
-  const [previousComplaints, recentAreaComplaints] = await Promise.all([
+  const [previousComplaints, recentAreaComplaints, activeRoutingComplaints] = await Promise.all([
     Complaint.find(previousComplaintFilter).sort({ createdAt: -1 }).limit(5).lean(),
     location
       ? Complaint.find(recentAreaFilter).sort({ createdAt: -1 }).limit(8).lean()
-      : Promise.resolve([])
+      : Promise.resolve([]),
+    Complaint.find({ status: { $in: ["Queued", "Needs Review", "In Progress", "Escalated"] } })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean()
   ]);
 
   const analysis = await analyzeComplaint({
@@ -234,6 +243,8 @@ async function createComplaintFromPayload(auth, payload) {
       location: complaint.location,
       priority: complaint.priority,
       status: complaint.status,
+      reporterUserId: complaint.reporterUserId,
+      reporterUsername: complaint.reporterUsername,
       createdAt: complaint.createdAt
     }))
   });
@@ -250,9 +261,23 @@ async function createComplaintFromPayload(auth, payload) {
     imageFeatures: payload.imageFeatures || null
   });
   const reviewRequired = confidenceScore < LOW_CONFIDENCE_THRESHOLD;
+  analysis.priority.level = canonicalPriority(analysis.priority?.level);
   const finalStatus = reviewRequired ? "Needs Review" : analysis.status;
   const explanation = buildAiExplanation(analysis, payload, reviewRequired, confidenceScore);
-  logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired });
+  const routing = await routeComplaint({
+    analysis,
+    location,
+    mapLocation,
+    activeComplaints: activeRoutingComplaints
+  });
+  analysis.assignedAuthority = routing.authority;
+  analysis.nlp.team = routing.department || analysis.nlp.team;
+  analysis.alerts = [
+    ...(analysis.alerts || []),
+    `${routing.unit} assigned through ${routing.department}`,
+    `Routing reason: ${routing.routingReason}`
+  ];
+  logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired, routing });
 
   const complaint = await Complaint.create({
     reporter: auth.role,
@@ -264,7 +289,8 @@ async function createComplaintFromPayload(auth, payload) {
     source: payload.inputSource || "Manual Submission",
     confidence: Math.round(confidenceScore * 100),
     location,
-    assignedAuthority: analysis.assignedAuthority,
+    assignedAuthority: routing.authority,
+    routing,
     mapLocation,
     description: analysis.unifiedText || "No complaint text provided.",
     alerts: analysis.alerts,
@@ -307,14 +333,59 @@ async function createComplaintFromPayload(auth, payload) {
     }
   });
 
+  const broadcast = await createEmergencyBroadcast({
+    complaint,
+    analysis,
+    routing,
+    mapLocation,
+    confidenceScore,
+    recentAreaComplaints,
+    triggeredBy: auth.username || "system"
+  });
+
+  if (broadcast) {
+    complaint.broadcast = {
+      triggered: true,
+      broadcastId: broadcast._id,
+      status: broadcast.status,
+      channels: broadcast.channels || [],
+      recipientCount: (broadcast.recipients || []).length,
+      message: broadcast.message,
+      sentAt: broadcast.sentAt
+    };
+    complaint.alerts = [
+      ...(complaint.alerts || []),
+      `Emergency broadcast ${broadcast.status} for ${complaint.priority} priority ${complaint.type}`,
+      `Broadcast recipients: ${(broadcast.recipients || []).length}`
+    ];
+    await complaint.save();
+  }
+
   analysis.status = finalStatus;
   analysis.mapLocation = mapLocation;
+  analysis.assignedAuthority = routing.authority;
+  analysis.routing = routing;
+  analysis.broadcast = broadcast
+    ? {
+        triggered: true,
+        broadcastId: String(broadcast._id),
+        status: broadcast.status,
+        channels: broadcast.channels || [],
+        recipientCount: (broadcast.recipients || []).length,
+        message: broadcast.message,
+        sentAt: broadcast.sentAt
+      }
+    : {
+        triggered: false
+      };
   analysis.explainability = {
     explanation,
     confidenceLabel: getConfidenceLabel(confidenceScore),
     reviewRequired,
     geocodingSource: geocoded.source,
     recommendedTeam: analysis.nlp.team,
+    routing,
+    broadcast: analysis.broadcast,
     provider: analysis.aiMeta?.provider || "unknown",
     engine: analysis.aiMeta?.engine || "unknown",
     fallbackUsed: Boolean(analysis.aiMeta?.fallbackUsed),

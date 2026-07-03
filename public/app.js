@@ -1775,6 +1775,10 @@ function renderMetrics(metrics) {
   document.getElementById("totalComplaints").textContent = metrics.totalComplaints;
   document.getElementById("openComplaints").textContent = metrics.openComplaints;
   document.getElementById("resolvedCount").textContent = Math.max(0, metrics.totalComplaints - metrics.openComplaints);
+  const broadcastCount = document.getElementById("broadcastCount");
+  if (broadcastCount) {
+    broadcastCount.textContent = metrics.emergencyBroadcasts || 0;
+  }
 }
 
 function getFilteredComplaints(complaints = []) {
@@ -1970,8 +1974,10 @@ function confidenceBadge(complaint) {
 
 function renderAnalysis(result) {
   const reviewText = result.explainability?.reviewRequired ? " It needs admin review because confidence is low." : "";
+  const routeText = result.routing?.unit ? ` ${result.routing.unit} is assigned.` : "";
+  const broadcastText = result.broadcast?.triggered ? ` Emergency broadcast ${result.broadcast.status}.` : "";
   setDashboardMessage(
-    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}. Detected issue: ${result.nlp?.issueType || result.cv.detected}.${reviewText}`,
+    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}.${routeText} Detected issue: ${result.nlp?.issueType || result.cv.detected}.${reviewText}${broadcastText}`,
     result.explainability?.reviewRequired ? "info" : "success"
   );
 }
@@ -1997,6 +2003,8 @@ function buildSubmittedReport(payload, result) {
     category: result.nlp?.category || "General",
     priority: result.priority?.level || "Low",
     assignedAuthority: result.assignedAuthority || "Gram Panchayat",
+    routing: result.routing || result.explainability?.routing || null,
+    broadcast: result.broadcast || result.explainability?.broadcast || null,
     status: result.status || "Queued",
     detection: result.cv?.detected || "No image analysis available",
     cvReason: result.cv?.reason || "Local AI matched the uploaded issue against known civic patterns.",
@@ -2101,6 +2109,41 @@ function renderConfidenceBreakdown(confidenceBreakdown = {}) {
     .join("");
 }
 
+function renderRoutingSummary(complaint) {
+  const routing = complaint.routing || {};
+  if (!routing.unit && !routing.department) {
+    return "Current authority assignment for this complaint.";
+  }
+
+  const workload = Number.isFinite(Number(routing.workloadScore))
+    ? `${Math.round(Number(routing.workloadScore) * 100)}% workload`
+    : "workload not recorded";
+  return [
+    `${routing.department || "Response department"} · ${routing.unit || "Response unit"}`,
+    `${routing.ward || "Ward not inferred"} · ${routing.escalationLevel || "Routine"} · ${workload}`,
+    routing.routingReason || ""
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
+function renderBroadcastSummary(complaint) {
+  const broadcast = complaint.broadcast || {};
+  if (!broadcast.triggered) {
+    return "No emergency broadcast was required for this case.";
+  }
+
+  return [
+    `Status: ${broadcast.status || "created"}`,
+    `Recipients: ${broadcast.recipientCount || 0}`,
+    broadcast.message || ""
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
 function renderComplaintDetail(complaint) {
   complaintDetailTitle.textContent = complaint.type || "Complaint";
   const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
@@ -2164,8 +2207,8 @@ function renderComplaintDetail(complaint) {
       <div class="detail-support-grid">
         <section class="detail-support-card">
           <p class="detail-section-label">Routing</p>
-          <strong>${escapeHtml(complaint.assignedAuthority || "Gram Panchayat")}</strong>
-          <p>Current authority assignment for this complaint.</p>
+          <strong>${escapeHtml(complaint.routing?.unit || complaint.assignedAuthority || "Gram Panchayat")}</strong>
+          <p>${renderRoutingSummary(complaint)}</p>
         </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Created</p>
@@ -2176,6 +2219,11 @@ function renderComplaintDetail(complaint) {
           <p class="detail-section-label">Alternative reads</p>
           <strong>${alternatives.length ? pluralize(alternatives.length, "candidate") : "No alternates"}</strong>
           <p>${alternatives.length ? escapeHtml(alternatives.map((candidate) => candidate.label || "Candidate").join(" • ")) : "No secondary image candidates were recorded for this complaint."}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Emergency broadcast</p>
+          <strong>${complaint.broadcast?.triggered ? "Triggered" : "Not triggered"}</strong>
+          <p>${renderBroadcastSummary(complaint)}</p>
         </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Map</p>
@@ -2339,6 +2387,8 @@ async function generatePdfReport(report, options = {}) {
   drawRow("Reported By", report.reporter);
   drawRow("User Role", report.role);
   drawRow("Routed Authority", report.assignedAuthority);
+  drawRow("Assigned Unit", report.routing?.unit || report.routing?.department || "Not recorded");
+  drawRow("Ward / Coverage", report.routing?.ward || "Not recorded");
   drawRow("Complaint Status", report.status);
 
   drawSectionTitle("2. Complaint Particulars");
@@ -2413,6 +2463,7 @@ async function generatePdfReport(report, options = {}) {
   drawRow("Notifications Issued", "");
   cursorY -= 8;
   drawBulletsBox(report.notifications);
+  drawRow("Emergency Broadcast", report.broadcast?.triggered ? `${report.broadcast.status || "created"} · ${report.broadcast.recipientCount || 0} recipient(s)` : "Not triggered");
 
   ensureSpace(18);
   doc.setDrawColor(...lineColor);
@@ -2455,6 +2506,7 @@ function renderComplaints(complaints) {
             <span class="status-pill" data-status="${escapeHtml(complaint.status)}">${escapeHtml(complaint.status)}</span>
           </div>
           <p>${escapeHtml(complaint.location)}</p>
+          <p class="helper-text">Unit: ${escapeHtml(complaint.routing?.unit || complaint.routing?.department || complaint.ai?.recommendedTeam || "Response team")} · ${complaint.broadcast?.triggered ? `Broadcast ${escapeHtml(complaint.broadcast.status || "created")}` : "No broadcast"}</p>
           <div class="issue-meta">
             ${severityBadge(complaint.priority)}
             ${authorityBadge(complaint.assignedAuthority)}

@@ -12,6 +12,41 @@ const complaintSchema = new mongoose.Schema(
     confidence: { type: Number, required: true },
     location: { type: String, required: true },
     assignedAuthority: { type: String, default: "Gram Panchayat" },
+    routing: {
+      authority: String,
+      department: String,
+      unit: String,
+      unitId: String,
+      ward: String,
+      escalationLevel: String,
+      workloadScore: Number,
+      activeCaseLoad: Number,
+      maxActiveCases: Number,
+      contactEmail: String,
+      portalUrl: String,
+      routingReason: String,
+      alternatives: [
+        {
+          unitId: String,
+          department: String,
+          unit: String,
+          authority: String,
+          score: Number,
+          activeCaseLoad: Number,
+          workloadScore: Number
+        }
+      ],
+      assignedAt: Date
+    },
+    broadcast: {
+      triggered: { type: Boolean, default: false },
+      broadcastId: { type: mongoose.Schema.Types.ObjectId, ref: "EmergencyBroadcast", default: null },
+      status: { type: String, default: "" },
+      channels: [{ type: String }],
+      recipientCount: { type: Number, default: 0 },
+      message: { type: String, default: "" },
+      sentAt: { type: Date, default: null }
+    },
     mapLocation: {
       lat: Number,
       lng: Number

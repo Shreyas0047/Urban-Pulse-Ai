@@ -201,10 +201,48 @@ async function sendCloseContactsComplaintEmail({ emails, report, reporter }) {
   };
 }
 
+async function sendEmergencyBroadcastEmail({ emails, complaint, routing, message }) {
+  const transporter = createTransporter();
+  const safeEmails = [...new Set((Array.isArray(emails) ? emails : []).map((email) => String(email || "").trim().toLowerCase()).filter(Boolean))];
+
+  if (!safeEmails.length) {
+    throw new Error("At least one emergency broadcast recipient is required.");
+  }
+
+  const bodyLines = [
+    "Emergency civic alert from Urban Pulse AI.",
+    "",
+    message,
+    "",
+    `Issue: ${complaint.type}`,
+    `Severity: ${complaint.priority}`,
+    `Location: ${complaint.location}`,
+    `Assigned unit: ${routing?.unit || complaint.assignedAuthority}`,
+    `Department: ${routing?.department || "Response team"}`,
+    "",
+    "Please avoid the affected area if needed and follow local authority instructions.",
+    "",
+    "This alert was generated because the complaint was classified as high-risk."
+  ];
+
+  const info = await transporter.sendMail({
+    from: env.smtpFrom,
+    to: safeEmails,
+    subject: `Emergency civic alert: ${complaint.type}`,
+    text: bodyLines.join("\n")
+  });
+
+  return {
+    messageId: info.messageId,
+    accepted: info.accepted || []
+  };
+}
+
 module.exports = {
   isEmailConfigured,
   sendBbmpComplaintEmail,
   sendCloseContactsComplaintEmail,
+  sendEmergencyBroadcastEmail,
   sendPasswordResetOtpEmail,
   sendRegistrationOtpEmail
 };

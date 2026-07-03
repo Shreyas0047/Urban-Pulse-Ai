@@ -17,6 +17,8 @@ async function analyzeAndCreateComplaint(req, res, next) {
       confidence: analysis.confidence,
       status: analysis.status,
       assignedAuthority: analysis.assignedAuthority,
+      routing: analysis.routing,
+      broadcast: analysis.broadcast,
       mapLocation: analysis.mapLocation,
       explainability: analysis.explainability,
       aiMeta: analysis.aiMeta,

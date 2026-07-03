@@ -142,13 +142,16 @@ async function getDashboard(req, res, next) {
     const manageableUsers = filterUsers(users, filters);
     const issueCounts = countBy(complaints, (item) => item.type);
     const authorityCounts = countBy(complaints, (item) => item.assignedAuthority);
+    const departmentCounts = countBy(complaints, (item) => item.routing?.department || item.ai?.recommendedTeam);
     const statusCounts = countBy(complaints, (item) => item.status);
+    const broadcastCount = complaints.filter((item) => item.broadcast?.triggered).length;
 
     res.json({
       metrics: {
         totalComplaints: complaints.length,
         openComplaints: complaints.filter((item) => item.status !== "Resolved").length,
         criticalAlerts: complaints.filter((item) => item.priority === "Critical").length,
+        emergencyBroadcasts: broadcastCount,
         avgConfidence: complaints.length
           ? Math.round(complaints.reduce((sum, item) => sum + item.confidence, 0) / complaints.length)
           : 0,
@@ -158,9 +161,11 @@ async function getDashboard(req, res, next) {
       analytics: {
         topIssue: issueCounts[0] || null,
         topAuthority: authorityCounts[0] || null,
+        topDepartment: departmentCounts[0] || null,
         statusCounts,
         totalLoadedComplaints: complaints.length,
-        totalLoadedAlerts: alertComplaints.reduce((sum, complaint) => sum + (Array.isArray(complaint.alerts) ? complaint.alerts.length : 0), 0)
+        totalLoadedAlerts: alertComplaints.reduce((sum, complaint) => sum + (Array.isArray(complaint.alerts) ? complaint.alerts.length : 0), 0),
+        emergencyBroadcasts: broadcastCount
       },
       iotReadings: canViewSensors ? iotReadings : [],
       manageableUsers,

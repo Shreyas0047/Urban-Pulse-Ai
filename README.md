@@ -22,12 +22,12 @@ The README uses GitHub-visible components only: badges, Mermaid diagrams, tables
 | --- | --- | --- |
 | Frontend | `public/` | Citizen/admin dashboard, complaint form, image preparation, voice UI, chatbot, PDF export, account actions |
 | API | `src/` | Express routes, auth, validation, complaint workflow, geocoding, email, AI orchestration |
-| Database | MongoDB | Users, complaints, status history, chat sessions, registration and password reset OTPs |
+| Database | MongoDB | Users, complaints, department units, emergency broadcasts, status history, chat sessions, registration and password reset OTPs |
 | AI service | `ai_service/` | Flask `/analyze`, `/transcript/process`, `/chat`, `/health` endpoints |
 | Shared AI data | `shared/aiCategories.json` | Single source of truth for complaint categories across Node and Flask |
 | Evaluation | `scripts/evaluateAi.js`, `scripts/evaluateVision.py` | Deterministic category evaluation and optional local vision evaluation |
 | Speech | Deepgram | Live speech-to-text with transcript cleanup through the AI service |
-| Email | SMTP | OTP delivery and BBMP complaint forwarding |
+| Email | SMTP | OTP delivery, authority forwarding, close-contact warnings, and emergency broadcast emails |
 
 ## Architecture
 
@@ -64,9 +64,11 @@ sequenceDiagram
     AI->>AI: Score text, vision, context, severity
     AI-->>API: Category, confidence, explanation, provenance
     API->>API: Calibrate confidence and geocode location
-    API->>DB: Store complaint, status history, AI metadata
-    API->>Mail: Optional BBMP forwarding
-    API-->>FE: Complaint result and review state
+    API->>API: Route to department unit by ward, category, severity, workload
+    API->>DB: Store complaint, routing, status history, AI metadata
+    API->>DB: Create emergency broadcast record when high-risk
+    API->>Mail: Optional authority forwarding or emergency email broadcast
+    API-->>FE: Complaint result, routing, broadcast, and review state
 ```
 
 ## Updated AI Service
@@ -106,14 +108,15 @@ The AI service now uses a decision-engine v4 layer that fuses text, image, conte
 | --- | --- |
 | Authentication | Email OTP registration, forgot-password OTP reset, standard login, no captcha, no demo login route |
 | Citizen workflow | Submit text, image, or voice complaints and review generated summaries |
-| Admin workflow | Review complaints, update statuses, inspect details, manage accounts |
-| Complaint detail | Case-file modal with routing summary, AI decision notes, confidence breakdown, alternatives, alert history, and status timeline |
+| Admin workflow | Review complaints, inspect AI/routing/broadcast details, update statuses, manage accounts |
+| Complaint detail | Case-file modal with department routing, emergency broadcast status, AI decision notes, confidence breakdown, alternatives, alert history, and status timeline |
 | Status tracking | Complaint status history is persisted |
 | AI helper | Floating chatbot supports status lookup, complaint guidance, FAQ, and navigation help |
-| Reporting | PDF complaint reports and BBMP email forwarding |
+| Reporting | PDF complaint reports, BBMP email forwarding, routing metadata, and emergency broadcast audit |
 | Operations map | Visual marker board, hotspot summary, priority watch, focused complaint preview, and direct case opening |
 | Dashboard insights | Review load, priority load, hotspot, oldest open case, resolution rate, and routing concentration |
-| Safety | Low-confidence AI classifications require review instead of being silently trusted |
+| Smart response | Department/unit routing uses issue type, severity, ward inference, and active workload |
+| Safety | Low-confidence AI classifications require review, while high-risk cases create emergency broadcast records |
 
 ## Latest UX And Ops Upgrades
 
@@ -134,13 +137,14 @@ The current production pass focuses on making the system easier to trust, scan, 
 1. Login or register with email and password.
 2. Add a location, complaint text or voice transcript, and optional image.
 3. Review AI-generated description and submit the case.
-4. Generate a PDF, forward the complaint, or notify close contacts.
-5. Track the complaint later from the dedicated complaints view.
+4. Receive the routed authority, department unit, and broadcast status where applicable.
+5. Generate a PDF, forward the complaint, or notify close contacts.
+6. Track the complaint later from the dedicated complaints view.
 
 ### Admin Journey
 
 1. Open the dashboard and inspect review load, hotspot concentration, and open-case pressure.
-2. Open a complaint in the case-file modal to inspect history, alerts, and AI reasoning.
+2. Open a complaint in the case-file modal to inspect history, alerts, AI reasoning, routing, and emergency broadcast audit.
 3. Update status or acknowledge alerts.
 4. Use the operations map to focus on geographic clusters and jump into cases quickly.
 5. Manage roles, account state, and account deletion from the accounts area.
@@ -222,6 +226,8 @@ http://localhost:3000
 
 The first Python 3.11 vision run may download or load the configured `sentence-transformers/clip-ViT-B-32` model. If the model cannot load, the AI service still returns deterministic feature-fallback image candidates.
 
+Smart routing uses built-in fallback department units when no `DepartmentUnit` records exist in MongoDB. Add `DepartmentUnit` records later to replace the fallback registry with real ward, department, contact email, and portal metadata.
+
 ## Evaluation
 
 Run the deterministic AI category evaluation:
@@ -260,6 +266,7 @@ AI_EVAL_MIN_ACCURACY=0.65
 - Runs AI analysis through Flask when available.
 - Falls back to local deterministic analysis if the AI service is unavailable.
 - Stores AI provenance and status history with the complaint.
+- Stores routing and emergency broadcast audit metadata when applicable.
 
 </details>
 
@@ -290,6 +297,29 @@ Stored complaint AI metadata includes:
 - `quality`
 - `confidenceLabel`
 - `reviewRequired`
+
+</details>
+
+<details>
+<summary>Smart Routing And Emergency Broadcast</summary>
+
+- New complaints receive a routing decision with authority, department, unit, ward/coverage, workload score, escalation level, and routing reason.
+- Routing uses AI category, priority, inferred ward/location keywords, and active complaint workload.
+- High-risk complaints can create emergency broadcast records with in-app audit data and email delivery when SMTP recipients are available.
+- Emergency broadcast recipients currently include admins and users with recent complaints in the same area.
+- SMS is represented as `sms-ready` metadata so Twilio or another SMS provider can be connected later without changing the complaint workflow.
+
+</details>
+
+<details>
+<summary>Core Data Models</summary>
+
+- `User`: authenticated Citizen/Admin accounts, email, role, disabled state, and login metadata.
+- `Complaint`: complaint details, AI metadata, routing decision, broadcast summary, alerts, status history, and map coordinates.
+- `DepartmentUnit`: configurable authority, department, unit, ward coverage, category coverage, workload capacity, contact email, and portal URL.
+- `EmergencyBroadcast`: high-risk broadcast audit record with channels, recipients, delivery status, message, and linked complaint.
+- `RegistrationOtp` and `PasswordResetOtp`: short-lived OTP records for account creation and password reset.
+- `ChatSession`: stored chatbot conversation state.
 
 </details>
 
@@ -331,9 +361,9 @@ Urban-Pulse-Ai/
 |-- src/
 |   |-- controllers/         # Express controllers
 |   |-- middleware/          # Auth and security middleware
-|   |-- models/              # MongoDB models
+|   |-- models/              # MongoDB models, department units, emergency broadcasts
 |   |-- routes/              # API routes
-|   `-- services/            # AI, complaint, email, OTP, seed services
+|   `-- services/            # AI, complaint, routing, broadcast, email, OTP, seed services
 |-- dataset/                 # Local category evaluation images/data
 |-- render.yaml              # Render deployment blueprint
 |-- package.json
@@ -350,7 +380,7 @@ Recommended production layout:
 | AI service | Python on Render | Runs Flask AI endpoints and loads text/vision models |
 | Database | MongoDB Atlas | Stores users, complaints, chat sessions, OTPs, and AI metadata |
 | Speech | Deepgram | Provides speech-to-text for voice complaints |
-| Email | SMTP provider | Sends OTPs and complaint forwarding emails |
+| Email | SMTP provider | Sends OTPs, authority forwarding emails, close-contact warnings, and emergency broadcast emails |
 
 Use `render.yaml` as the deployment starting point. Configure production secrets in the Render dashboard instead of committing them.
 
@@ -361,8 +391,10 @@ Use `render.yaml` as the deployment starting point. Configure production secrets
 | Strong `JWT_SECRET` | Protects session tokens |
 | Production MongoDB URI | Keeps local and production data separate |
 | Real SMTP credentials | Enables registration, password reset, and escalation emails |
+| Authority contact registry | Replace fallback department units with real ward, department, email, and portal metadata |
 | Deepgram API key | Enables voice complaint transcription |
 | AI service URL | Connects Express to Flask in production |
 | Vision model cache planning | Prevents slow cold starts for the local CLIP model |
 | Evaluation in CI | Catches category regressions before deploy |
+| Broadcast dry run | Confirm emergency broadcast records are created and email failures do not block complaint submission |
 | Seed credential cleanup | Prevents development credentials from reaching production |
