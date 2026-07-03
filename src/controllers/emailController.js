@@ -100,7 +100,7 @@ async function emailBbmpComplaint(req, res, next) {
 
     res.json({
       sent: true,
-      message: `Complaint email sent to BBMP at comm@bbmp.gov.in.`,
+      message: "Complaint email sent to the configured authority channel.",
       messageId: emailResult.messageId
     });
   } catch (error) {

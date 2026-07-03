@@ -1,9 +1,17 @@
 const Complaint = require("../models/Complaint");
+const IncidentCommand = require("../models/IncidentCommand");
 const { transcribeAudio } = require("../services/aiClient");
 const { createComplaintFromPayload, createHttpError } = require("../services/complaintService");
 
 const ALLOWED_STATUSES = ["Queued", "Needs Review", "In Progress", "Resolved", "Escalated"];
 const ALLOWED_PRIORITIES = ["Low", "Medium", "High", "Critical"];
+
+function commandStatusForComplaintStatus(status) {
+  if (status === "Resolved") return "Resolved";
+  if (status === "Escalated") return "Active";
+  if (status === "In Progress") return "Active";
+  return "Monitoring";
+}
 
 async function analyzeAndCreateComplaint(req, res, next) {
   try {
@@ -19,6 +27,7 @@ async function analyzeAndCreateComplaint(req, res, next) {
       assignedAuthority: analysis.assignedAuthority,
       routing: analysis.routing,
       broadcast: analysis.broadcast,
+      incidentCommand: analysis.incidentCommand,
       mapLocation: analysis.mapLocation,
       explainability: analysis.explainability,
       aiMeta: analysis.aiMeta,
@@ -105,6 +114,21 @@ async function updateComplaintStatus(req, res, next) {
           note: String(req.body.alertNote || req.body.note || "").trim()
         }
       ];
+
+      if (complaint.incidentCommand?.triggered && complaint.incidentCommand?.incidentId) {
+        const commandStatus = commandStatusForComplaintStatus(req.body.status);
+        await IncidentCommand.findByIdAndUpdate(complaint.incidentCommand.incidentId, {
+          commandStatus,
+          $push: {
+            timeline: {
+              event: `Complaint status changed to ${req.body.status}`,
+              at: new Date(),
+              by: req.auth.username
+            }
+          }
+        });
+        complaint.incidentCommand.status = commandStatus;
+      }
     }
 
     if (req.body.priority) {

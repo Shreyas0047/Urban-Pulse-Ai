@@ -467,7 +467,7 @@
                   <div class="form-actions">
                     <button type="submit" id="complaintSubmitBtn" class="light-beam-button">Submit Report</button>
                     <button type="button" id="generatePdfBtn" class="secondary-button" disabled>Generate PDF</button>
-                    <button type="button" id="emailBbmpBtn" class="secondary-button" disabled>Email BBMP</button>
+                    <button type="button" id="emailBbmpBtn" class="secondary-button" disabled>Email Authority</button>
                   </div>
 
                   <div id="emailProgress" class="email-progress" hidden>
@@ -545,7 +545,25 @@
                   <span>Broadcasts</span>
                   <strong id="broadcastCount">0</strong>
                 </div>
+                <div class="metric-card">
+                  <span>Incidents</span>
+                  <strong id="incidentCount">0</strong>
+                </div>
               </div>
+              <div class="section-head compact ops-subhead">
+                <div>
+                  <p class="eyebrow">Civic digital twin</p>
+                  <h2>City Health</h2>
+                </div>
+              </div>
+              <div id="digitalTwinPanel" class="insight-grid"></div>
+              <div class="section-head compact ops-subhead">
+                <div>
+                  <p class="eyebrow">Incident command</p>
+                  <h2>Active Response Rooms</h2>
+                </div>
+              </div>
+              <div id="incidentCommandPanel" class="table-list command-room-list"></div>
               <div id="adminTable" class="table-list"></div>
             </article>
 
@@ -695,7 +713,7 @@
         <div id="postSubmitSummary" class="post-submit-summary"></div>
         <div class="post-submit-actions">
           <button type="button" id="modalGeneratePdfBtn" class="secondary-button">Generate PDF</button>
-          <button type="button" id="modalEmailBbmpBtn" class="secondary-button">Email BBMP</button>
+          <button type="button" id="modalEmailBbmpBtn" class="secondary-button">Email Authority</button>
           <button type="button" id="informClosedOnesBtn" class="light-beam-button">Notify contacts</button>
         </div>
         <form id="closeContactsForm" class="close-contacts-form" hidden>

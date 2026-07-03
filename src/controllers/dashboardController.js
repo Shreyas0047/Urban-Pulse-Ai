@@ -1,11 +1,20 @@
 const Complaint = require("../models/Complaint");
+const IncidentCommand = require("../models/IncidentCommand");
 const User = require("../models/User");
+const { buildCivicDigitalTwin } = require("../services/civicDigitalTwinService");
 
 const iotReadings = [
   { sensor: "Gas Sensor", zone: "Community Kitchen", value: 74, unit: "ppm", status: "Warning" },
   { sensor: "Smoke Sensor", zone: "Parking Basement", value: 11, unit: "AQI", status: "Normal" },
   { sensor: "Fire Sensor", zone: "Library Hall", value: 0, unit: "trigger", status: "Normal" }
 ];
+
+function hasActiveIncident(complaint) {
+  return Boolean(
+    complaint.incidentCommand?.triggered &&
+      !["Closed", "Resolved"].includes(String(complaint.incidentCommand?.status || "Active"))
+  );
+}
 
 function escapeRegex(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -122,10 +131,13 @@ async function getDashboard(req, res, next) {
       userState: String(req.query.userState || "").trim()
     };
 
-    const [allComplaints, users] = await Promise.all([
+    const [allComplaints, users, incidentCommands] = await Promise.all([
       Complaint.find(complaintFilter).sort({ createdAt: -1 }).lean(),
       canDeleteUsers
         ? User.find({}, { username: 1, email: 1, role: 1, disabledAt: 1, disabledBy: 1, lastLoginAt: 1, createdAt: 1 }).sort({ role: 1, username: 1 }).lean()
+        : Promise.resolve([]),
+      canViewDashboard
+        ? IncidentCommand.find({ commandStatus: { $in: ["Active", "Monitoring"] } }).sort({ riskScore: -1, slaDueAt: 1 }).limit(12).lean()
         : Promise.resolve([])
     ]);
 
@@ -145,6 +157,8 @@ async function getDashboard(req, res, next) {
     const departmentCounts = countBy(complaints, (item) => item.routing?.department || item.ai?.recommendedTeam);
     const statusCounts = countBy(complaints, (item) => item.status);
     const broadcastCount = complaints.filter((item) => item.broadcast?.triggered).length;
+    const digitalTwin = canViewDashboard ? buildCivicDigitalTwin(allComplaints) : buildCivicDigitalTwin(complaints);
+    const activeIncidentCount = complaints.filter(hasActiveIncident).length;
 
     res.json({
       metrics: {
@@ -152,6 +166,8 @@ async function getDashboard(req, res, next) {
         openComplaints: complaints.filter((item) => item.status !== "Resolved").length,
         criticalAlerts: complaints.filter((item) => item.priority === "Critical").length,
         emergencyBroadcasts: broadcastCount,
+        activeIncidents: activeIncidentCount,
+        civicHealthScore: digitalTwin.cityHealthScore,
         avgConfidence: complaints.length
           ? Math.round(complaints.reduce((sum, item) => sum + item.confidence, 0) / complaints.length)
           : 0,
@@ -165,8 +181,13 @@ async function getDashboard(req, res, next) {
         statusCounts,
         totalLoadedComplaints: complaints.length,
         totalLoadedAlerts: alertComplaints.reduce((sum, complaint) => sum + (Array.isArray(complaint.alerts) ? complaint.alerts.length : 0), 0),
-        emergencyBroadcasts: broadcastCount
+        emergencyBroadcasts: broadcastCount,
+        activeIncidents: activeIncidentCount,
+        civicHealthScore: digitalTwin.cityHealthScore,
+        civicHealthBand: digitalTwin.cityHealthBand
       },
+      digitalTwin,
+      incidentCommands,
       iotReadings: canViewSensors ? iotReadings : [],
       manageableUsers,
       auth: {

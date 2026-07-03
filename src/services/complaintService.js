@@ -1,6 +1,7 @@
 const Complaint = require("../models/Complaint");
 const { analyzeComplaint } = require("./aiClient");
 const { createEmergencyBroadcast } = require("./broadcastService");
+const { createIncidentCommand, summarizeIncidentCommand } = require("./incidentCommandService");
 const { canonicalPriority, routeComplaint } = require("./routingService");
 
 const LOW_CONFIDENCE_THRESHOLD = 0.52;
@@ -260,7 +261,8 @@ async function createComplaintFromPayload(auth, payload) {
     imageHint,
     imageFeatures: payload.imageFeatures || null
   });
-  const reviewRequired = confidenceScore < LOW_CONFIDENCE_THRESHOLD;
+  const reviewRequired = confidenceScore < LOW_CONFIDENCE_THRESHOLD || Boolean(analysis.decision?.reviewRequired || analysis.conflictDetected);
+  analysis.reviewRequired = reviewRequired;
   analysis.priority.level = canonicalPriority(analysis.priority?.level);
   const finalStatus = reviewRequired ? "Needs Review" : analysis.status;
   const explanation = buildAiExplanation(analysis, payload, reviewRequired, confidenceScore);
@@ -333,15 +335,24 @@ async function createComplaintFromPayload(auth, payload) {
     }
   });
 
-  const broadcast = await createEmergencyBroadcast({
-    complaint,
-    analysis,
-    routing,
-    mapLocation,
-    confidenceScore,
-    recentAreaComplaints,
-    triggeredBy: auth.username || "system"
-  });
+  let broadcast = null;
+  try {
+    broadcast = await createEmergencyBroadcast({
+      complaint,
+      analysis,
+      routing,
+      mapLocation,
+      confidenceScore,
+      recentAreaComplaints,
+      triggeredBy: auth.username || "system"
+    });
+  } catch (error) {
+    complaint.alerts = [
+      ...(complaint.alerts || []),
+      `Emergency broadcast could not be created: ${error.message || "unknown broadcast error"}`
+    ];
+    await complaint.save();
+  }
 
   if (broadcast) {
     complaint.broadcast = {
@@ -357,6 +368,45 @@ async function createComplaintFromPayload(auth, payload) {
       ...(complaint.alerts || []),
       `Emergency broadcast ${broadcast.status} for ${complaint.priority} priority ${complaint.type}`,
       `Broadcast recipients: ${(broadcast.recipients || []).length}`
+    ];
+    await complaint.save();
+  }
+
+  let incidentCommand = null;
+  try {
+    incidentCommand = await createIncidentCommand({
+      complaint,
+      analysis,
+      routing,
+      confidenceScore,
+      broadcast,
+      triggeredBy: auth.username || "system"
+    });
+  } catch (error) {
+    complaint.alerts = [
+      ...(complaint.alerts || []),
+      `Incident command could not be created: ${error.message || "unknown command error"}`
+    ];
+    await complaint.save();
+  }
+  const incidentSummary = summarizeIncidentCommand(incidentCommand);
+  if (incidentSummary.triggered) {
+    complaint.incidentCommand = {
+      triggered: true,
+      incidentId: incidentCommand._id,
+      incidentCode: incidentCommand.incidentCode,
+      status: incidentCommand.commandStatus,
+      severity: incidentCommand.severity,
+      assignedUnit: incidentCommand.assignedUnit,
+      slaDueAt: incidentCommand.slaDueAt,
+      checklistTotal: (incidentCommand.checklist || []).length,
+      checklistDone: (incidentCommand.checklist || []).filter((item) => item.status === "done").length,
+      riskScore: incidentCommand.riskScore,
+      summary: incidentCommand.summary
+    };
+    complaint.alerts = [
+      ...(complaint.alerts || []),
+      `Incident command ${incidentCommand.incidentCode} opened with ${incidentCommand.slaMinutes} minute SLA`
     ];
     await complaint.save();
   }
@@ -378,6 +428,7 @@ async function createComplaintFromPayload(auth, payload) {
     : {
         triggered: false
       };
+  analysis.incidentCommand = incidentSummary;
   analysis.explainability = {
     explanation,
     confidenceLabel: getConfidenceLabel(confidenceScore),
@@ -386,6 +437,7 @@ async function createComplaintFromPayload(auth, payload) {
     recommendedTeam: analysis.nlp.team,
     routing,
     broadcast: analysis.broadcast,
+    incidentCommand: incidentSummary,
     provider: analysis.aiMeta?.provider || "unknown",
     engine: analysis.aiMeta?.engine || "unknown",
     fallbackUsed: Boolean(analysis.aiMeta?.fallbackUsed),

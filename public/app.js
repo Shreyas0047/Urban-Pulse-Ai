@@ -144,7 +144,7 @@ let loginAttemptsRemaining = 4;
 let loginLockTimer = null;
 let otpTimer = null;
 let otpSecondsRemaining = 0;
-let dashboardDataCache = { complaints: [], users: [] };
+let dashboardDataCache = { complaints: [], users: [], digitalTwin: null, incidentCommands: [] };
 let draftSaveTimer = null;
 let dashboardReloadTimer = null;
 
@@ -1403,9 +1403,9 @@ function beginEmailProgress() {
     if (nextValue >= 28 && nextValue < 56) {
       nextLabel = "Generating formal PDF attachment...";
     } else if (nextValue >= 56 && nextValue < 82) {
-      nextLabel = "Encoding report for BBMP delivery...";
+      nextLabel = "Encoding report for authority delivery...";
     } else if (nextValue >= 82) {
-      nextLabel = "Contacting BBMP mail server...";
+      nextLabel = "Contacting authority mail server...";
     }
 
     setEmailProgress(nextValue, nextLabel);
@@ -1772,12 +1772,18 @@ function renderRecentComplaints(complaints) {
 }
 
 function renderMetrics(metrics) {
-  document.getElementById("totalComplaints").textContent = metrics.totalComplaints;
-  document.getElementById("openComplaints").textContent = metrics.openComplaints;
-  document.getElementById("resolvedCount").textContent = Math.max(0, metrics.totalComplaints - metrics.openComplaints);
+  const totalComplaints = Number(metrics?.totalComplaints || 0);
+  const openComplaints = Number(metrics?.openComplaints || 0);
+  document.getElementById("totalComplaints").textContent = totalComplaints;
+  document.getElementById("openComplaints").textContent = openComplaints;
+  document.getElementById("resolvedCount").textContent = Math.max(0, totalComplaints - openComplaints);
   const broadcastCount = document.getElementById("broadcastCount");
   if (broadcastCount) {
-    broadcastCount.textContent = metrics.emergencyBroadcasts || 0;
+    broadcastCount.textContent = metrics?.emergencyBroadcasts || 0;
+  }
+  const incidentCount = document.getElementById("incidentCount");
+  if (incidentCount) {
+    incidentCount.textContent = metrics?.activeIncidents || 0;
   }
 }
 
@@ -1916,6 +1922,69 @@ function renderAdminInsights(complaints = [], analytics = null) {
   `;
 }
 
+function renderDigitalTwin(digitalTwin = null) {
+  const panel = document.getElementById("digitalTwinPanel");
+  if (!panel) return;
+
+  if (!digitalTwin) {
+    panel.innerHTML = "";
+    return;
+  }
+
+  const weakestZones = (digitalTwin.zones || []).slice(0, 3);
+  panel.innerHTML = `
+    <article class="insight-card">
+      <span>Civic health</span>
+      <strong>${digitalTwin.cityHealthScore ?? 100}</strong>
+      <p>${escapeHtml(digitalTwin.cityHealthBand || "Stable")} citywide digital twin score.</p>
+    </article>
+    <article class="insight-card">
+      <span>Stressed zones</span>
+      <strong>${digitalTwin.summary?.stressedZones || 0}</strong>
+      <p>${digitalTwin.summary?.totalZones || 0} zone${digitalTwin.summary?.totalZones === 1 ? "" : "s"} currently modeled.</p>
+    </article>
+    <article class="insight-card">
+      <span>Active incidents</span>
+      <strong>${digitalTwin.summary?.activeIncidents || 0}</strong>
+      <p>Command-center cases influencing civic risk.</p>
+    </article>
+    <article class="insight-card">
+      <span>Weakest zone</span>
+      <strong>${escapeHtml(weakestZones[0]?.zone || "No zone")}</strong>
+      <p>${weakestZones[0] ? `${weakestZones[0].healthBand}: ${escapeHtml(weakestZones[0].recommendation)}` : "No complaint pressure detected."}</p>
+    </article>
+  `;
+}
+
+function renderIncidentCommands(commands = []) {
+  const panel = document.getElementById("incidentCommandPanel");
+  if (!panel) return;
+
+  if (!commands.length) {
+    panel.innerHTML = `<div class="table-row empty-state"><span>No active incident command rooms. High-risk cases will appear here automatically.</span></div>`;
+    return;
+  }
+
+  panel.innerHTML = commands
+    .map((command) => {
+      const total = command.checklist?.length || 0;
+      const done = (command.checklist || []).filter((item) => item.status === "done").length;
+      return `
+        <div class="table-row">
+          <div>
+            <strong>${escapeHtml(command.incidentCode || "Incident")}: ${escapeHtml(command.title || "Civic incident")}</strong>
+            <span>${escapeHtml(command.assignedUnit || command.assignedDepartment || "Response unit")} · ${escapeHtml(command.ward || "Citywide")}</span>
+          </div>
+          <div>
+            <strong>${escapeHtml(command.commandStatus || "Active")}</strong>
+            <span>SLA ${escapeHtml(formatDateTime(command.slaDueAt))} · checklist ${done}/${total}</span>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
 function formatTokenLabel(value) {
   return String(value || "")
     .toLowerCase()
@@ -2005,6 +2074,7 @@ function buildSubmittedReport(payload, result) {
     assignedAuthority: result.assignedAuthority || "Gram Panchayat",
     routing: result.routing || result.explainability?.routing || null,
     broadcast: result.broadcast || result.explainability?.broadcast || null,
+    incidentCommand: result.incidentCommand || result.explainability?.incidentCommand || null,
     status: result.status || "Queued",
     detection: result.cv?.detected || "No image analysis available",
     cvReason: result.cv?.reason || "Local AI matched the uploaded issue against known civic patterns.",
@@ -2144,6 +2214,23 @@ function renderBroadcastSummary(complaint) {
     .join("<br>");
 }
 
+function renderIncidentSummary(complaint) {
+  const incident = complaint.incidentCommand || {};
+  if (!incident.triggered) {
+    return "No incident command room was needed for this complaint.";
+  }
+
+  return [
+    incident.incidentCode || "Incident command",
+    `Status: ${incident.status || "Active"}`,
+    incident.slaDueAt ? `SLA: ${formatDateTime(incident.slaDueAt)}` : "",
+    incident.summary || ""
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
 function renderComplaintDetail(complaint) {
   complaintDetailTitle.textContent = complaint.type || "Complaint";
   const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
@@ -2224,6 +2311,11 @@ function renderComplaintDetail(complaint) {
           <p class="detail-section-label">Emergency broadcast</p>
           <strong>${complaint.broadcast?.triggered ? "Triggered" : "Not triggered"}</strong>
           <p>${renderBroadcastSummary(complaint)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Incident command</p>
+          <strong>${complaint.incidentCommand?.triggered ? escapeHtml(complaint.incidentCommand.incidentCode || "Command active") : "Not opened"}</strong>
+          <p>${renderIncidentSummary(complaint)}</p>
         </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Map</p>
@@ -2464,6 +2556,7 @@ async function generatePdfReport(report, options = {}) {
   cursorY -= 8;
   drawBulletsBox(report.notifications);
   drawRow("Emergency Broadcast", report.broadcast?.triggered ? `${report.broadcast.status || "created"} · ${report.broadcast.recipientCount || 0} recipient(s)` : "Not triggered");
+  drawRow("Incident Command", report.incidentCommand?.triggered ? `${report.incidentCommand.incidentCode || "Opened"} · SLA ${formatDateTime(report.incidentCommand.slaDueAt)}` : "Not opened");
 
   ensureSpace(18);
   doc.setDrawColor(...lineColor);
@@ -3281,6 +3374,8 @@ function setupComplaintInputMode() {
 function renderLoggedOutState() {
   renderMetrics({ totalComplaints: 0, openComplaints: 0 });
   renderAdminInsights([]);
+  renderDigitalTwin(null);
+  renderIncidentCommands([]);
   document.getElementById("recentComplaints").innerHTML = `<div class="table-row empty-state"><span>Login to view recent complaints.</span></div>`;
   document.getElementById("complaintsList").innerHTML = `<div class="table-row empty-state"><span>Login to view your complaint history.</span></div>`;
   document.getElementById("adminTable").innerHTML = `<div class="table-row empty-state"><span>Login as Admin to access the command center.</span></div>`;
@@ -3308,6 +3403,14 @@ function renderDashboardLoadingState() {
   document.getElementById("recentComplaints").innerHTML = `${skeleton}${skeleton}`;
   document.getElementById("complaintsList").innerHTML = `${skeleton}${skeleton}${skeleton}`;
   document.getElementById("adminTable").innerHTML = `${skeleton}${skeleton}`;
+  const digitalTwinPanel = document.getElementById("digitalTwinPanel");
+  const incidentCommandPanel = document.getElementById("incidentCommandPanel");
+  if (digitalTwinPanel) {
+    digitalTwinPanel.innerHTML = `${skeleton}${skeleton}`;
+  }
+  if (incidentCommandPanel) {
+    incidentCommandPanel.innerHTML = `${skeleton}${skeleton}`;
+  }
   alertsList.innerHTML = `${skeleton}${skeleton}`;
   userManagementList.innerHTML = `${skeleton}${skeleton}`;
   if (mapComplaintList) {
@@ -3322,6 +3425,8 @@ function rerenderDashboardViews() {
   renderComplaints(dashboardDataCache.complaints || []);
   renderAlerts(dashboardDataCache.complaints || []);
   renderUserManagement(dashboardDataCache.users || []);
+  renderDigitalTwin(dashboardDataCache.digitalTwin || null);
+  renderIncidentCommands(dashboardDataCache.incidentCommands || []);
 }
 
 function setupDashboardFilters() {
@@ -3383,12 +3488,16 @@ async function loadDashboard() {
   const data = await apiRequest(path, { method: "GET" });
   dashboardDataCache = {
     complaints: data.complaints || [],
-    users: data.manageableUsers || []
+    users: data.manageableUsers || [],
+    digitalTwin: data.digitalTwin || null,
+    incidentCommands: data.incidentCommands || []
   };
   renderMetrics(data.metrics);
   renderRecentComplaints(data.complaints);
   renderComplaints(data.complaints);
   renderAdminInsights(data.complaints, data.analytics || null);
+  renderDigitalTwin(data.digitalTwin || null);
+  renderIncidentCommands(data.incidentCommands || []);
   renderAdminTable(data.complaints);
   renderAlerts(data.complaints);
   renderMap(data.complaints);
@@ -3688,7 +3797,7 @@ generatePdfBtn.addEventListener("click", async () => {
 emailBbmpBtn.addEventListener("click", async () => {
   try {
     if (!lastSubmittedReport) {
-      throw new Error("Submit a complaint first before preparing the BBMP email.");
+      throw new Error("Submit a complaint first before preparing the authority email.");
     }
 
     emailBbmpBtn.disabled = true;
@@ -3696,7 +3805,7 @@ emailBbmpBtn.addEventListener("click", async () => {
     const { blob, filename } = await generatePdfReport(lastSubmittedReport, { download: false });
     setEmailProgress(42, "Generating formal PDF attachment...");
     const pdfBase64 = await blobToBase64(blob);
-    setEmailProgress(68, "Encoding report for BBMP delivery...");
+    setEmailProgress(68, "Encoding report for authority delivery...");
 
     const response = await apiRequest("/api/email-bbmp", {
       method: "POST",
@@ -3709,7 +3818,7 @@ emailBbmpBtn.addEventListener("click", async () => {
     });
 
     finishEmailProgress(true);
-    setDashboardMessage(response.message || "Complaint email sent to BBMP successfully.", "success");
+    setDashboardMessage(response.message || "Complaint email sent to the configured authority successfully.", "success");
   } catch (error) {
     finishEmailProgress(false);
     setDashboardMessage(error.message, "error");

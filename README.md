@@ -22,7 +22,7 @@ The README uses GitHub-visible components only: badges, Mermaid diagrams, tables
 | --- | --- | --- |
 | Frontend | `public/` | Citizen/admin dashboard, complaint form, image preparation, voice UI, chatbot, PDF export, account actions |
 | API | `src/` | Express routes, auth, validation, complaint workflow, geocoding, email, AI orchestration |
-| Database | MongoDB | Users, complaints, department units, emergency broadcasts, status history, chat sessions, registration and password reset OTPs |
+| Database | MongoDB | Users, complaints, department units, emergency broadcasts, incident commands, status history, chat sessions, registration and password reset OTPs |
 | AI service | `ai_service/` | Flask `/analyze`, `/transcript/process`, `/chat`, `/health` endpoints |
 | Shared AI data | `shared/aiCategories.json` | Single source of truth for complaint categories across Node and Flask |
 | Evaluation | `scripts/evaluateAi.js`, `scripts/evaluateVision.py` | Deterministic category evaluation and optional local vision evaluation |
@@ -66,9 +66,9 @@ sequenceDiagram
     API->>API: Calibrate confidence and geocode location
     API->>API: Route to department unit by ward, category, severity, workload
     API->>DB: Store complaint, routing, status history, AI metadata
-    API->>DB: Create emergency broadcast record when high-risk
+    API->>DB: Create emergency broadcast and incident command records when high-risk
     API->>Mail: Optional authority forwarding or emergency email broadcast
-    API-->>FE: Complaint result, routing, broadcast, and review state
+    API-->>FE: Complaint result, routing, broadcast, incident command, and review state
 ```
 
 ## Updated AI Service
@@ -116,6 +116,8 @@ The AI service now uses a decision-engine v4 layer that fuses text, image, conte
 | Operations map | Visual marker board, hotspot summary, priority watch, focused complaint preview, and direct case opening |
 | Dashboard insights | Review load, priority load, hotspot, oldest open case, resolution rate, and routing concentration |
 | Smart response | Department/unit routing uses issue type, severity, ward inference, and active workload |
+| Civic digital twin | Dashboard-level city health model built from complaint pressure, severity, broadcasts, active incidents, and ward hotspots |
+| Incident command | High-risk complaints can open command-room records with SLA, assigned unit, checklist, risk score, and timeline |
 | Safety | Low-confidence AI classifications require review, while high-risk cases create emergency broadcast records |
 
 ## Latest UX And Ops Upgrades
@@ -127,6 +129,8 @@ The current production pass focuses on making the system easier to trust, scan, 
 | Case-file complaint detail | Complaint details now open as a structured case view with summary cards, AI explanation, numeric decision breakdown, alternatives, alert notes, and a timeline | Admins can understand and verify a case faster |
 | Operations map | The map area now renders complaint markers from stored coordinates, highlights visible hotspots, and lets operators open a case directly from the map rail | Makes geographic clustering and triage easier |
 | Stronger admin insights | Dashboard insight cards now surface hotspot concentration, oldest open case, and resolution rate in addition to confidence and review load | Gives admins clearer operational priorities |
+| Civic digital twin | Admin dashboard now has a dedicated City Health section for civic health, stressed zones, active incidents, weakest zone, and recommended operational focus | Helps evaluators see a city-scale intelligence layer, not only a complaint list |
+| Autonomous incident command | High-risk complaints can automatically create an Active Response Room with SLA, checklist, responsible unit, timeline, risk score, and status synchronization | Turns severe reports into trackable response operations |
 | Loading polish | Dashboard panels can show loading placeholders while filtered data reloads | Reduces UI jumpiness and makes the app feel more deliberate |
 | Single-focus navigation | Each top-level workspace keeps attention on one functional area at a time | Reduces clutter and supports task-based usage |
 
@@ -143,8 +147,8 @@ The current production pass focuses on making the system easier to trust, scan, 
 
 ### Admin Journey
 
-1. Open the dashboard and inspect review load, hotspot concentration, and open-case pressure.
-2. Open a complaint in the case-file modal to inspect history, alerts, AI reasoning, routing, and emergency broadcast audit.
+1. Open the dashboard and inspect review load, hotspot concentration, city health, active incidents, and open-case pressure.
+2. Open a complaint in the case-file modal to inspect history, alerts, AI reasoning, routing, emergency broadcast audit, and incident command state.
 3. Update status or acknowledge alerts.
 4. Use the operations map to focus on geographic clusters and jump into cases quickly.
 5. Manage roles, account state, and account deletion from the accounts area.
@@ -266,7 +270,7 @@ AI_EVAL_MIN_ACCURACY=0.65
 - Runs AI analysis through Flask when available.
 - Falls back to local deterministic analysis if the AI service is unavailable.
 - Stores AI provenance and status history with the complaint.
-- Stores routing and emergency broadcast audit metadata when applicable.
+- Stores routing, emergency broadcast, incident command, and digital-twin input metadata when applicable.
 
 </details>
 
@@ -312,12 +316,27 @@ Stored complaint AI metadata includes:
 </details>
 
 <details>
+<summary>Civic Digital Twin And Incident Command</summary>
+
+- The civic digital twin computes city and zone health from open complaints, severity, broadcasts, active incidents, and issue concentration.
+- Admin dashboard cards show civic health score, stressed zones, active incidents, and the weakest zone recommendation in the City Health section.
+- High-risk, high-confidence complaints can automatically open an incident command record.
+- Incident command records store incident code, severity, ward, assigned authority/unit, SLA deadline, checklist, timeline, broadcast link, and risk score.
+- Complaint status changes are mirrored into linked incident command rooms so resolved complaints no longer count as active incidents.
+- The frontend exposes active command rooms through a dedicated Active Response Rooms section and an Incidents dashboard metric.
+- Complaint details and PDF reports include the incident command summary when a command room is opened.
+- This is implemented as durable MongoDB data plus computed dashboard intelligence, so real-time sockets or SMS providers can be added later without replacing the workflow.
+
+</details>
+
+<details>
 <summary>Core Data Models</summary>
 
 - `User`: authenticated Citizen/Admin accounts, email, role, disabled state, and login metadata.
 - `Complaint`: complaint details, AI metadata, routing decision, broadcast summary, alerts, status history, and map coordinates.
 - `DepartmentUnit`: configurable authority, department, unit, ward coverage, category coverage, workload capacity, contact email, and portal URL.
 - `EmergencyBroadcast`: high-risk broadcast audit record with channels, recipients, delivery status, message, and linked complaint.
+- `IncidentCommand`: high-risk response room with incident code, SLA, assigned unit, checklist, timeline, broadcast link, and risk score.
 - `RegistrationOtp` and `PasswordResetOtp`: short-lived OTP records for account creation and password reset.
 - `ChatSession`: stored chatbot conversation state.
 
@@ -361,9 +380,9 @@ Urban-Pulse-Ai/
 |-- src/
 |   |-- controllers/         # Express controllers
 |   |-- middleware/          # Auth and security middleware
-|   |-- models/              # MongoDB models, department units, emergency broadcasts
+|   |-- models/              # MongoDB models, department units, emergency broadcasts, incident commands
 |   |-- routes/              # API routes
-|   `-- services/            # AI, complaint, routing, broadcast, email, OTP, seed services
+|   `-- services/            # AI, complaint, routing, broadcast, incident command, digital twin, email, OTP, seed services
 |-- dataset/                 # Local category evaluation images/data
 |-- render.yaml              # Render deployment blueprint
 |-- package.json
@@ -397,4 +416,6 @@ Use `render.yaml` as the deployment starting point. Configure production secrets
 | Vision model cache planning | Prevents slow cold starts for the local CLIP model |
 | Evaluation in CI | Catches category regressions before deploy |
 | Broadcast dry run | Confirm emergency broadcast records are created and email failures do not block complaint submission |
+| Incident command dry run | Submit a high-risk test complaint and confirm command room, SLA, checklist, and dashboard incident count appear |
+| Digital twin review | Confirm dashboard city health and stressed-zone cards render correctly for admin accounts |
 | Seed credential cleanup | Prevents development credentials from reaching production |

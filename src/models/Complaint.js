@@ -47,6 +47,19 @@ const complaintSchema = new mongoose.Schema(
       message: { type: String, default: "" },
       sentAt: { type: Date, default: null }
     },
+    incidentCommand: {
+      triggered: { type: Boolean, default: false },
+      incidentId: { type: mongoose.Schema.Types.ObjectId, ref: "IncidentCommand", default: null },
+      incidentCode: { type: String, default: "" },
+      status: { type: String, default: "" },
+      severity: { type: String, default: "" },
+      assignedUnit: { type: String, default: "" },
+      slaDueAt: { type: Date, default: null },
+      checklistTotal: { type: Number, default: 0 },
+      checklistDone: { type: Number, default: 0 },
+      riskScore: { type: Number, default: 0 },
+      summary: { type: String, default: "" }
+    },
     mapLocation: {
       lat: Number,
       lng: Number
