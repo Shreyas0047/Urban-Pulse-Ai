@@ -1,7 +1,12 @@
+const dns = require("dns");
 const nodemailer = require("nodemailer");
 const env = require("../config/env");
 
 let cachedTransporter = null;
+
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder(env.smtpFamily === 6 ? "verbatim" : "ipv4first");
+}
 
 function isEmailConfigured() {
   return Boolean(env.smtpHost && env.smtpPort && env.smtpUser && env.smtpPass && env.smtpFrom);
@@ -49,6 +54,28 @@ function normalizeRecipients(value) {
   return (Array.isArray(value) ? value : [value])
     .map((email) => String(email || "").trim())
     .filter(Boolean);
+}
+
+function maskEmail(email) {
+  const value = String(email || "").trim();
+  const [name, domain] = value.split("@");
+  if (!name || !domain) {
+    return value ? "***" : "";
+  }
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function logEmailDelivery({ purpose, recipients, info }) {
+  console.log(
+    JSON.stringify({
+      event: "smtp_email_delivery",
+      purpose,
+      accepted: (info.accepted || []).map(maskEmail),
+      rejected: (info.rejected || []).map(maskEmail),
+      pending: (info.pending || []).map(maskEmail),
+      messageId: Boolean(info.messageId)
+    })
+  );
 }
 
 function normalizeEmailError(error) {
@@ -106,6 +133,12 @@ async function sendMail(options) {
       throw new Error(`SMTP provider rejected ${rejected}.`);
     }
 
+    logEmailDelivery({
+      purpose: options.purpose || "general",
+      recipients,
+      info
+    });
+
     return info;
   } catch (error) {
     throw normalizeEmailError(error);
@@ -149,6 +182,7 @@ async function sendRegistrationOtpEmail({ email, otp, username }) {
   ];
 
   const info = await sendMail({
+    purpose: "registration_otp",
     to: safeEmail,
     subject: "Urban Pulse AI verification code",
     text: bodyLines.join("\n"),
@@ -187,6 +221,7 @@ async function sendPasswordResetOtpEmail({ email, otp }) {
   ];
 
   const info = await sendMail({
+    purpose: "password_reset_otp",
     to: safeEmail,
     subject: "Urban Pulse AI password reset code",
     text: bodyLines.join("\n"),
@@ -237,6 +272,7 @@ async function sendBbmpComplaintEmail({ subject, report, pdfBase64, filename }) 
   ];
 
   const info = await sendMail({
+    purpose: "authority_complaint",
     to: env.bbmpEmailTo,
     subject: mailSubject,
     text: bodyLines.join("\n"),
@@ -302,6 +338,7 @@ async function sendCloseContactsComplaintEmail({ emails, report, reporter }) {
   ];
 
   const info = await sendMail({
+    purpose: "close_contacts",
     to: safeEmails,
     subject: `Community issue warning: ${severity} severity complaint`,
     text: bodyLines.join("\n")
@@ -337,6 +374,7 @@ async function sendEmergencyBroadcastEmail({ emails, complaint, routing, message
   ];
 
   const info = await sendMail({
+    purpose: "emergency_broadcast",
     to: safeEmails,
     subject: `Emergency civic alert: ${complaint.type}`,
     text: bodyLines.join("\n")
