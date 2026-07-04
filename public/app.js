@@ -42,7 +42,6 @@ const clearDraftBtn = document.getElementById("clearDraftBtn");
 const complaintSubmitBtn = document.getElementById("complaintSubmitBtn");
 const authOverlay = document.getElementById("authOverlay");
 const faqOverlay = document.getElementById("faqOverlay");
-const closeAuthBtn = document.getElementById("closeAuthBtn");
 const closeFaqBtn = document.getElementById("closeFaqBtn");
 const authForm = document.getElementById("authForm");
 const authSubmitBtn = document.getElementById("authSubmitBtn");
@@ -3730,7 +3729,6 @@ forgotPasswordBtn?.addEventListener("click", () => openAuthOverlay("reset-passwo
 sendOtpBtn?.addEventListener("click", requestActiveOtp);
 issueTokenBtn.addEventListener("click", () => openAuthOverlay("login"));
 logoutBtn?.addEventListener("click", () => logoutCurrentUser());
-closeAuthBtn.addEventListener("click", closeAuthOverlay);
 openFaqLink?.addEventListener("click", (event) => {
   event.preventDefault();
   openFaqOverlay();

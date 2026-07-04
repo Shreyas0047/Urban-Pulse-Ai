@@ -106,13 +106,13 @@ The AI service now uses a decision-engine v4 layer that fuses text, image, conte
 
 | Area | Current Behavior |
 | --- | --- |
-| Authentication | Email OTP registration, forgot-password OTP reset, standard login, no captcha, no demo login route |
+| Authentication | Clean Urban Pulse AI login/register modal, email OTP registration, forgot-password OTP reset, standard login, no captcha, no demo login route |
 | Citizen workflow | Submit text, image, or voice complaints and review generated summaries |
 | Admin workflow | Review complaints, inspect AI/routing/broadcast details, update statuses, manage accounts |
 | Complaint detail | Case-file modal with department routing, emergency broadcast status, AI decision notes, confidence breakdown, alternatives, alert history, and status timeline |
 | Status tracking | Complaint status history is persisted |
 | AI helper | Floating chatbot supports status lookup, complaint guidance, FAQ, and navigation help |
-| Reporting | PDF complaint reports, BBMP email forwarding, routing metadata, and emergency broadcast audit |
+| Reporting | PDF complaint reports, authority email forwarding, routing metadata, and emergency broadcast audit |
 | Operations map | Visual marker board, hotspot summary, priority watch, focused complaint preview, and direct case opening |
 | Dashboard insights | Review load, priority load, hotspot, oldest open case, resolution rate, and routing concentration |
 | Smart response | Department/unit routing uses issue type, severity, ward inference, and active workload |
@@ -131,6 +131,7 @@ The current production pass focuses on making the system easier to trust, scan, 
 | Stronger admin insights | Dashboard insight cards now surface hotspot concentration, oldest open case, and resolution rate in addition to confidence and review load | Gives admins clearer operational priorities |
 | Civic digital twin | Admin dashboard now has a dedicated City Health section for civic health, stressed zones, active incidents, weakest zone, and recommended operational focus | Helps evaluators see a city-scale intelligence layer, not only a complaint list |
 | Autonomous incident command | High-risk complaints can automatically create an Active Response Room with SLA, checklist, responsible unit, timeline, risk score, and status synchronization | Turns severe reports into trackable response operations |
+| Cleaner auth screen | Login/register now uses a single `Urban Pulse AI` heading and removes the unused back button | Reduces clutter and avoids a control that did not add functionality |
 | Loading polish | Dashboard panels can show loading placeholders while filtered data reloads | Reduces UI jumpiness and makes the app feel more deliberate |
 | Single-focus navigation | Each top-level workspace keeps attention on one functional area at a time | Reduces clutter and supports task-based usage |
 
@@ -347,6 +348,7 @@ Stored complaint AI metadata includes:
 
 - Captcha has been removed from the login page.
 - Demo login has been removed.
+- The login/register modal uses a single `Urban Pulse AI` heading and no unused back button.
 - Registration uses email OTP verification.
 - Forgot password uses email-only OTP reset. The reset request does not reveal whether an email is registered.
 - Auth OTPs expire after 90 seconds.
