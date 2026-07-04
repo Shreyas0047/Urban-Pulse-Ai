@@ -9,6 +9,7 @@
     "start:stt": "python stt_service/app.py",
     "seed": "node scripts/seedDatabase.js",
     "seed:fresh": "node scripts/seedDatabase.js --fresh",
+    "verify:smtp": "node scripts/verifySmtp.js",
     "evaluate:ai": "node scripts/evaluateAi.js"
   },
   "dependencies": {

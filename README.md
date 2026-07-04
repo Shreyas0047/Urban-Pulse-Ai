@@ -254,6 +254,12 @@ Run the Flask AI-service decision-engine evaluation:
 python scripts/evaluateAiService.py
 ```
 
+Verify SMTP login and TLS settings without sending an email:
+
+```bash
+npm run verify:smtp
+```
+
 The default minimum accuracy threshold is controlled by:
 
 ```bash
@@ -413,6 +419,7 @@ Use `render.yaml` as the deployment starting point. Configure production secrets
 | Strong `JWT_SECRET` | Protects session tokens |
 | Production MongoDB URI | Keeps local and production data separate |
 | Real SMTP credentials | Enables registration, password reset, and escalation emails |
+| SMTP verification | Run `npm run verify:smtp` before deploy to confirm host, port, TLS, and credentials |
 | Authority contact registry | Replace fallback department units with real ward, department, email, and portal metadata |
 | Deepgram API key | Enables voice complaint transcription |
 | AI service URL | Connects Express to Flask in production |

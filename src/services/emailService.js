@@ -1,6 +1,8 @@
 const nodemailer = require("nodemailer");
 const env = require("../config/env");
 
+let cachedTransporter = null;
+
 function isEmailConfigured() {
   return Boolean(env.smtpHost && env.smtpPort && env.smtpUser && env.smtpPass && env.smtpFrom);
 }
@@ -10,19 +12,83 @@ function createTransporter() {
     throw new Error("SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and SMTP_FROM in .env.");
   }
 
-  return nodemailer.createTransport({
+  if (cachedTransporter) {
+    return cachedTransporter;
+  }
+
+  cachedTransporter = nodemailer.createTransport({
     host: env.smtpHost,
     port: env.smtpPort,
     secure: env.smtpSecure,
+    requireTLS: !env.smtpSecure && env.smtpPort === 587,
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
     auth: {
       user: env.smtpUser,
       pass: env.smtpPass
+    },
+    tls: {
+      minVersion: "TLSv1.2"
     }
   });
+
+  return cachedTransporter;
+}
+
+function getFromAddress() {
+  const from = String(env.smtpFrom || env.smtpUser || "").trim();
+  if (!from) {
+    return "";
+  }
+  return from.includes("<") ? from : `"Urban Pulse AI" <${from}>`;
+}
+
+function normalizeEmailError(error) {
+  const code = error?.code || error?.responseCode || "SMTP_ERROR";
+  const message = error?.response || error?.message || "SMTP request failed.";
+  const details = `${code}: ${message}`;
+
+  if (String(message).toLowerCase().includes("invalid login") || error?.responseCode === 535) {
+    return new Error(`${details} Check SMTP_USER and SMTP_PASS. Gmail requires an App Password, not the normal account password.`);
+  }
+
+  if (String(message).toLowerCase().includes("self signed") || String(message).toLowerCase().includes("certificate")) {
+    return new Error(`${details} Check SMTP TLS settings for the provider.`);
+  }
+
+  return new Error(details);
+}
+
+async function verifySmtpConnection() {
+  try {
+    const transporter = createTransporter();
+    await transporter.verify();
+    return {
+      ok: true,
+      host: env.smtpHost,
+      port: env.smtpPort,
+      secure: env.smtpSecure,
+      from: getFromAddress()
+    };
+  } catch (error) {
+    throw normalizeEmailError(error);
+  }
+}
+
+async function sendMail(options) {
+  try {
+    const transporter = createTransporter();
+    return await transporter.sendMail({
+      ...options,
+      from: options.from || getFromAddress()
+    });
+  } catch (error) {
+    throw normalizeEmailError(error);
+  }
 }
 
 async function sendRegistrationOtpEmail({ email, otp, username }) {
-  const transporter = createTransporter();
   const safeEmail = String(email || "").trim();
   const safeUsername = String(username || "Citizen").trim() || "Citizen";
   const code = String(otp || "").trim();
@@ -43,8 +109,7 @@ async function sendRegistrationOtpEmail({ email, otp, username }) {
     "If you did not request this registration, you can ignore this email."
   ];
 
-  const info = await transporter.sendMail({
-    from: env.smtpUser,
+  const info = await sendMail({
     to: safeEmail,
     subject: "Your registration OTP",
     text: bodyLines.join("\n")
@@ -56,7 +121,6 @@ async function sendRegistrationOtpEmail({ email, otp, username }) {
 }
 
 async function sendPasswordResetOtpEmail({ email, otp }) {
-  const transporter = createTransporter();
   const safeEmail = String(email || "").trim();
   const code = String(otp || "").trim();
 
@@ -76,8 +140,7 @@ async function sendPasswordResetOtpEmail({ email, otp }) {
     "If you did not request this password reset, you can ignore this email."
   ];
 
-  const info = await transporter.sendMail({
-    from: env.smtpUser,
+  const info = await sendMail({
     to: safeEmail,
     subject: "Your password reset OTP",
     text: bodyLines.join("\n")
@@ -89,7 +152,6 @@ async function sendPasswordResetOtpEmail({ email, otp }) {
 }
 
 async function sendBbmpComplaintEmail({ subject, report, pdfBase64, filename }) {
-  const transporter = createTransporter();
   const safeSubject = String(subject || report?.issueType || "Citizen Complaint Report").trim();
   const mailSubject = safeSubject || "Citizen Complaint Report";
 
@@ -121,8 +183,7 @@ async function sendBbmpComplaintEmail({ subject, report, pdfBase64, filename }) 
     "AI Powered Smart Community Problem Detection System"
   ];
 
-  const info = await transporter.sendMail({
-    from: env.smtpFrom,
+  const info = await sendMail({
     to: env.bbmpEmailTo,
     subject: mailSubject,
     text: bodyLines.join("\n"),
@@ -160,7 +221,6 @@ function getSeverityWarning(severity) {
 }
 
 async function sendCloseContactsComplaintEmail({ emails, report, reporter }) {
-  const transporter = createTransporter();
   const safeEmails = Array.isArray(emails) ? emails.map((email) => String(email || "").trim()).filter(Boolean) : [];
   const safeReporter = String(reporter || report?.reporter || "Citizen").trim() || "Citizen";
   const severity = report?.priority || report?.severity || "Low";
@@ -188,8 +248,7 @@ async function sendCloseContactsComplaintEmail({ emails, report, reporter }) {
     "AI Powered Smart Community Problem Detection System"
   ];
 
-  const info = await transporter.sendMail({
-    from: env.smtpFrom,
+  const info = await sendMail({
     to: safeEmails,
     subject: `Community issue warning: ${severity} severity complaint`,
     text: bodyLines.join("\n")
@@ -202,7 +261,6 @@ async function sendCloseContactsComplaintEmail({ emails, report, reporter }) {
 }
 
 async function sendEmergencyBroadcastEmail({ emails, complaint, routing, message }) {
-  const transporter = createTransporter();
   const safeEmails = [...new Set((Array.isArray(emails) ? emails : []).map((email) => String(email || "").trim().toLowerCase()).filter(Boolean))];
 
   if (!safeEmails.length) {
@@ -225,8 +283,7 @@ async function sendEmergencyBroadcastEmail({ emails, complaint, routing, message
     "This alert was generated because the complaint was classified as high-risk."
   ];
 
-  const info = await transporter.sendMail({
-    from: env.smtpFrom,
+  const info = await sendMail({
     to: safeEmails,
     subject: `Emergency civic alert: ${complaint.type}`,
     text: bodyLines.join("\n")
@@ -244,5 +301,6 @@ module.exports = {
   sendCloseContactsComplaintEmail,
   sendEmergencyBroadcastEmail,
   sendPasswordResetOtpEmail,
-  sendRegistrationOtpEmail
+  sendRegistrationOtpEmail,
+  verifySmtpConnection
 };
