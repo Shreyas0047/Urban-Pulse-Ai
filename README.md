@@ -183,6 +183,7 @@ DEEPGRAM_MODEL=nova-3
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false
+SMTP_FAMILY=4
 SMTP_USER=your_email@example.com
 SMTP_PASS=your_app_password
 SMTP_FROM=your_email@example.com

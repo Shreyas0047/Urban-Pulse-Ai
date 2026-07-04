@@ -26,6 +26,7 @@ verifySmtpConnection()
           host: result.host,
           port: result.port,
           secure: result.secure,
+          family: result.family,
           fromConfigured: Boolean(result.from),
           testResult
         },

@@ -20,6 +20,7 @@ function createTransporter() {
     host: env.smtpHost,
     port: env.smtpPort,
     secure: env.smtpSecure,
+    family: env.smtpFamily,
     requireTLS: !env.smtpSecure && env.smtpPort === 587,
     connectionTimeout: 15000,
     greetingTimeout: 10000,
@@ -63,6 +64,10 @@ function normalizeEmailError(error) {
     return new Error(`${details} Check SMTP TLS settings for the provider.`);
   }
 
+  if (error?.code === "ENETUNREACH" && String(message).includes(":587")) {
+    return new Error(`${details} SMTP resolved to an unreachable network address. Set SMTP_FAMILY=4 to force IPv4.`);
+  }
+
   return new Error(details);
 }
 
@@ -75,6 +80,7 @@ async function verifySmtpConnection() {
       host: env.smtpHost,
       port: env.smtpPort,
       secure: env.smtpSecure,
+      family: env.smtpFamily,
       from: getFromAddress()
     };
   } catch (error) {
