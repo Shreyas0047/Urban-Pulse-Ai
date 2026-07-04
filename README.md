@@ -131,6 +131,7 @@ The current production pass focuses on making the system easier to trust, scan, 
 | Stronger admin insights | Dashboard insight cards now surface hotspot concentration, oldest open case, and resolution rate in addition to confidence and review load | Gives admins clearer operational priorities |
 | Civic digital twin | Admin dashboard now has a dedicated City Health section for civic health, stressed zones, active incidents, weakest zone, and recommended operational focus | Helps evaluators see a city-scale intelligence layer, not only a complaint list |
 | Autonomous incident command | High-risk complaints can automatically create an Active Response Room with SLA, checklist, responsible unit, timeline, risk score, and status synchronization | Turns severe reports into trackable response operations |
+| Premium glass UI | The frontend now uses a Rideradian-inspired editorial layout, warm iOS/macOS-style glass surfaces, Adwaita Sans-first typography, and practical civic labels | Makes the product feel mature and polished without fake command-center wording |
 | Cleaner auth screen | Login/register now uses a single `Urban Pulse AI` heading and removes the unused back button | Reduces clutter and avoids a control that did not add functionality |
 | Loading polish | Dashboard panels can show loading placeholders while filtered data reloads | Reduces UI jumpiness and makes the app feel more deliberate |
 | Single-focus navigation | Each top-level workspace keeps attention on one functional area at a time | Reduces clutter and supports task-based usage |
