@@ -44,6 +44,12 @@ function getFromAddress() {
   return from.includes("<") ? from : `"Urban Pulse AI" <${from}>`;
 }
 
+function normalizeRecipients(value) {
+  return (Array.isArray(value) ? value : [value])
+    .map((email) => String(email || "").trim())
+    .filter(Boolean);
+}
+
 function normalizeEmailError(error) {
   const code = error?.code || error?.responseCode || "SMTP_ERROR";
   const message = error?.response || error?.message || "SMTP request failed.";
@@ -79,13 +85,40 @@ async function verifySmtpConnection() {
 async function sendMail(options) {
   try {
     const transporter = createTransporter();
-    return await transporter.sendMail({
+    const recipients = normalizeRecipients(options.to);
+    const info = await transporter.sendMail({
       ...options,
-      from: options.from || getFromAddress()
+      from: options.from || getFromAddress(),
+      envelope: {
+        from: env.smtpUser,
+        to: recipients
+      }
     });
+
+    if (recipients.length && !info.accepted?.length) {
+      const rejected = (info.rejected || []).join(", ") || "all recipients";
+      throw new Error(`SMTP provider rejected ${rejected}.`);
+    }
+
+    return info;
   } catch (error) {
     throw normalizeEmailError(error);
   }
+}
+
+function buildOtpHtml({ title, intro, otp }) {
+  return `
+    <div style="margin:0;padding:32px;background:#f5f3ef;font-family:Arial,sans-serif;color:#1b1c1a;">
+      <div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e4e2de;border-radius:18px;padding:28px;">
+        <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#747874;">Urban Pulse AI</p>
+        <h1 style="margin:0 0 16px;font-size:24px;line-height:1.2;color:#1b1c1a;">${title}</h1>
+        <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#444844;">${intro}</p>
+        <div style="font-size:34px;letter-spacing:0.22em;font-weight:700;background:#f5f3ef;border-radius:14px;padding:18px;text-align:center;color:#1b1c1a;">${otp}</div>
+        <p style="margin:22px 0 0;font-size:14px;line-height:1.6;color:#444844;">This OTP is valid for 5 minutes. Do not share it with anyone.</p>
+        <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#747874;">If you did not request this, you can ignore this email.</p>
+      </div>
+    </div>
+  `;
 }
 
 async function sendRegistrationOtpEmail({ email, otp, username }) {
@@ -100,23 +133,30 @@ async function sendRegistrationOtpEmail({ email, otp, username }) {
   const bodyLines = [
     `Hello ${safeUsername},`,
     "",
-    "Your one-time password for AI Smart Community System registration is:",
+    "Your one-time password for Urban Pulse AI registration is:",
     "",
     code,
     "",
-    "This OTP is valid for 90 seconds. Do not share it with anyone.",
+    "This OTP is valid for 5 minutes. Do not share it with anyone.",
     "",
     "If you did not request this registration, you can ignore this email."
   ];
 
   const info = await sendMail({
     to: safeEmail,
-    subject: "Your registration OTP",
-    text: bodyLines.join("\n")
+    subject: "Urban Pulse AI verification code",
+    text: bodyLines.join("\n"),
+    html: buildOtpHtml({
+      title: "Your verification code",
+      intro: "Use this code to complete your Urban Pulse AI registration.",
+      otp: code
+    })
   });
 
   return {
-    messageId: info.messageId
+    messageId: info.messageId,
+    accepted: info.accepted || [],
+    rejected: info.rejected || []
   };
 }
 
@@ -135,19 +175,26 @@ async function sendPasswordResetOtpEmail({ email, otp }) {
     "",
     code,
     "",
-    "This OTP is valid for 90 seconds. Do not share it with anyone.",
+    "This OTP is valid for 5 minutes. Do not share it with anyone.",
     "",
     "If you did not request this password reset, you can ignore this email."
   ];
 
   const info = await sendMail({
     to: safeEmail,
-    subject: "Your password reset OTP",
-    text: bodyLines.join("\n")
+    subject: "Urban Pulse AI password reset code",
+    text: bodyLines.join("\n"),
+    html: buildOtpHtml({
+      title: "Your password reset code",
+      intro: "Use this code to reset your Urban Pulse AI password.",
+      otp: code
+    })
   });
 
   return {
-    messageId: info.messageId
+    messageId: info.messageId,
+    accepted: info.accepted || [],
+    rejected: info.rejected || []
   };
 }
 

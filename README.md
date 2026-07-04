@@ -260,6 +260,12 @@ Verify SMTP login and TLS settings without sending an email:
 npm run verify:smtp
 ```
 
+Send one test OTP email through the same registration email path:
+
+```bash
+npm run verify:smtp -- --send-test=your_email@example.com
+```
+
 The default minimum accuracy threshold is controlled by:
 
 ```bash
@@ -358,7 +364,7 @@ Stored complaint AI metadata includes:
 - The login/register modal uses a single `Urban Pulse AI` heading and no unused back button.
 - Registration uses email OTP verification.
 - Forgot password uses email-only OTP reset. The reset request does not reveal whether an email is registered.
-- Auth OTPs expire after 90 seconds.
+- Auth OTPs expire after 5 minutes.
 - Seed scripts may create local seed users for development databases; replace or remove seeded credentials before production use.
 
 </details>

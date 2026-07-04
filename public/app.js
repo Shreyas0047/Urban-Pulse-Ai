@@ -397,9 +397,9 @@ function setOtpTimerMessage(message, state = "") {
   otpTimerMessage.dataset.state = state;
 }
 
-function startOtpCountdown(email, purpose = "register") {
+function startOtpCountdown(email, purpose = "register", expiresInSeconds = 300) {
   clearOtpTimer();
-  otpSecondsRemaining = 90;
+  otpSecondsRemaining = Number(expiresInSeconds || 300);
   sendOtpBtn.disabled = true;
   sendOtpBtn.textContent = "OTP sent";
 
@@ -1282,8 +1282,8 @@ async function requestRegistrationOtp() {
       body: JSON.stringify(payload)
     });
     registrationOtpIssued = true;
-    startOtpCountdown(payload.email);
-    authMessage.textContent = `${data.message} Verify the OTP within 90 seconds.`;
+    startOtpCountdown(payload.email, "register", data.expiresInSeconds);
+    authMessage.textContent = `${data.message} Verify the OTP within ${Math.floor((data.expiresInSeconds || 300) / 60)} minutes.`;
     setDashboardMessage(authMessage.textContent, "success");
     authOtpInput.focus();
   } catch (error) {
@@ -1311,7 +1311,7 @@ async function requestPasswordResetOtp() {
       body: JSON.stringify(payload)
     });
     passwordResetOtpIssued = true;
-    startOtpCountdown(payload.email, "reset");
+    startOtpCountdown(payload.email, "reset", data.expiresInSeconds);
     authMessage.textContent = data.message;
     setDashboardMessage(data.message, "success");
     authOtpInput.focus();
