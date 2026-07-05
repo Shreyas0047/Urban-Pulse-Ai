@@ -404,7 +404,11 @@ function startOtpCountdown(email, purpose = "register", expiresInSeconds = 300) 
   sendOtpBtn.textContent = "OTP sent";
 
   const updateOtpCountdown = () => {
-    setOtpTimerMessage(`OTP sent to ${email}. Verify within ${otpSecondsRemaining}s.`, "active");
+    const message =
+      purpose === "reset"
+        ? `If ${email} is registered, verify the OTP within ${otpSecondsRemaining}s.`
+        : `OTP sent to ${email}. Verify within ${otpSecondsRemaining}s.`;
+    setOtpTimerMessage(message, "active");
   };
 
   updateOtpCountdown();
