@@ -57,6 +57,27 @@ function buildUsernameFromEmail(email) {
   return normalizeEmail(email);
 }
 
+function maskEmail(email) {
+  const value = String(email || "").trim();
+  const [name, domain] = value.split("@");
+  if (!name || !domain) {
+    return value ? "***" : "";
+  }
+  return `${name.slice(0, 2)}***@${domain}`;
+}
+
+function logAuthOtpEvent(event, payload = {}) {
+  console.log(
+    JSON.stringify({
+      event,
+      email: maskEmail(payload.email),
+      role: payload.role || undefined,
+      reason: payload.reason || undefined,
+      accepted: Number.isFinite(payload.accepted) ? payload.accepted : undefined
+    })
+  );
+}
+
 function getLoginAttemptKey(req, email) {
   const forwarded = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
   const ip = forwarded || req.ip || req.socket?.remoteAddress || "unknown";
@@ -253,10 +274,16 @@ async function requestRegistrationOtp(req, res, next) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    await sendRegistrationOtpEmail({
+    logAuthOtpEvent("auth_registration_otp_send_attempt", { email, role });
+    const emailResult = await sendRegistrationOtpEmail({
       email,
       otp,
       username
+    });
+    logAuthOtpEvent("auth_registration_otp_send_accepted", {
+      email,
+      role,
+      accepted: (emailResult.accepted || []).length
     });
 
     res.json({
@@ -281,6 +308,10 @@ async function requestPasswordResetOtp(req, res, next) {
     const user = await User.findOne({ email });
     if (!user || user.disabledAt) {
       await PasswordResetOtp.deleteOne({ email }).catch(() => {});
+      logAuthOtpEvent("auth_password_reset_otp_skipped", {
+        email,
+        reason: user?.disabledAt ? "disabled" : "not_registered"
+      });
       return res.json({
         message: PASSWORD_RESET_MESSAGE,
         expiresInSeconds: OTP_TTL_MS / 1000
@@ -301,9 +332,14 @@ async function requestPasswordResetOtp(req, res, next) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    await sendPasswordResetOtpEmail({
+    logAuthOtpEvent("auth_password_reset_otp_send_attempt", { email });
+    const emailResult = await sendPasswordResetOtpEmail({
       email,
       otp
+    });
+    logAuthOtpEvent("auth_password_reset_otp_send_accepted", {
+      email,
+      accepted: (emailResult.accepted || []).length
     });
 
     res.json({
