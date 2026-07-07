@@ -29,6 +29,7 @@ The README uses GitHub-visible components only: badges, Mermaid diagrams, tables
 | Speech | Deepgram | Live speech-to-text with transcript cleanup through the AI service |
 | Email | SMTP | OTP delivery, authority forwarding, close-contact warnings, and emergency broadcast emails |
 | Weather | Weatherstack | Current weather context for complaint reasoning, PDF reports, and risk notes |
+| Civic search | Zenserp | Official source discovery, public incident context, and civic reference links |
 
 ## Architecture
 
@@ -47,6 +48,7 @@ flowchart LR
     Express --> SMTP[SMTP Email]
     Express --> Geo[Nominatim Geocoding]
     Express --> Weather[Weatherstack Current Weather]
+    Express --> Zenserp[Zenserp Google Search]
 ```
 
 ```mermaid
@@ -68,7 +70,8 @@ sequenceDiagram
     API->>API: Calibrate confidence and geocode location
     API->>API: Fetch current weather context when configured
     API->>API: Route to department unit by ward, category, severity, workload
-    API->>DB: Store complaint, routing, weather, status history, AI metadata
+    API->>API: Find official sources and public context when quota allows
+    API->>DB: Store complaint, routing, weather, civic evidence, status history, AI metadata
     API->>DB: Create emergency broadcast and incident command records when high-risk
     API->>Mail: Optional authority forwarding or emergency email broadcast
     API-->>FE: Complaint result, routing, broadcast, incident command, and review state
@@ -104,6 +107,7 @@ The AI service now uses a decision-engine v4 layer that fuses text, image, conte
 | Conflict detection | Integrated | Strong disagreement between text and image evidence is flagged for admin review |
 | Review routing | Integrated | Low-confidence or conflicting cases are assigned `Needs Review` |
 | Weather context | Integrated | Weatherstack current conditions are stored with complaints and used for weather-sensitive risk notes |
+| Civic evidence | Integrated | Zenserp adds official-source links and public incident context as supporting references |
 | Evaluation | Integrated | Deterministic local evaluation, AI-service decision evaluation, and optional vision checks |
 
 ## Product And User Experience
@@ -121,6 +125,7 @@ The AI service now uses a decision-engine v4 layer that fuses text, image, conte
 | Dashboard insights | Review load, priority load, hotspot, oldest open case, resolution rate, and routing concentration |
 | Smart response | Department/unit routing uses issue type, severity, ward inference, and active workload |
 | Weather context | Weatherstack current conditions enrich complaint reasoning, reports, and weather-sensitive risk notes |
+| Civic evidence | Zenserp official-source and public-context searches add supporting references to case details and PDF reports |
 | Civic digital twin | Dashboard-level city health model built from complaint pressure, severity, broadcasts, active incidents, and ward hotspots |
 | Incident command | High-risk complaints can open command-room records with SLA, assigned unit, checklist, risk score, and timeline |
 | Safety | Low-confidence AI classifications require review, while high-risk cases create emergency broadcast records |
@@ -141,6 +146,7 @@ The current production pass focuses on making the system easier to trust, scan, 
 | Loading polish | Dashboard panels can show loading placeholders while filtered data reloads | Reduces UI jumpiness and makes the app feel more deliberate |
 | Single-focus navigation | Each top-level workspace keeps attention on one functional area at a time | Reduces clutter and supports task-based usage |
 | Weather-aware complaint context | Weatherstack current conditions are stored with each complaint, shown in case details, added to PDF reports, and appended to AI reasoning when relevant | Adds real-world context for drainage, tree obstruction, road damage, utility, and safety complaints |
+| Official source finder | Zenserp searches official civic/department references and recent public context without changing AI decisions | Helps admins verify escalation paths and makes formal reports more credible |
 
 ## Main User Journeys
 
@@ -189,6 +195,11 @@ DEEPGRAM_MODEL=nova-3
 WEATHERSTACK_API_KEY=your_weatherstack_api_key
 WEATHERSTACK_BASE_URL=http://api.weatherstack.com
 WEATHERSTACK_ENABLED=true
+WEATHERSTACK_MONTHLY_LIMIT=90
+ZENSERP_API_KEY=your_zenserp_api_key
+ZENSERP_BASE_URL=https://app.zenserp.com/api/v2/search
+ZENSERP_ENABLED=true
+ZENSERP_MONTHLY_LIMIT=48
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false
@@ -244,7 +255,7 @@ The first Python 3.11 vision run may download or load the configured `sentence-t
 
 Smart routing uses built-in fallback department units when no `DepartmentUnit` records exist in MongoDB. Add `DepartmentUnit` records later to replace the fallback registry with real ward, department, contact email, and portal metadata.
 
-Weather context is optional and non-blocking. If `WEATHERSTACK_API_KEY` is missing, disabled, or Weatherstack is temporarily unavailable, complaint submission continues and the stored complaint records weather as unavailable.
+Weather context and civic search are optional and non-blocking. If `WEATHERSTACK_API_KEY` or `ZENSERP_API_KEY` is missing, disabled, quota-limited, or temporarily unavailable, complaint submission continues and the stored complaint records that context as unavailable.
 
 ## Evaluation
 
@@ -296,6 +307,7 @@ AI_EVAL_MIN_ACCURACY=0.65
 - Runs AI analysis through Flask when available.
 - Falls back to local deterministic analysis if the AI service is unavailable.
 - Fetches Weatherstack current conditions server-side and stores weather context when available.
+- Fetches Zenserp official-source links and public incident context server-side when monthly quota allows.
 - Stores AI provenance and status history with the complaint.
 - Stores routing, emergency broadcast, incident command, and digital-twin input metadata when applicable.
 
@@ -332,6 +344,17 @@ Stored complaint AI metadata includes:
 </details>
 
 <details>
+<summary>Monthly External API Quotas</summary>
+
+- Weatherstack is capped by `WEATHERSTACK_MONTHLY_LIMIT`, default `90` calls per UTC calendar month.
+- Zenserp is capped by `ZENSERP_MONTHLY_LIMIT`, default `48` calls per UTC calendar month.
+- Quota usage is tracked in MongoDB by provider and `YYYY-MM` month.
+- The app checks quota before external calls and skips providers once the monthly limit is reached.
+- Quota skips never block complaint creation.
+
+</details>
+
+<details>
 <summary>Weather Context</summary>
 
 - Weather is fetched server-side through Weatherstack after complaint location geocoding.
@@ -339,6 +362,17 @@ Stored complaint AI metadata includes:
 - Stored complaint weather data includes status, provider, observation time, location name, temperature, condition, precipitation, humidity, wind speed, and an optional context note.
 - Weather notes are added only when relevant to the complaint category, such as drainage, sewage overflow, fallen trees, road damage, utility faults, or safety hazards.
 - Weather failures do not block complaint creation.
+
+</details>
+
+<details>
+<summary>Civic Evidence Search</summary>
+
+- Zenserp is called only from the backend, and the API key is never sent to the browser.
+- Official source finder searches for civic/department pages using issue type, routing department, authority, location, and Bengaluru terms.
+- Public incident context searches for recent public references around high-risk or weather-sensitive complaints.
+- Search results are supporting context only and never override AI classification, priority, routing, or emergency broadcast decisions.
+- Stored results include title, URL, snippet, domain, query, and source type.
 
 </details>
 
@@ -371,7 +405,8 @@ Stored complaint AI metadata includes:
 <summary>Core Data Models</summary>
 
 - `User`: authenticated Citizen/Admin accounts, email, role, disabled state, and login metadata.
-- `Complaint`: complaint details, AI metadata, routing decision, broadcast summary, alerts, status history, and map coordinates.
+- `Complaint`: complaint details, AI metadata, routing decision, weather context, civic evidence, broadcast summary, alerts, status history, and map coordinates.
+- `ExternalApiUsage`: monthly provider quota counters for Weatherstack and Zenserp.
 - `DepartmentUnit`: configurable authority, department, unit, ward coverage, category coverage, workload capacity, contact email, and portal URL.
 - `EmergencyBroadcast`: high-risk broadcast audit record with channels, recipients, delivery status, message, and linked complaint.
 - `IncidentCommand`: high-risk response room with incident code, SLA, assigned unit, checklist, timeline, broadcast link, and risk score.
@@ -419,9 +454,9 @@ Urban-Pulse-Ai/
 |-- src/
 |   |-- controllers/         # Express controllers
 |   |-- middleware/          # Auth and security middleware
-|   |-- models/              # MongoDB models, department units, emergency broadcasts, incident commands
+|   |-- models/              # MongoDB models, department units, emergency broadcasts, incident commands, API usage counters
 |   |-- routes/              # API routes
-|   `-- services/            # AI, complaint, routing, broadcast, incident command, digital twin, weather, email, OTP, seed services
+|   `-- services/            # AI, complaint, routing, broadcast, incident command, digital twin, weather, civic search, email, OTP, seed services
 |-- dataset/                 # Local category evaluation images/data
 |-- render.yaml              # Render deployment blueprint
 |-- package.json
@@ -440,6 +475,7 @@ Recommended production layout:
 | Speech | Deepgram | Provides speech-to-text for voice complaints |
 | Email | SMTP provider | Sends OTPs, authority forwarding emails, close-contact warnings, and emergency broadcast emails |
 | Weather | Weatherstack | Adds current weather context to complaints, detail views, and PDF reports |
+| Civic search | Zenserp | Adds official-source references and public incident context |
 
 Use `render.yaml` as the deployment starting point. Configure production secrets in the Render dashboard instead of committing them.
 
@@ -454,6 +490,8 @@ Use `render.yaml` as the deployment starting point. Configure production secrets
 | Authority contact registry | Replace fallback department units with real ward, department, email, and portal metadata |
 | Deepgram API key | Enables voice complaint transcription |
 | Weatherstack API key | Enables weather-aware complaint context without exposing the key to the frontend |
+| Zenserp API key | Enables official-source finder and public incident context without exposing the key to the frontend |
+| Monthly API quotas | Prevents free Weatherstack and Zenserp keys from being overused |
 | AI service URL | Connects Express to Flask in production |
 | Vision model cache planning | Prevents slow cold starts for the local CLIP model |
 | Evaluation in CI | Catches category regressions before deploy |

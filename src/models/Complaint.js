@@ -75,7 +75,35 @@ const complaintSchema = new mongoose.Schema(
       precipitationMm: { type: Number, default: null },
       humidity: { type: Number, default: null },
       windKph: { type: Number, default: null },
-      note: { type: String, default: "" }
+      note: { type: String, default: "" },
+      quota: mongoose.Schema.Types.Mixed
+    },
+    civicEvidence: {
+      status: { type: String, default: "unavailable" },
+      provider: { type: String, default: "zenserp" },
+      reason: { type: String, default: "" },
+      quota: mongoose.Schema.Types.Mixed,
+      officialSources: [
+        {
+          title: String,
+          url: String,
+          snippet: String,
+          sourceType: String,
+          query: String,
+          domain: String,
+          official: Boolean
+        }
+      ],
+      publicContext: [
+        {
+          title: String,
+          url: String,
+          snippet: String,
+          sourceType: String,
+          query: String,
+          domain: String
+        }
+      ]
     },
     description: { type: String, required: true },
     alerts: [{ type: String }],

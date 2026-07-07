@@ -2148,6 +2148,7 @@ function buildSubmittedReport(payload, result) {
     broadcast: result.broadcast || result.explainability?.broadcast || null,
     incidentCommand: result.incidentCommand || result.explainability?.incidentCommand || null,
     weather: result.weather || result.explainability?.weather || null,
+    civicEvidence: result.civicEvidence || result.explainability?.civicEvidence || null,
     status: result.status || "Queued",
     detection: result.cv?.detected || "No image analysis available",
     cvReason: result.cv?.reason || "Local AI matched the uploaded issue against known civic patterns.",
@@ -2325,6 +2326,31 @@ function renderWeatherSummary(complaint) {
     .join("<br>");
 }
 
+function renderEvidenceLinks(items = [], emptyMessage = "No references found.") {
+  if (!items.length) {
+    return escapeHtml(emptyMessage);
+  }
+
+  return items
+    .map(
+      (item) => `
+        <a href="${escapeHtml(item.url)}" target="_blank" rel="noreferrer noopener">${escapeHtml(item.title || item.domain || "Reference")}</a>
+        <span>${escapeHtml(item.domain || "")}${item.official ? " · official-looking" : ""}</span>
+      `
+    )
+    .join("<br>");
+}
+
+function renderCivicEvidenceReason(complaint) {
+  const evidence = complaint.civicEvidence || {};
+  if (evidence.status === "available") {
+    const remaining = Number(evidence.quota?.remaining);
+    return Number.isFinite(remaining) ? `Zenserp quota remaining this month: ${remaining}.` : "Search context is available.";
+  }
+
+  return evidence.reason || "Civic search context was not available for this complaint.";
+}
+
 function renderComplaintDetail(complaint) {
   complaintDetailTitle.textContent = complaint.type || "Complaint";
   const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
@@ -2415,6 +2441,16 @@ function renderComplaintDetail(complaint) {
           <p class="detail-section-label">Weather context</p>
           <strong>${complaint.weather?.status === "available" ? escapeHtml(complaint.weather.condition || "Available") : "Unavailable"}</strong>
           <p>${renderWeatherSummary(complaint)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Official sources</p>
+          <strong>${complaint.civicEvidence?.officialSources?.length ? pluralize(complaint.civicEvidence.officialSources.length, "reference") : "No references"}</strong>
+          <p>${renderEvidenceLinks(complaint.civicEvidence?.officialSources || [], renderCivicEvidenceReason(complaint))}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Public context</p>
+          <strong>${complaint.civicEvidence?.publicContext?.length ? pluralize(complaint.civicEvidence.publicContext.length, "result") : "No public context"}</strong>
+          <p>${renderEvidenceLinks(complaint.civicEvidence?.publicContext || [], renderCivicEvidenceReason(complaint))}</p>
         </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Map</p>
@@ -2553,6 +2589,11 @@ async function generatePdfReport(report, options = {}) {
     cursorY += boxHeight + 3;
   };
 
+  const evidenceLines = (items = []) =>
+    items.length
+      ? items.map((item) => `${item.title || item.domain || "Reference"} - ${item.url}`)
+      : ["No entries recorded."];
+
   doc.setDrawColor(50, 76, 114);
   doc.setLineWidth(0.5);
   doc.rect(margin - 2, cursorY - 2, contentWidth + 4, pageHeight - 28, "S");
@@ -2662,6 +2703,12 @@ async function generatePdfReport(report, options = {}) {
   drawBulletsBox(report.notifications);
   drawRow("Emergency Broadcast", report.broadcast?.triggered ? `${report.broadcast.status || "created"} · ${report.broadcast.recipientCount || 0} recipient(s)` : "Not triggered");
   drawRow("Incident Command", report.incidentCommand?.triggered ? `${report.incidentCommand.incidentCode || "Opened"} · SLA ${formatDateTime(report.incidentCommand.slaDueAt)}` : "Not opened");
+  drawRow("Official Sources", "");
+  cursorY -= 8;
+  drawBulletsBox(evidenceLines(report.civicEvidence?.officialSources || []));
+  drawRow("Public Context", "");
+  cursorY -= 8;
+  drawBulletsBox(evidenceLines(report.civicEvidence?.publicContext || []));
 
   ensureSpace(18);
   doc.setDrawColor(...lineColor);

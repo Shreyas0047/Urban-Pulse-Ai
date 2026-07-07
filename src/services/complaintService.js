@@ -1,6 +1,7 @@
 const Complaint = require("../models/Complaint");
 const { analyzeComplaint } = require("./aiClient");
 const { createEmergencyBroadcast } = require("./broadcastService");
+const { fetchCivicEvidence } = require("./civicEvidenceService");
 const { createIncidentCommand, summarizeIncidentCommand } = require("./incidentCommandService");
 const { canonicalPriority, routeComplaint } = require("./routingService");
 const { fetchWeatherSnapshot } = require("./weatherService");
@@ -296,6 +297,11 @@ async function createComplaintFromPayload(auth, payload) {
   if (weather.note) {
     analysis.alerts = [...analysis.alerts, weather.note];
   }
+  const civicEvidence = await fetchCivicEvidence({
+    analysis,
+    routing,
+    location
+  });
   logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired, routing });
 
   const complaint = await Complaint.create({
@@ -312,6 +318,7 @@ async function createComplaintFromPayload(auth, payload) {
     routing,
     mapLocation,
     weather,
+    civicEvidence,
     description: analysis.unifiedText || "No complaint text provided.",
     alerts: analysis.alerts,
     statusHistory: [
@@ -432,6 +439,7 @@ async function createComplaintFromPayload(auth, payload) {
   analysis.status = finalStatus;
   analysis.mapLocation = mapLocation;
   analysis.weather = weather;
+  analysis.civicEvidence = civicEvidence;
   analysis.assignedAuthority = routing.authority;
   analysis.routing = routing;
   analysis.broadcast = broadcast
@@ -458,6 +466,7 @@ async function createComplaintFromPayload(auth, payload) {
     broadcast: analysis.broadcast,
     incidentCommand: incidentSummary,
     weather,
+    civicEvidence,
     provider: analysis.aiMeta?.provider || "unknown",
     engine: analysis.aiMeta?.engine || "unknown",
     fallbackUsed: Boolean(analysis.aiMeta?.fallbackUsed),

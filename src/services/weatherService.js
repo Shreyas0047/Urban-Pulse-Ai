@@ -1,4 +1,5 @@
 const env = require("../config/env");
+const { reserveMonthlyQuota } = require("./monthlyQuotaService");
 
 const WEATHER_TIMEOUT_MS = 3500;
 const WEATHER_RELEVANT_CATEGORY_IDS = new Set([
@@ -24,7 +25,8 @@ function unavailableWeather(reason) {
     precipitationMm: null,
     humidity: null,
     windKph: null,
-    note: ""
+    note: "",
+    quota: null
   };
 }
 
@@ -114,6 +116,20 @@ async function fetchWeatherSnapshot({ location, mapLocation, analysis }) {
     return unavailableWeather("Location is missing.");
   }
 
+  const quotaReservation = await reserveMonthlyQuota({
+    provider: "weatherstack",
+    limit: env.weatherstackMonthlyLimit
+  });
+  if (!quotaReservation.allowed) {
+    const weather = unavailableWeather(
+      quotaReservation.reason === "Monthly quota reached."
+        ? "Monthly Weatherstack quota reached."
+        : quotaReservation.reason
+    );
+    weather.quota = quotaReservation.quota;
+    return weather;
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), WEATHER_TIMEOUT_MS);
 
@@ -138,6 +154,7 @@ async function fetchWeatherSnapshot({ location, mapLocation, analysis }) {
 
     const weather = normalizeWeatherResponse(data);
     weather.note = buildWeatherImpactNote(weather, analysis);
+    weather.quota = quotaReservation.quota;
     return weather;
   } catch (error) {
     console.warn(
@@ -147,7 +164,9 @@ async function fetchWeatherSnapshot({ location, mapLocation, analysis }) {
         reason: error.name === "AbortError" ? "timeout" : error.message || "unknown weather error"
       })
     );
-    return unavailableWeather("Weather context could not be fetched.");
+    const weather = unavailableWeather("Weather context could not be fetched.");
+    weather.quota = quotaReservation.quota;
+    return weather;
   } finally {
     clearTimeout(timeout);
   }

@@ -35,6 +35,16 @@ services:
         value: http://api.weatherstack.com
       - key: WEATHERSTACK_ENABLED
         value: "true"
+      - key: WEATHERSTACK_MONTHLY_LIMIT
+        value: "90"
+      - key: ZENSERP_API_KEY
+        sync: false
+      - key: ZENSERP_BASE_URL
+        value: https://app.zenserp.com/api/v2/search
+      - key: ZENSERP_ENABLED
+        value: "true"
+      - key: ZENSERP_MONTHLY_LIMIT
+        value: "48"
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
