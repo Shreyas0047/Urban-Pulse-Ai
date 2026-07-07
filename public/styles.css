@@ -1081,6 +1081,100 @@ select,
   line-height: 1.6;
 }
 
+.risk-prediction-panel {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0 22px;
+}
+
+.risk-forecast-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.risk-forecast-list {
+  display: grid;
+  gap: 12px;
+}
+
+.risk-forecast-card {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
+    rgba(255, 255, 255, 0.018);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.risk-forecast-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.risk-forecast-card span {
+  display: block;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 11px;
+}
+
+.risk-forecast-card strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 21px;
+  letter-spacing: -0.035em;
+}
+
+.risk-forecast-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.risk-band-severe {
+  border-color: rgba(255, 91, 91, 0.42);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 91, 91, 0.13), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+}
+
+.risk-band-severe::before {
+  background: linear-gradient(180deg, #ff7a7a, rgba(255, 122, 122, 0.15));
+}
+
+.risk-band-high {
+  border-color: rgba(255, 185, 95, 0.42);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(255, 185, 95, 0.13), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
+}
+
+.risk-band-high::before {
+  background: linear-gradient(180deg, #ffc36f, rgba(255, 195, 111, 0.15));
+}
+
+.risk-band-watch {
+  border-color: rgba(151, 182, 255, 0.36);
+}
+
+.risk-band-watch::before {
+  background: linear-gradient(180deg, #9fb9ff, rgba(159, 185, 255, 0.15));
+}
+
+.risk-band-low::before {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.08));
+}
+
 input,
 textarea,
 select {
@@ -2721,6 +2815,10 @@ audio::-webkit-media-controls-panel {
 
   .section-shell {
     padding: 22px;
+  }
+
+  .risk-forecast-summary {
+    grid-template-columns: 1fr;
   }
 
   .hero-grid {

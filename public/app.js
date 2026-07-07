@@ -142,7 +142,7 @@ let loginAttemptsRemaining = 4;
 let loginLockTimer = null;
 let otpTimer = null;
 let otpSecondsRemaining = 0;
-let dashboardDataCache = { complaints: [], users: [], digitalTwin: null, incidentCommands: [] };
+let dashboardDataCache = { complaints: [], users: [], digitalTwin: null, riskPredictions: null, incidentCommands: [] };
 let draftSaveTimer = null;
 let dashboardReloadTimer = null;
 
@@ -2027,6 +2027,64 @@ function renderDigitalTwin(digitalTwin = null) {
   `;
 }
 
+function riskBandClass(band) {
+  return `risk-band-${formatTokenLabel(band || "low")}`;
+}
+
+function renderRiskPredictions(riskPredictions = null) {
+  const panel = document.getElementById("riskPredictionPanel");
+  if (!panel) return;
+
+  if (!riskPredictions) {
+    panel.innerHTML = "";
+    return;
+  }
+
+  const predictions = riskPredictions.predictions || [];
+  if (!predictions.length) {
+    panel.innerHTML = `<div class="table-row empty-state"><span>No predictive risk signals yet. Forecasts appear after complaint patterns form.</span></div>`;
+    return;
+  }
+
+  const summary = riskPredictions.summary || {};
+  const topPredictions = predictions.slice(0, 4);
+  panel.innerHTML = `
+    <div class="risk-forecast-summary">
+      <article class="insight-card">
+        <span>Highest risk</span>
+        <strong>${summary.highestRiskScore || 0}</strong>
+        <p>${escapeHtml(summary.highestRiskZone || "No zone")} · ${escapeHtml(summary.primaryRisk || "No dominant issue")}</p>
+      </article>
+      <article class="insight-card">
+        <span>Severe zones</span>
+        <strong>${summary.severeZones || 0}</strong>
+        <p>${summary.highZones || 0} high-risk zone${summary.highZones === 1 ? "" : "s"} in the 72h forecast.</p>
+      </article>
+      <article class="insight-card">
+        <span>Forecast horizon</span>
+        <strong>${riskPredictions.horizonHours || 72}h</strong>
+        <p>Predictions use recent complaints, weather context, incidents, and repeat patterns.</p>
+      </article>
+    </div>
+    <div class="risk-forecast-list">
+      ${topPredictions
+        .map(
+          (prediction) => `
+            <article class="risk-forecast-card ${riskBandClass(prediction.band)}">
+              <div>
+                <span>${escapeHtml(prediction.band || "Low")} risk · ${prediction.score || 0}/100</span>
+                <strong>${escapeHtml(prediction.zone || "Unknown zone")}</strong>
+                <p>${escapeHtml(prediction.likelyIssue || "Civic issue")} likely within ${prediction.horizonHours || 72}h · ${escapeHtml(prediction.confidenceLabel || "Early signal")}</p>
+              </div>
+              <p>${escapeHtml((prediction.drivers || []).slice(0, 3).join(" · ") || prediction.recommendation || "No strong drivers recorded.")}</p>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function renderIncidentCommands(commands = []) {
   const panel = document.getElementById("incidentCommandPanel");
   if (!panel) return;
@@ -3527,6 +3585,7 @@ function renderLoggedOutState() {
   renderMetrics({ totalComplaints: 0, openComplaints: 0 });
   renderAdminInsights([]);
   renderDigitalTwin(null);
+  renderRiskPredictions(null);
   renderIncidentCommands([]);
   document.getElementById("recentComplaints").innerHTML = `<div class="table-row empty-state"><span>Login to view recent complaints.</span></div>`;
   document.getElementById("complaintsList").innerHTML = `<div class="table-row empty-state"><span>Login to view your complaint history.</span></div>`;
@@ -3556,9 +3615,13 @@ function renderDashboardLoadingState() {
   document.getElementById("complaintsList").innerHTML = `${skeleton}${skeleton}${skeleton}`;
   document.getElementById("adminTable").innerHTML = `${skeleton}${skeleton}`;
   const digitalTwinPanel = document.getElementById("digitalTwinPanel");
+  const riskPredictionPanel = document.getElementById("riskPredictionPanel");
   const incidentCommandPanel = document.getElementById("incidentCommandPanel");
   if (digitalTwinPanel) {
     digitalTwinPanel.innerHTML = `${skeleton}${skeleton}`;
+  }
+  if (riskPredictionPanel) {
+    riskPredictionPanel.innerHTML = `${skeleton}${skeleton}`;
   }
   if (incidentCommandPanel) {
     incidentCommandPanel.innerHTML = `${skeleton}${skeleton}`;
@@ -3578,6 +3641,7 @@ function rerenderDashboardViews() {
   renderAlerts(dashboardDataCache.complaints || []);
   renderUserManagement(dashboardDataCache.users || []);
   renderDigitalTwin(dashboardDataCache.digitalTwin || null);
+  renderRiskPredictions(dashboardDataCache.riskPredictions || null);
   renderIncidentCommands(dashboardDataCache.incidentCommands || []);
 }
 
@@ -3642,6 +3706,7 @@ async function loadDashboard() {
     complaints: data.complaints || [],
     users: data.manageableUsers || [],
     digitalTwin: data.digitalTwin || null,
+    riskPredictions: data.riskPredictions || null,
     incidentCommands: data.incidentCommands || []
   };
   renderMetrics(data.metrics);
@@ -3649,6 +3714,7 @@ async function loadDashboard() {
   renderComplaints(data.complaints);
   renderAdminInsights(data.complaints, data.analytics || null);
   renderDigitalTwin(data.digitalTwin || null);
+  renderRiskPredictions(data.riskPredictions || null);
   renderIncidentCommands(data.incidentCommands || []);
   renderAdminTable(data.complaints);
   renderAlerts(data.complaints);

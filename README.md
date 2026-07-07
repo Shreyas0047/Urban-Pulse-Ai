@@ -30,6 +30,7 @@ The README uses GitHub-visible components only: badges, Mermaid diagrams, tables
 | Email | SMTP | OTP delivery, authority forwarding, close-contact warnings, and emergency broadcast emails |
 | Weather | Weatherstack | Current weather context for complaint reasoning, PDF reports, and risk notes |
 | Civic search | Zenserp | Official source discovery, public incident context, and civic reference links |
+| Predictive risk | `riskPredictionService` | 72-hour ward-level civic risk forecast from complaints, weather context, broadcasts, and active incidents |
 
 ## Architecture
 
@@ -49,6 +50,7 @@ flowchart LR
     Express --> Geo[Nominatim Geocoding]
     Express --> Weather[Weatherstack Current Weather]
     Express --> Zenserp[Zenserp Google Search]
+    Express --> Risk[Risk Forecast Engine]
 ```
 
 ```mermaid
@@ -71,6 +73,7 @@ sequenceDiagram
     API->>API: Fetch current weather context when configured
     API->>API: Route to department unit by ward, category, severity, workload
     API->>API: Find official sources and public context when quota allows
+    API->>API: Build dashboard risk forecast from recent civic pressure
     API->>DB: Store complaint, routing, weather, civic evidence, status history, AI metadata
     API->>DB: Create emergency broadcast and incident command records when high-risk
     API->>Mail: Optional authority forwarding or emergency email broadcast
@@ -108,6 +111,7 @@ The AI service now uses a decision-engine v4 layer that fuses text, image, conte
 | Review routing | Integrated | Low-confidence or conflicting cases are assigned `Needs Review` |
 | Weather context | Integrated | Weatherstack current conditions are stored with complaints and used for weather-sensitive risk notes |
 | Civic evidence | Integrated | Zenserp adds official-source links and public incident context as supporting references |
+| Civic risk forecast | Integrated | Dashboard predicts 72-hour ward-level risk using complaint velocity, priority, unresolved pressure, weather, broadcasts, and incident commands |
 | Evaluation | Integrated | Deterministic local evaluation, AI-service decision evaluation, and optional vision checks |
 
 ## Product And User Experience
@@ -127,6 +131,7 @@ The AI service now uses a decision-engine v4 layer that fuses text, image, conte
 | Weather context | Weatherstack current conditions enrich complaint reasoning, reports, and weather-sensitive risk notes |
 | Civic evidence | Zenserp official-source and public-context searches add supporting references to case details and PDF reports |
 | Civic digital twin | Dashboard-level city health model built from complaint pressure, severity, broadcasts, active incidents, and ward hotspots |
+| Civic risk forecast | 72-hour ward risk forecast ranks zones by complaint velocity, issue repetition, unresolved pressure, weather sensitivity, broadcasts, and active incidents |
 | Incident command | High-risk complaints can open command-room records with SLA, assigned unit, checklist, risk score, and timeline |
 | Safety | Low-confidence AI classifications require review, while high-risk cases create emergency broadcast records |
 
@@ -147,6 +152,7 @@ The current production pass focuses on making the system easier to trust, scan, 
 | Single-focus navigation | Each top-level workspace keeps attention on one functional area at a time | Reduces clutter and supports task-based usage |
 | Weather-aware complaint context | Weatherstack current conditions are stored with each complaint, shown in case details, added to PDF reports, and appended to AI reasoning when relevant | Adds real-world context for drainage, tree obstruction, road damage, utility, and safety complaints |
 | Official source finder | Zenserp searches official civic/department references and recent public context without changing AI decisions | Helps admins verify escalation paths and makes formal reports more credible |
+| Civic risk prediction | City Health now includes a 72-hour forecast for likely ward-level civic pressure, with confidence, drivers, and operational recommendation | Shows proactive intelligence instead of only reacting to submitted complaints |
 
 ## Main User Journeys
 
@@ -161,7 +167,7 @@ The current production pass focuses on making the system easier to trust, scan, 
 
 ### Admin Journey
 
-1. Open the dashboard and inspect review load, hotspot concentration, city health, active incidents, and open-case pressure.
+1. Open the dashboard and inspect review load, hotspot concentration, city health, predicted ward risk, active incidents, and open-case pressure.
 2. Open a complaint in the case-file modal to inspect history, alerts, AI reasoning, routing, emergency broadcast audit, and incident command state.
 3. Update status or acknowledge alerts.
 4. Use the operations map to focus on geographic clusters and jump into cases quickly.
@@ -309,7 +315,7 @@ AI_EVAL_MIN_ACCURACY=0.65
 - Fetches Weatherstack current conditions server-side and stores weather context when available.
 - Fetches Zenserp official-source links and public incident context server-side when monthly quota allows.
 - Stores AI provenance and status history with the complaint.
-- Stores routing, emergency broadcast, incident command, and digital-twin input metadata when applicable.
+- Stores routing, emergency broadcast, incident command, digital-twin input, and risk-forecast input metadata when applicable.
 
 </details>
 
@@ -392,6 +398,9 @@ Stored complaint AI metadata includes:
 
 - The civic digital twin computes city and zone health from open complaints, severity, broadcasts, active incidents, and issue concentration.
 - Admin dashboard cards show civic health score, stressed zones, active incidents, and the weakest zone recommendation in the City Health section.
+- The Civic Risk Forecast computes a 72-hour ward-level risk score from recent complaint velocity, repeated issue type, open-case pressure, priority load, weather context, broadcasts, and active incident commands.
+- Forecast cards show risk band, confidence label, likely issue, top drivers, and a practical operational recommendation.
+- Forecasts are deterministic dashboard intelligence and never overwrite stored AI category, severity, routing, or broadcast decisions.
 - High-risk, high-confidence complaints can automatically open an incident command record.
 - Incident command records store incident code, severity, ward, assigned authority/unit, SLA deadline, checklist, timeline, broadcast link, and risk score.
 - Complaint status changes are mirrored into linked incident command rooms so resolved complaints no longer count as active incidents.
@@ -456,7 +465,7 @@ Urban-Pulse-Ai/
 |   |-- middleware/          # Auth and security middleware
 |   |-- models/              # MongoDB models, department units, emergency broadcasts, incident commands, API usage counters
 |   |-- routes/              # API routes
-|   `-- services/            # AI, complaint, routing, broadcast, incident command, digital twin, weather, civic search, email, OTP, seed services
+|   `-- services/            # AI, complaint, routing, broadcast, incident command, digital twin, risk prediction, weather, civic search, email, OTP, seed services
 |-- dataset/                 # Local category evaluation images/data
 |-- render.yaml              # Render deployment blueprint
 |-- package.json
@@ -498,4 +507,5 @@ Use `render.yaml` as the deployment starting point. Configure production secrets
 | Broadcast dry run | Confirm emergency broadcast records are created and email failures do not block complaint submission |
 | Incident command dry run | Submit a high-risk test complaint and confirm command room, SLA, checklist, and dashboard incident count appear |
 | Digital twin review | Confirm dashboard city health and stressed-zone cards render correctly for admin accounts |
+| Risk forecast review | Confirm City Health shows 72-hour forecast cards with risk band, confidence, drivers, and recommendations |
 | Seed credential cleanup | Prevents development credentials from reaching production |

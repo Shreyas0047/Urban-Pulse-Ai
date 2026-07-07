@@ -2,6 +2,7 @@ const Complaint = require("../models/Complaint");
 const IncidentCommand = require("../models/IncidentCommand");
 const User = require("../models/User");
 const { buildCivicDigitalTwin } = require("../services/civicDigitalTwinService");
+const { buildCivicRiskPredictions } = require("../services/riskPredictionService");
 
 const iotReadings = [
   { sensor: "Gas Sensor", zone: "Community Kitchen", value: 74, unit: "ppm", status: "Warning" },
@@ -158,6 +159,7 @@ async function getDashboard(req, res, next) {
     const statusCounts = countBy(complaints, (item) => item.status);
     const broadcastCount = complaints.filter((item) => item.broadcast?.triggered).length;
     const digitalTwin = canViewDashboard ? buildCivicDigitalTwin(allComplaints) : buildCivicDigitalTwin(complaints);
+    const riskPredictions = canViewDashboard ? buildCivicRiskPredictions(allComplaints) : buildCivicRiskPredictions(complaints);
     const activeIncidentCount = complaints.filter(hasActiveIncident).length;
 
     res.json({
@@ -168,6 +170,7 @@ async function getDashboard(req, res, next) {
         emergencyBroadcasts: broadcastCount,
         activeIncidents: activeIncidentCount,
         civicHealthScore: digitalTwin.cityHealthScore,
+        highestPredictedRisk: riskPredictions.summary.highestRiskScore,
         avgConfidence: complaints.length
           ? Math.round(complaints.reduce((sum, item) => sum + item.confidence, 0) / complaints.length)
           : 0,
@@ -184,9 +187,12 @@ async function getDashboard(req, res, next) {
         emergencyBroadcasts: broadcastCount,
         activeIncidents: activeIncidentCount,
         civicHealthScore: digitalTwin.cityHealthScore,
-        civicHealthBand: digitalTwin.cityHealthBand
+        civicHealthBand: digitalTwin.cityHealthBand,
+        highestPredictedRisk: riskPredictions.summary.highestRiskScore,
+        highestPredictedZone: riskPredictions.summary.highestRiskZone
       },
       digitalTwin,
+      riskPredictions,
       incidentCommands,
       iotReadings: canViewSensors ? iotReadings : [],
       manageableUsers,
