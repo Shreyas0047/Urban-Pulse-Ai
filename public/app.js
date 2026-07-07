@@ -51,7 +51,6 @@ const authIdentityLabel = document.getElementById("authIdentityLabel");
 const authIdentityInput = document.getElementById("authIdentity");
 const authPasswordInput = document.getElementById("authPassword");
 const loginAttemptCounter = document.getElementById("loginAttemptCounter");
-const authOtpEmailField = document.getElementById("authOtpEmailField");
 const authOtpField = document.getElementById("authOtpField");
 const authOtpInput = document.getElementById("authOtp");
 const sendOtpBtn = document.getElementById("sendOtpBtn");
@@ -395,6 +394,26 @@ function setOtpTimerMessage(message, state = "") {
   otpTimerMessage.hidden = !message;
   otpTimerMessage.textContent = message;
   otpTimerMessage.dataset.state = state;
+}
+
+function assertOtpRequestInputs(mode) {
+  if (!authIdentityInput.value.trim()) {
+    authIdentityInput.focus();
+    authIdentityInput.reportValidity();
+    throw new Error("Enter your email address before requesting an OTP.");
+  }
+
+  if (!authIdentityInput.checkValidity()) {
+    authIdentityInput.focus();
+    authIdentityInput.reportValidity();
+    throw new Error("Enter a valid email address before requesting an OTP.");
+  }
+
+  if (mode === "register" && !authPasswordInput.value) {
+    authPasswordInput.focus();
+    authPasswordInput.reportValidity();
+    throw new Error("Enter your password before requesting a registration OTP.");
+  }
 }
 
 function startOtpCountdown(email, purpose = "register", expiresInSeconds = 300) {
@@ -744,13 +763,12 @@ function openAuthOverlay(mode = "login") {
     roleField.hidden = isResetMode;
     roleField.style.display = isResetMode ? "none" : "";
   }
-  authOtpEmailField.hidden = !usesOtp;
   authOtpField.hidden = !usesOtp;
   sendOtpBtn.hidden = !usesOtp;
-  authOtpEmailField.style.display = usesOtp ? "" : "none";
   authOtpField.style.display = usesOtp ? "" : "none";
   sendOtpBtn.style.display = usesOtp ? "" : "none";
   authOtpInput.disabled = !usesOtp;
+  authOtpInput.required = usesOtp;
   authIdentityLabel.textContent = "Email ID";
   authIdentityInput.placeholder = "Enter email address";
   authIdentityInput.autocomplete = "email";
@@ -1276,7 +1294,9 @@ function getAuthSuccessMessage(mode, data) {
 
 async function requestRegistrationOtp() {
   try {
+    assertOtpRequestInputs("register");
     sendOtpBtn.disabled = true;
+    sendOtpBtn.textContent = "Sending...";
     authSubmitBtn.disabled = true;
     const formData = new FormData(authForm);
     const payload = Object.fromEntries(formData.entries());
@@ -1293,6 +1313,7 @@ async function requestRegistrationOtp() {
   } catch (error) {
     authMessage.textContent = error.message;
     setDashboardMessage(error.message, "error");
+    sendOtpBtn.textContent = registrationOtpIssued ? "Resend OTP" : "Send OTP";
   } finally {
     if (!otpTimer) {
       sendOtpBtn.disabled = false;
@@ -1304,7 +1325,9 @@ async function requestRegistrationOtp() {
 
 async function requestPasswordResetOtp() {
   try {
+    assertOtpRequestInputs("reset-password");
     sendOtpBtn.disabled = true;
+    sendOtpBtn.textContent = "Sending...";
     authSubmitBtn.disabled = true;
     const formData = new FormData(authForm);
     const payload = {
@@ -1322,6 +1345,7 @@ async function requestPasswordResetOtp() {
   } catch (error) {
     authMessage.textContent = error.message;
     setDashboardMessage(error.message, "error");
+    sendOtpBtn.textContent = passwordResetOtpIssued ? "Resend OTP" : "Send OTP";
   } finally {
     if (!otpTimer) {
       sendOtpBtn.disabled = false;

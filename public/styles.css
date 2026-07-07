@@ -1727,6 +1727,21 @@ textarea {
   margin-top: 18px;
 }
 
+.auth-email-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.auth-email-control input {
+  min-width: 0;
+}
+
+.auth-otp-action {
+  white-space: nowrap;
+}
+
 .auth-link-button {
   justify-self: flex-start;
   min-height: auto;
@@ -2760,6 +2775,15 @@ audio::-webkit-media-controls-panel {
 @media (max-width: 640px) {
   .content-shell {
     gap: 48px;
+  }
+
+  .auth-email-control {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-otp-action {
+    justify-content: center;
+    width: 100%;
   }
 
   .section-shell {

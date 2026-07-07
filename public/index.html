@@ -44,7 +44,10 @@
 
           <label>
             <span id="authIdentityLabel" class="field-label">Email ID</span>
-            <input type="email" id="authIdentity" name="email" placeholder="Enter email address" autocomplete="email" />
+            <div class="auth-email-control">
+              <input type="email" id="authIdentity" name="email" placeholder="Enter email address" autocomplete="email" required />
+              <button type="button" id="sendOtpBtn" class="secondary-button auth-otp-action" hidden>Send OTP</button>
+            </div>
           </label>
 
           <label>
@@ -53,13 +56,6 @@
           </label>
 
           <button type="button" id="forgotPasswordBtn" class="auth-link-button">Forgot password?</button>
-
-          <label id="authOtpEmailField" hidden>
-            <span class="field-label">Email Verification</span>
-            <div class="auth-inline-field">
-              <button type="button" id="sendOtpBtn" class="secondary-button" hidden>Send OTP</button>
-            </div>
-          </label>
 
           <label id="authOtpField" hidden>
             <span class="field-label">OTP</span>
