@@ -3,6 +3,7 @@ const { analyzeComplaint } = require("./aiClient");
 const { createEmergencyBroadcast } = require("./broadcastService");
 const { createIncidentCommand, summarizeIncidentCommand } = require("./incidentCommandService");
 const { canonicalPriority, routeComplaint } = require("./routingService");
+const { fetchWeatherSnapshot } = require("./weatherService");
 
 const LOW_CONFIDENCE_THRESHOLD = 0.52;
 const GEOCODE_TIMEOUT_MS = 3500;
@@ -168,6 +169,14 @@ function buildAiExplanation(analysis, payload, reviewRequired, confidenceScore) 
   ].join(" ");
 }
 
+function appendWeatherContext(explanation, weather) {
+  if (!weather?.note) {
+    return explanation;
+  }
+
+  return `${explanation} Weather context: ${weather.note}`;
+}
+
 function logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired, routing }) {
   const record = {
     event: "ai_complaint_decision",
@@ -254,6 +263,11 @@ async function createComplaintFromPayload(auth, payload) {
     lat: geocoded.lat,
     lng: geocoded.lng
   };
+  const weather = await fetchWeatherSnapshot({
+    location,
+    mapLocation,
+    analysis
+  });
   const rawConfidenceScore = Number(analysis.confidence || Math.max(analysis.priority.score, analysis.cv.score) || 0);
   const confidenceScore = calibrateConfidence(rawConfidenceScore, analysis, {
     textComplaint,
@@ -265,7 +279,7 @@ async function createComplaintFromPayload(auth, payload) {
   analysis.reviewRequired = reviewRequired;
   analysis.priority.level = canonicalPriority(analysis.priority?.level);
   const finalStatus = reviewRequired ? "Needs Review" : analysis.status;
-  const explanation = buildAiExplanation(analysis, payload, reviewRequired, confidenceScore);
+  const explanation = appendWeatherContext(buildAiExplanation(analysis, payload, reviewRequired, confidenceScore), weather);
   const routing = await routeComplaint({
     analysis,
     location,
@@ -279,6 +293,9 @@ async function createComplaintFromPayload(auth, payload) {
     `${routing.unit} assigned through ${routing.department}`,
     `Routing reason: ${routing.routingReason}`
   ];
+  if (weather.note) {
+    analysis.alerts = [...analysis.alerts, weather.note];
+  }
   logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired, routing });
 
   const complaint = await Complaint.create({
@@ -294,6 +311,7 @@ async function createComplaintFromPayload(auth, payload) {
     assignedAuthority: routing.authority,
     routing,
     mapLocation,
+    weather,
     description: analysis.unifiedText || "No complaint text provided.",
     alerts: analysis.alerts,
     statusHistory: [
@@ -413,6 +431,7 @@ async function createComplaintFromPayload(auth, payload) {
 
   analysis.status = finalStatus;
   analysis.mapLocation = mapLocation;
+  analysis.weather = weather;
   analysis.assignedAuthority = routing.authority;
   analysis.routing = routing;
   analysis.broadcast = broadcast
@@ -438,6 +457,7 @@ async function createComplaintFromPayload(auth, payload) {
     routing,
     broadcast: analysis.broadcast,
     incidentCommand: incidentSummary,
+    weather,
     provider: analysis.aiMeta?.provider || "unknown",
     engine: analysis.aiMeta?.engine || "unknown",
     fallbackUsed: Boolean(analysis.aiMeta?.fallbackUsed),

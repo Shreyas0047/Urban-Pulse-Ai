@@ -2116,8 +2116,9 @@ function renderAnalysis(result) {
   const reviewText = result.explainability?.reviewRequired ? " It needs admin review because confidence is low." : "";
   const routeText = result.routing?.unit ? ` ${result.routing.unit} is assigned.` : "";
   const broadcastText = result.broadcast?.triggered ? ` Emergency broadcast ${result.broadcast.status}.` : "";
+  const weatherText = result.weather?.note ? ` Weather context: ${result.weather.note}` : "";
   setDashboardMessage(
-    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}.${routeText} Detected issue: ${result.nlp?.issueType || result.cv.detected}.${reviewText}${broadcastText}`,
+    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}.${routeText} Detected issue: ${result.nlp?.issueType || result.cv.detected}.${reviewText}${broadcastText}${weatherText}`,
     result.explainability?.reviewRequired ? "info" : "success"
   );
 }
@@ -2146,6 +2147,7 @@ function buildSubmittedReport(payload, result) {
     routing: result.routing || result.explainability?.routing || null,
     broadcast: result.broadcast || result.explainability?.broadcast || null,
     incidentCommand: result.incidentCommand || result.explainability?.incidentCommand || null,
+    weather: result.weather || result.explainability?.weather || null,
     status: result.status || "Queued",
     detection: result.cv?.detected || "No image analysis available",
     cvReason: result.cv?.reason || "Local AI matched the uploaded issue against known civic patterns.",
@@ -2302,6 +2304,27 @@ function renderIncidentSummary(complaint) {
     .join("<br>");
 }
 
+function formatWeatherValue(value, suffix = "") {
+  return Number.isFinite(Number(value)) ? `${Number(value)}${suffix}` : "Not recorded";
+}
+
+function renderWeatherSummary(complaint) {
+  const weather = complaint.weather || {};
+  if (weather.status !== "available") {
+    return weather.reason || "Weather context was not available for this complaint.";
+  }
+
+  return [
+    weather.locationName || "Weather location not recorded",
+    `${weather.condition || "Condition not recorded"} · ${formatWeatherValue(weather.temperatureC, "°C")}`,
+    `Rain: ${formatWeatherValue(weather.precipitationMm, " mm")} · Humidity: ${formatWeatherValue(weather.humidity, "%")} · Wind: ${formatWeatherValue(weather.windKph, " kph")}`,
+    weather.note || ""
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
 function renderComplaintDetail(complaint) {
   complaintDetailTitle.textContent = complaint.type || "Complaint";
   const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
@@ -2387,6 +2410,11 @@ function renderComplaintDetail(complaint) {
           <p class="detail-section-label">Incident command</p>
           <strong>${complaint.incidentCommand?.triggered ? escapeHtml(complaint.incidentCommand.incidentCode || "Command active") : "Not opened"}</strong>
           <p>${renderIncidentSummary(complaint)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Weather context</p>
+          <strong>${complaint.weather?.status === "available" ? escapeHtml(complaint.weather.condition || "Available") : "Unavailable"}</strong>
+          <p>${renderWeatherSummary(complaint)}</p>
         </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Map</p>
@@ -2572,6 +2600,12 @@ async function generatePdfReport(report, options = {}) {
   drawRow("AI Engine", report.aiMeta?.engine || "Not recorded");
   drawRow("AI Provider", report.aiMeta?.provider || "Not recorded");
   drawRow("Vision Engine", report.aiMeta?.visionEngine || "Not recorded");
+  drawRow(
+    "Weather Context",
+    report.weather?.status === "available"
+      ? `${report.weather.condition || "Condition not recorded"}, ${formatWeatherValue(report.weather.temperatureC, "°C")}, rain ${formatWeatherValue(report.weather.precipitationMm, " mm")}, wind ${formatWeatherValue(report.weather.windKph, " kph")}${report.weather.note ? `. ${report.weather.note}` : ""}`
+      : report.weather?.reason || "Weather context unavailable."
+  );
 
   drawSectionTitle("5. Evidence and Location Reference");
   ensureSpace(95);

@@ -1,0 +1,160 @@
+const env = require("../config/env");
+
+const WEATHER_TIMEOUT_MS = 3500;
+const WEATHER_RELEVANT_CATEGORY_IDS = new Set([
+  "water_drainage",
+  "sewage_overflow",
+  "water_leakage",
+  "tree_obstruction",
+  "road_damage",
+  "utility_fault",
+  "safety_fire",
+  "vehicle_obstruction"
+]);
+
+function unavailableWeather(reason) {
+  return {
+    status: "unavailable",
+    provider: "weatherstack",
+    reason,
+    observedAt: null,
+    locationName: "",
+    temperatureC: null,
+    condition: "",
+    precipitationMm: null,
+    humidity: null,
+    windKph: null,
+    note: ""
+  };
+}
+
+function buildWeatherQuery({ location, mapLocation }) {
+  const lat = Number(mapLocation?.lat);
+  const lng = Number(mapLocation?.lng);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return `${lat},${lng}`;
+  }
+
+  return String(location || "").trim();
+}
+
+function normalizeWeatherResponse(data) {
+  const current = data?.current || {};
+  const location = data?.location || {};
+  const condition = Array.isArray(current.weather_descriptions) ? current.weather_descriptions[0] : "";
+
+  return {
+    status: "available",
+    provider: "weatherstack",
+    reason: "",
+    observedAt: current.observation_time || location.localtime || null,
+    locationName: [location.name, location.region, location.country].filter(Boolean).join(", "),
+    temperatureC: Number.isFinite(Number(current.temperature)) ? Number(current.temperature) : null,
+    condition: String(condition || "").trim(),
+    precipitationMm: Number.isFinite(Number(current.precip)) ? Number(current.precip) : null,
+    humidity: Number.isFinite(Number(current.humidity)) ? Number(current.humidity) : null,
+    windKph: Number.isFinite(Number(current.wind_speed)) ? Number(current.wind_speed) : null,
+    note: ""
+  };
+}
+
+function weatherLooksRainy(weather) {
+  const condition = String(weather.condition || "").toLowerCase();
+  const precipitation = Number(weather.precipitationMm || 0);
+  return precipitation > 0 || /\b(rain|drizzle|shower|storm|thunder|mist|fog|overcast)\b/.test(condition);
+}
+
+function weatherLooksWindy(weather) {
+  return Number(weather.windKph || 0) >= 28;
+}
+
+function buildWeatherImpactNote(weather, analysis) {
+  if (weather.status !== "available") {
+    return "";
+  }
+
+  const categoryId = analysis?.aiMeta?.categoryId || "general";
+  if (!WEATHER_RELEVANT_CATEGORY_IDS.has(categoryId)) {
+    return "";
+  }
+
+  const rainy = weatherLooksRainy(weather);
+  const windy = weatherLooksWindy(weather);
+
+  if (["water_drainage", "sewage_overflow", "water_leakage"].includes(categoryId) && rainy) {
+    return "Rain or wet conditions may be contributing to the reported drainage or water issue.";
+  }
+
+  if (categoryId === "tree_obstruction" && (windy || rainy)) {
+    return "Wind or rain conditions may be related to the reported tree or road obstruction.";
+  }
+
+  if (["road_damage", "vehicle_obstruction"].includes(categoryId) && rainy) {
+    return "Wet conditions may increase road safety risk for this complaint.";
+  }
+
+  if (["utility_fault", "safety_fire"].includes(categoryId) && rainy) {
+    return "Wet conditions can increase electrical or public safety risk for this complaint.";
+  }
+
+  return "";
+}
+
+async function fetchWeatherSnapshot({ location, mapLocation, analysis }) {
+  if (!env.weatherstackEnabled) {
+    return unavailableWeather("Weather context is disabled.");
+  }
+
+  if (!env.weatherstackApiKey) {
+    return unavailableWeather("Weatherstack API key is not configured.");
+  }
+
+  const query = buildWeatherQuery({ location, mapLocation });
+  if (!query) {
+    return unavailableWeather("Location is missing.");
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), WEATHER_TIMEOUT_MS);
+
+  try {
+    const url = new URL("/current", env.weatherstackBaseUrl);
+    url.searchParams.set("access_key", env.weatherstackApiKey);
+    url.searchParams.set("query", query);
+    url.searchParams.set("units", "m");
+
+    const response = await fetch(url, {
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(`Weatherstack returned HTTP ${response.status}.`);
+    }
+
+    const data = await response.json();
+    if (data?.success === false || data?.error) {
+      throw new Error(data?.error?.info || "Weatherstack returned an error.");
+    }
+
+    const weather = normalizeWeatherResponse(data);
+    weather.note = buildWeatherImpactNote(weather, analysis);
+    return weather;
+  } catch (error) {
+    console.warn(
+      JSON.stringify({
+        event: "weather_context_unavailable",
+        provider: "weatherstack",
+        reason: error.name === "AbortError" ? "timeout" : error.message || "unknown weather error"
+      })
+    );
+    return unavailableWeather("Weather context could not be fetched.");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+module.exports = {
+  buildWeatherImpactNote,
+  fetchWeatherSnapshot,
+  unavailableWeather
+};

@@ -116,6 +116,7 @@ The AI service now uses a decision-engine v4 layer that fuses text, image, conte
 | Operations map | Visual marker board, hotspot summary, priority watch, focused complaint preview, and direct case opening |
 | Dashboard insights | Review load, priority load, hotspot, oldest open case, resolution rate, and routing concentration |
 | Smart response | Department/unit routing uses issue type, severity, ward inference, and active workload |
+| Weather context | Weatherstack current conditions enrich complaint reasoning, reports, and weather-sensitive risk notes |
 | Civic digital twin | Dashboard-level city health model built from complaint pressure, severity, broadcasts, active incidents, and ward hotspots |
 | Incident command | High-risk complaints can open command-room records with SLA, assigned unit, checklist, risk score, and timeline |
 | Safety | Low-confidence AI classifications require review, while high-risk cases create emergency broadcast records |
@@ -180,6 +181,9 @@ JWT_SECRET=replace-with-a-strong-secret
 AI_SERVICE_URL=http://127.0.0.1:5000
 DEEPGRAM_API_KEY=your_deepgram_api_key
 DEEPGRAM_MODEL=nova-3
+WEATHERSTACK_API_KEY=your_weatherstack_api_key
+WEATHERSTACK_BASE_URL=http://api.weatherstack.com
+WEATHERSTACK_ENABLED=true
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_SECURE=false
@@ -284,6 +288,7 @@ AI_EVAL_MIN_ACCURACY=0.65
 - Validates AI image payload size and MIME type on the server.
 - Runs AI analysis through Flask when available.
 - Falls back to local deterministic analysis if the AI service is unavailable.
+- Fetches Weatherstack current conditions server-side and stores weather context when available.
 - Stores AI provenance and status history with the complaint.
 - Stores routing, emergency broadcast, incident command, and digital-twin input metadata when applicable.
 

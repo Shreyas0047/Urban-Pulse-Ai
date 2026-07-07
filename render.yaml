@@ -29,6 +29,12 @@ services:
         generateValue: true
       - key: AI_SERVICE_URL
         sync: false
+      - key: WEATHERSTACK_API_KEY
+        sync: false
+      - key: WEATHERSTACK_BASE_URL
+        value: http://api.weatherstack.com
+      - key: WEATHERSTACK_ENABLED
+        value: "true"
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

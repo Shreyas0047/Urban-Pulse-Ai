@@ -64,6 +64,19 @@ const complaintSchema = new mongoose.Schema(
       lat: Number,
       lng: Number
     },
+    weather: {
+      status: { type: String, default: "unavailable" },
+      provider: { type: String, default: "weatherstack" },
+      reason: { type: String, default: "" },
+      observedAt: { type: String, default: "" },
+      locationName: { type: String, default: "" },
+      temperatureC: { type: Number, default: null },
+      condition: { type: String, default: "" },
+      precipitationMm: { type: Number, default: null },
+      humidity: { type: Number, default: null },
+      windKph: { type: Number, default: null },
+      note: { type: String, default: "" }
+    },
     description: { type: String, required: true },
     alerts: [{ type: String }],
     statusHistory: [
