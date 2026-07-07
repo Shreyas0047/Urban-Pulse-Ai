@@ -23,6 +23,14 @@ function createHttpError(message, statusCode = 400) {
   return error;
 }
 
+function createDeliveryHttpError(error, fallbackMessage) {
+  const deliveryError = createHttpError(error.userMessage || fallbackMessage, error.statusCode || 502);
+  deliveryError.code = error.code || "SMTP_DELIVERY_FAILED";
+  deliveryError.deliveryStatus = error.deliveryStatus || "not_sent";
+  deliveryError.retryable = error.retryable !== false;
+  return deliveryError;
+}
+
 function normalizeValue(value) {
   return String(value || "").trim();
 }
@@ -73,7 +81,8 @@ function logAuthOtpEvent(event, payload = {}) {
       email: maskEmail(payload.email),
       role: payload.role || undefined,
       reason: payload.reason || undefined,
-      accepted: Number.isFinite(payload.accepted) ? payload.accepted : undefined
+      accepted: Number.isFinite(payload.accepted) ? payload.accepted : undefined,
+      code: payload.code || undefined
     })
   );
 }
@@ -275,11 +284,19 @@ async function requestRegistrationOtp(req, res, next) {
     );
 
     logAuthOtpEvent("auth_registration_otp_send_attempt", { email, role });
-    const emailResult = await sendRegistrationOtpEmail({
-      email,
-      otp,
-      username
-    });
+    let emailResult;
+    try {
+      emailResult = await sendRegistrationOtpEmail({
+        email,
+        otp,
+        username
+      });
+    } catch (error) {
+      await RegistrationOtp.deleteOne({ email, role }).catch(() => {});
+      logAuthOtpEvent("auth_registration_otp_send_failed", { email, role, code: error.code });
+      throw createDeliveryHttpError(error, "Email delivery failed. The registration OTP was not sent. Please try again.");
+    }
+
     logAuthOtpEvent("auth_registration_otp_send_accepted", {
       email,
       role,
@@ -288,6 +305,8 @@ async function requestRegistrationOtp(req, res, next) {
 
     res.json({
       message: `An OTP has been sent to ${email}. Enter it to complete registration.`,
+      deliveryStatus: "sent",
+      sent: true,
       expiresInSeconds: OTP_TTL_MS / 1000
     });
   } catch (error) {
@@ -314,6 +333,8 @@ async function requestPasswordResetOtp(req, res, next) {
       });
       return res.json({
         message: PASSWORD_RESET_MESSAGE,
+        deliveryStatus: "skipped",
+        sent: false,
         expiresInSeconds: OTP_TTL_MS / 1000
       });
     }
@@ -333,10 +354,18 @@ async function requestPasswordResetOtp(req, res, next) {
     );
 
     logAuthOtpEvent("auth_password_reset_otp_send_attempt", { email });
-    const emailResult = await sendPasswordResetOtpEmail({
-      email,
-      otp
-    });
+    let emailResult;
+    try {
+      emailResult = await sendPasswordResetOtpEmail({
+        email,
+        otp
+      });
+    } catch (error) {
+      await PasswordResetOtp.deleteOne({ email }).catch(() => {});
+      logAuthOtpEvent("auth_password_reset_otp_send_failed", { email, code: error.code });
+      throw createDeliveryHttpError(error, "Email delivery failed. The password reset OTP was not sent. Please try again.");
+    }
+
     logAuthOtpEvent("auth_password_reset_otp_send_accepted", {
       email,
       accepted: (emailResult.accepted || []).length
@@ -344,6 +373,8 @@ async function requestPasswordResetOtp(req, res, next) {
 
     res.json({
       message: PASSWORD_RESET_MESSAGE,
+      deliveryStatus: "sent",
+      sent: true,
       expiresInSeconds: OTP_TTL_MS / 1000
     });
   } catch (error) {

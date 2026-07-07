@@ -1305,14 +1305,32 @@ async function requestRegistrationOtp() {
       method: "POST",
       body: JSON.stringify(payload)
     });
+    if (data.deliveryStatus !== "sent") {
+      registrationOtpIssued = false;
+      clearOtpTimer();
+      setOtpTimerMessage("OTP was not sent. Please try again.", "expired");
+      authMessage.textContent = data.message || "OTP was not sent. Please try again.";
+      setDashboardMessage(authMessage.textContent, "error");
+      return;
+    }
+
     registrationOtpIssued = true;
     startOtpCountdown(payload.email, "register", data.expiresInSeconds);
     authMessage.textContent = `${data.message} Verify the OTP within ${Math.floor((data.expiresInSeconds || 300) / 60)} minutes.`;
     setDashboardMessage(authMessage.textContent, "success");
     authOtpInput.focus();
   } catch (error) {
-    authMessage.textContent = error.message;
-    setDashboardMessage(error.message, "error");
+    if (error.deliveryStatus === "not_sent") {
+      registrationOtpIssued = false;
+    }
+    const message =
+      error.deliveryStatus === "not_sent"
+        ? `${error.message} No OTP was sent.`
+        : error.message;
+    clearOtpTimer();
+    setOtpTimerMessage(message, "expired");
+    authMessage.textContent = message;
+    setDashboardMessage(message, "error");
     sendOtpBtn.textContent = registrationOtpIssued ? "Resend OTP" : "Send OTP";
   } finally {
     if (!otpTimer) {
@@ -1337,14 +1355,36 @@ async function requestPasswordResetOtp() {
       method: "POST",
       body: JSON.stringify(payload)
     });
+    if (data.deliveryStatus !== "sent") {
+      passwordResetOtpIssued = false;
+      clearOtpTimer();
+      const message =
+        data.deliveryStatus === "skipped"
+          ? "No OTP was sent. Use the exact email address used during registration."
+          : data.message || "OTP was not sent. Please try again.";
+      setOtpTimerMessage(message, "expired");
+      authMessage.textContent = message;
+      setDashboardMessage(message, "error");
+      return;
+    }
+
     passwordResetOtpIssued = true;
     startOtpCountdown(payload.email, "reset", data.expiresInSeconds);
-    authMessage.textContent = data.message;
-    setDashboardMessage(data.message, "success");
+    authMessage.textContent = "Password reset OTP sent. Check your inbox and spam folder.";
+    setDashboardMessage(authMessage.textContent, "success");
     authOtpInput.focus();
   } catch (error) {
-    authMessage.textContent = error.message;
-    setDashboardMessage(error.message, "error");
+    if (error.deliveryStatus === "not_sent") {
+      passwordResetOtpIssued = false;
+    }
+    const message =
+      error.deliveryStatus === "not_sent"
+        ? `${error.message} No OTP was sent.`
+        : error.message;
+    clearOtpTimer();
+    setOtpTimerMessage(message, "expired");
+    authMessage.textContent = message;
+    setDashboardMessage(message, "error");
     sendOtpBtn.textContent = passwordResetOtpIssued ? "Resend OTP" : "Send OTP";
   } finally {
     if (!otpTimer) {
@@ -1772,7 +1812,11 @@ async function apiRequest(path, options = {}) {
       clearAuthState("Your previous session is no longer valid. Please login again.");
     }
 
-    throw new Error(errorMessage);
+    const error = new Error(errorMessage);
+    error.code = data.code || "";
+    error.deliveryStatus = data.deliveryStatus || "";
+    error.retryable = data.retryable;
+    throw error;
   }
 
   return data;

@@ -45,7 +45,10 @@ app.get("*", (_req, res) => {
 
 app.use((error, _req, res, _next) => {
   res.status(error.statusCode || 400).json({
-    error: error.message || "Unexpected server error"
+    error: error.userMessage || error.message || "Unexpected server error",
+    code: error.code || undefined,
+    deliveryStatus: error.deliveryStatus || undefined,
+    retryable: typeof error.retryable === "boolean" ? error.retryable : undefined
   });
 });
 

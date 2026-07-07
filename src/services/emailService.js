@@ -12,9 +12,25 @@ function isEmailConfigured() {
   return Boolean(env.smtpHost && env.smtpPort && env.smtpUser && env.smtpPass && env.smtpFrom);
 }
 
+function createEmailDeliveryError(message, options = {}) {
+  const error = new Error(message);
+  error.code = options.code || "SMTP_DELIVERY_FAILED";
+  error.statusCode = options.statusCode || 502;
+  error.isEmailDeliveryError = true;
+  error.deliveryStatus = "not_sent";
+  error.retryable = options.retryable !== false;
+  error.userMessage = options.userMessage || "Email delivery failed. The email was not sent. Please try again in a minute.";
+  return error;
+}
+
 function createTransporter() {
   if (!isEmailConfigured()) {
-    throw new Error("SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and SMTP_FROM in .env.");
+    throw createEmailDeliveryError("SMTP is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and SMTP_FROM in .env.", {
+      code: "SMTP_NOT_CONFIGURED",
+      statusCode: 503,
+      retryable: false,
+      userMessage: "Email service is not configured. The email was not sent. Contact the administrator."
+    });
   }
 
   if (cachedTransporter) {
@@ -78,24 +94,55 @@ function logEmailDelivery({ purpose, recipients, info }) {
   );
 }
 
+function logEmailFailure({ purpose, recipients, error }) {
+  console.error(
+    JSON.stringify({
+      event: "smtp_email_failure",
+      purpose,
+      recipients: (recipients || []).map(maskEmail),
+      code: error.code || "SMTP_ERROR",
+      retryable: error.retryable !== false,
+      message: error.message || "SMTP request failed."
+    })
+  );
+}
+
 function normalizeEmailError(error) {
+  if (error?.isEmailDeliveryError) {
+    return error;
+  }
+
   const code = error?.code || error?.responseCode || "SMTP_ERROR";
   const message = error?.response || error?.message || "SMTP request failed.";
   const details = `${code}: ${message}`;
 
   if (String(message).toLowerCase().includes("invalid login") || error?.responseCode === 535) {
-    return new Error(`${details} Check SMTP_USER and SMTP_PASS. Gmail requires an App Password, not the normal account password.`);
+    return createEmailDeliveryError(`${details} Check SMTP_USER and SMTP_PASS. Gmail requires an App Password, not the normal account password.`, {
+      code: "SMTP_AUTH_FAILED",
+      statusCode: 502,
+      retryable: false,
+      userMessage: "Email service authentication failed. The email was not sent. Contact the administrator."
+    });
   }
 
   if (String(message).toLowerCase().includes("self signed") || String(message).toLowerCase().includes("certificate")) {
-    return new Error(`${details} Check SMTP TLS settings for the provider.`);
+    return createEmailDeliveryError(`${details} Check SMTP TLS settings for the provider.`, {
+      code: "SMTP_TLS_FAILED",
+      userMessage: "Email service TLS verification failed. The email was not sent. Contact the administrator."
+    });
   }
 
   if (error?.code === "ENETUNREACH" && String(message).includes(":587")) {
-    return new Error(`${details} SMTP resolved to an unreachable network address. Set SMTP_FAMILY=4 to force IPv4.`);
+    return createEmailDeliveryError(`${details} SMTP resolved to an unreachable network address. Set SMTP_FAMILY=4 to force IPv4.`, {
+      code: "SMTP_NETWORK_UNREACHABLE",
+      userMessage: "Email service cannot reach Gmail SMTP from this server. The email was not sent. Contact the administrator."
+    });
   }
 
-  return new Error(details);
+  return createEmailDeliveryError(details, {
+    code: String(code || "SMTP_ERROR"),
+    userMessage: "Email delivery failed. The email was not sent. Please try again in a minute."
+  });
 }
 
 async function verifySmtpConnection() {
@@ -116,9 +163,18 @@ async function verifySmtpConnection() {
 }
 
 async function sendMail(options) {
+  const recipients = normalizeRecipients(options.to);
   try {
     const transporter = createTransporter();
-    const recipients = normalizeRecipients(options.to);
+    if (!recipients.length) {
+      throw createEmailDeliveryError("At least one recipient email is required.", {
+        code: "SMTP_RECIPIENT_REQUIRED",
+        statusCode: 400,
+        retryable: false,
+        userMessage: "Recipient email is missing. The email was not sent."
+      });
+    }
+
     const info = await transporter.sendMail({
       ...options,
       from: options.from || getFromAddress(),
@@ -130,7 +186,10 @@ async function sendMail(options) {
 
     if (recipients.length && !info.accepted?.length) {
       const rejected = (info.rejected || []).join(", ") || "all recipients";
-      throw new Error(`SMTP provider rejected ${rejected}.`);
+      throw createEmailDeliveryError(`SMTP provider rejected ${rejected}.`, {
+        code: "SMTP_RECIPIENT_REJECTED",
+        userMessage: "Email provider rejected the recipient address. The email was not sent."
+      });
     }
 
     logEmailDelivery({
@@ -141,7 +200,13 @@ async function sendMail(options) {
 
     return info;
   } catch (error) {
-    throw normalizeEmailError(error);
+    const normalizedError = normalizeEmailError(error);
+    logEmailFailure({
+      purpose: options.purpose || "general",
+      recipients,
+      error: normalizedError
+    });
+    throw normalizedError;
   }
 }
 
