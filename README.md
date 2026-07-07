@@ -28,6 +28,7 @@ The README uses GitHub-visible components only: badges, Mermaid diagrams, tables
 | Evaluation | `scripts/evaluateAi.js`, `scripts/evaluateVision.py` | Deterministic category evaluation and optional local vision evaluation |
 | Speech | Deepgram | Live speech-to-text with transcript cleanup through the AI service |
 | Email | SMTP | OTP delivery, authority forwarding, close-contact warnings, and emergency broadcast emails |
+| Weather | Weatherstack | Current weather context for complaint reasoning, PDF reports, and risk notes |
 
 ## Architecture
 
@@ -45,6 +46,7 @@ flowchart LR
     Express --> Deepgram[Deepgram STT]
     Express --> SMTP[SMTP Email]
     Express --> Geo[Nominatim Geocoding]
+    Express --> Weather[Weatherstack Current Weather]
 ```
 
 ```mermaid
@@ -64,8 +66,9 @@ sequenceDiagram
     AI->>AI: Score text, vision, context, severity
     AI-->>API: Category, confidence, explanation, provenance
     API->>API: Calibrate confidence and geocode location
+    API->>API: Fetch current weather context when configured
     API->>API: Route to department unit by ward, category, severity, workload
-    API->>DB: Store complaint, routing, status history, AI metadata
+    API->>DB: Store complaint, routing, weather, status history, AI metadata
     API->>DB: Create emergency broadcast and incident command records when high-risk
     API->>Mail: Optional authority forwarding or emergency email broadcast
     API-->>FE: Complaint result, routing, broadcast, incident command, and review state
@@ -100,6 +103,7 @@ The AI service now uses a decision-engine v4 layer that fuses text, image, conte
 | Explainability | Integrated | Structured reasoning includes matched keywords, visual signals, context signals, risk factors, and decision summary |
 | Conflict detection | Integrated | Strong disagreement between text and image evidence is flagged for admin review |
 | Review routing | Integrated | Low-confidence or conflicting cases are assigned `Needs Review` |
+| Weather context | Integrated | Weatherstack current conditions are stored with complaints and used for weather-sensitive risk notes |
 | Evaluation | Integrated | Deterministic local evaluation, AI-service decision evaluation, and optional vision checks |
 
 ## Product And User Experience
@@ -136,6 +140,7 @@ The current production pass focuses on making the system easier to trust, scan, 
 | Cleaner auth screen | Login/register now uses a single `Urban Pulse AI` heading and removes the unused back button | Reduces clutter and avoids a control that did not add functionality |
 | Loading polish | Dashboard panels can show loading placeholders while filtered data reloads | Reduces UI jumpiness and makes the app feel more deliberate |
 | Single-focus navigation | Each top-level workspace keeps attention on one functional area at a time | Reduces clutter and supports task-based usage |
+| Weather-aware complaint context | Weatherstack current conditions are stored with each complaint, shown in case details, added to PDF reports, and appended to AI reasoning when relevant | Adds real-world context for drainage, tree obstruction, road damage, utility, and safety complaints |
 
 ## Main User Journeys
 
@@ -239,6 +244,8 @@ The first Python 3.11 vision run may download or load the configured `sentence-t
 
 Smart routing uses built-in fallback department units when no `DepartmentUnit` records exist in MongoDB. Add `DepartmentUnit` records later to replace the fallback registry with real ward, department, contact email, and portal metadata.
 
+Weather context is optional and non-blocking. If `WEATHERSTACK_API_KEY` is missing, disabled, or Weatherstack is temporarily unavailable, complaint submission continues and the stored complaint records weather as unavailable.
+
 ## Evaluation
 
 Run the deterministic AI category evaluation:
@@ -325,6 +332,17 @@ Stored complaint AI metadata includes:
 </details>
 
 <details>
+<summary>Weather Context</summary>
+
+- Weather is fetched server-side through Weatherstack after complaint location geocoding.
+- The API key is read from `WEATHERSTACK_API_KEY` and is never sent to the browser.
+- Stored complaint weather data includes status, provider, observation time, location name, temperature, condition, precipitation, humidity, wind speed, and an optional context note.
+- Weather notes are added only when relevant to the complaint category, such as drainage, sewage overflow, fallen trees, road damage, utility faults, or safety hazards.
+- Weather failures do not block complaint creation.
+
+</details>
+
+<details>
 <summary>Smart Routing And Emergency Broadcast</summary>
 
 - New complaints receive a routing decision with authority, department, unit, ward/coverage, workload score, escalation level, and routing reason.
@@ -403,7 +421,7 @@ Urban-Pulse-Ai/
 |   |-- middleware/          # Auth and security middleware
 |   |-- models/              # MongoDB models, department units, emergency broadcasts, incident commands
 |   |-- routes/              # API routes
-|   `-- services/            # AI, complaint, routing, broadcast, incident command, digital twin, email, OTP, seed services
+|   `-- services/            # AI, complaint, routing, broadcast, incident command, digital twin, weather, email, OTP, seed services
 |-- dataset/                 # Local category evaluation images/data
 |-- render.yaml              # Render deployment blueprint
 |-- package.json
@@ -421,6 +439,7 @@ Recommended production layout:
 | Database | MongoDB Atlas | Stores users, complaints, chat sessions, OTPs, and AI metadata |
 | Speech | Deepgram | Provides speech-to-text for voice complaints |
 | Email | SMTP provider | Sends OTPs, authority forwarding emails, close-contact warnings, and emergency broadcast emails |
+| Weather | Weatherstack | Adds current weather context to complaints, detail views, and PDF reports |
 
 Use `render.yaml` as the deployment starting point. Configure production secrets in the Render dashboard instead of committing them.
 
@@ -434,6 +453,7 @@ Use `render.yaml` as the deployment starting point. Configure production secrets
 | SMTP verification | Run `npm run verify:smtp` before deploy to confirm host, port, TLS, and credentials |
 | Authority contact registry | Replace fallback department units with real ward, department, email, and portal metadata |
 | Deepgram API key | Enables voice complaint transcription |
+| Weatherstack API key | Enables weather-aware complaint context without exposing the key to the frontend |
 | AI service URL | Connects Express to Flask in production |
 | Vision model cache planning | Prevents slow cold starts for the local CLIP model |
 | Evaluation in CI | Catches category regressions before deploy |
