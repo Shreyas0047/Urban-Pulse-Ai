@@ -1,4 +1,5 @@
 const ExternalApiUsage = require("../models/ExternalApiUsage");
+const mongoose = require("mongoose");
 
 function getUtcMonthKey(date = new Date()) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -25,6 +26,14 @@ async function reserveMonthlyQuota({ provider, limit }) {
     return {
       allowed: false,
       reason: "Monthly quota is not configured.",
+      quota: buildQuotaSnapshot({ provider: safeProvider, month, limit: safeLimit, count: 0 })
+    };
+  }
+
+  if (mongoose.connection.readyState !== 1) {
+    return {
+      allowed: false,
+      reason: "Monthly quota could not be verified.",
       quota: buildQuotaSnapshot({ provider: safeProvider, month, limit: safeLimit, count: 0 })
     };
   }

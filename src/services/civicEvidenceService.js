@@ -118,9 +118,10 @@ async function callZenserp(query, sourceType) {
   });
 
   if (!quotaReservation.allowed) {
+    const quotaReached = quotaReservation.reason === "Monthly quota reached.";
     return {
-      status: "quota_exceeded",
-      reason: quotaReservation.reason === "Monthly quota reached." ? "Monthly Zenserp quota reached." : quotaReservation.reason,
+      status: quotaReached ? "quota_exceeded" : "unavailable",
+      reason: quotaReached ? "Monthly Zenserp quota reached." : quotaReservation.reason,
       results: [],
       quota: quotaReservation.quota
     };
