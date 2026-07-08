@@ -145,6 +145,7 @@ let otpSecondsRemaining = 0;
 let dashboardDataCache = { complaints: [], users: [], digitalTwin: null, riskPredictions: null, incidentCommands: [] };
 let draftSaveTimer = null;
 let dashboardReloadTimer = null;
+const liquidGlassInstances = new Map();
 
 function emitAuthStateChange() {
   window.dispatchEvent(
@@ -168,6 +169,45 @@ function setDashboardMessage(message, type = "info") {
   dashboardMessage.textContent = message;
   dashboardMessage.dataset.state = type;
 }
+
+function ensureLiquidGlass(element, options = {}) {
+  if (!element || typeof window.liquidGlass !== "function") {
+    return null;
+  }
+
+  const existing = liquidGlassInstances.get(element);
+  if (existing) {
+    existing.refresh();
+    return existing;
+  }
+
+  const instance = window.liquidGlass(element, options);
+  liquidGlassInstances.set(element, instance);
+  element.classList.add(instance.supported ? "has-liquid-refraction" : "has-frosted-fallback");
+  element.dataset.glassEngine = instance.supported ? "refraction" : "frosted-fallback";
+  document.documentElement.dataset.glassEngine = instance.supported ? "refraction" : "frosted-fallback";
+  return instance;
+}
+
+function setupLiquidGlass() {
+  const topbar = document.querySelector(".topbar");
+  window.requestAnimationFrame(() => {
+    ensureLiquidGlass(topbar, {
+      scale: -118,
+      chroma: 8,
+      border: 0.12,
+      mapBlur: 10,
+      blur: 2,
+      saturate: 1.45,
+      fallbackBlur: 24
+    });
+  });
+}
+
+window.addEventListener("beforeunload", () => {
+  liquidGlassInstances.forEach((instance) => instance.destroy());
+  liquidGlassInstances.clear();
+});
 
 function loadAudioPreference() {
   try {
@@ -770,6 +810,7 @@ function openAuthOverlay(mode = "login") {
   authIdentityInput.placeholder = "Enter email address";
   authIdentityInput.autocomplete = "email";
   authPasswordInput.placeholder = isResetMode ? "Enter new password" : "Enter password";
+  authPasswordInput.autocomplete = isRegisterMode || isResetMode ? "new-password" : "current-password";
   forgotPasswordBtn.hidden = mode !== "login";
   forgotPasswordBtn.style.display = mode === "login" ? "" : "none";
   registrationOtpIssued = false;
@@ -782,12 +823,25 @@ function openAuthOverlay(mode = "login") {
     authSubmitBtn.disabled = false;
   }
   authSubmitBtn.textContent = mode === "login" ? "Login" : isResetMode ? "Reset Password" : "Verify OTP & Register";
+  authMessage.dataset.state = "info";
   authMessage.textContent =
     mode === "login"
       ? "Choose Admin or Citizen, then login with your email and password."
       : isResetMode
         ? "Enter your registered email and new password, then request an OTP to reset securely."
         : "Choose Admin or Citizen, enter your email and password, then request an OTP to complete registration.";
+
+  window.requestAnimationFrame(() => {
+    ensureLiquidGlass(authOverlay.querySelector(".auth-panel"), {
+      scale: window.matchMedia("(max-width: 640px)").matches ? -90 : -138,
+      chroma: 8,
+      border: 0.11,
+      mapBlur: 10,
+      blur: 2.5,
+      saturate: 1.45,
+      fallbackBlur: 28
+    });
+  });
 }
 
 function closeAuthOverlay() {
@@ -4089,8 +4143,7 @@ authForm.addEventListener("submit", async (event) => {
     });
 
     if (authMode === "reset-password") {
-      const successMessage = data.message || "Password reset successful. Login with your new password.";
-      authMessage.textContent = successMessage;
+      const successMessage = data.message || "Password reset successful. You can now log in with your new password.";
       setDashboardMessage(successMessage, "success");
       passwordResetOtpIssued = false;
       clearOtpTimer();
@@ -4099,6 +4152,7 @@ authForm.addEventListener("submit", async (event) => {
       authForm.reset();
       openAuthOverlay("login");
       authMessage.textContent = successMessage;
+      authMessage.dataset.state = "success";
       return;
     }
 
@@ -4123,6 +4177,7 @@ authForm.addEventListener("submit", async (event) => {
       recordClientLoginFailure();
     }
     authMessage.textContent = error.message;
+    authMessage.dataset.state = "error";
     setDashboardMessage(error.message, "error");
   } finally {
     if (!loginLockTimer) {
@@ -4211,6 +4266,7 @@ setupRevealAnimations();
 setupHeroStorytelling();
 setupAppNavigation();
 setupGooeyInteractions();
+setupLiquidGlass();
 applyPermissionState();
 updateAudioToggleState();
 setPdfButtonState(false);

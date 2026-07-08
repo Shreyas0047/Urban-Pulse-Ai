@@ -16,8 +16,8 @@
   }
 
   const position = {
-    x: window.innerWidth - 104,
-    y: window.innerHeight - 108
+    x: window.innerWidth - 136,
+    y: window.innerHeight - 76
   };
   const animationDurationMs = 220;
 
@@ -43,8 +43,10 @@
   }
 
   function clampPosition() {
-    position.x = Math.max(16, Math.min(position.x, window.innerWidth - 84));
-    position.y = Math.max(16, Math.min(position.y, window.innerHeight - 84));
+    const launcherWidth = launcher.offsetWidth || 112;
+    const launcherHeight = launcher.offsetHeight || 52;
+    position.x = Math.max(16, Math.min(position.x, window.innerWidth - launcherWidth - 16));
+    position.y = Math.max(16, Math.min(position.y, window.innerHeight - launcherHeight - 16));
   }
 
   function updateLauncherPosition() {
@@ -57,7 +59,8 @@
   function updatePanelPosition() {
     const panelWidth = 360;
     const panelHeight = 520;
-    const left = Math.max(16, Math.min(position.x - panelWidth + 64, window.innerWidth - panelWidth - 16));
+    const launcherWidth = launcher.offsetWidth || 112;
+    const left = Math.max(16, Math.min(position.x - panelWidth + launcherWidth, window.innerWidth - panelWidth - 16));
     const top = Math.max(16, Math.min(position.y - panelHeight - 18, window.innerHeight - panelHeight - 16));
     panel.style.left = `${left}px`;
     panel.style.top = `${top}px`;

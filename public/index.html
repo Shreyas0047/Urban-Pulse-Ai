@@ -3,13 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0e16" />
     <title>Urban Pulse AI</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap"
-      rel="stylesheet"
-    />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <link rel="stylesheet" href="/styles.css" />
   </head>
@@ -19,59 +14,92 @@
     <div class="scene-aurora scene-aurora-a" aria-hidden="true"></div>
     <div class="scene-aurora scene-aurora-b" aria-hidden="true"></div>
 
-    <div id="authOverlay" class="overlay-shell auth-overlay" hidden>
+    <div id="authOverlay" class="overlay-shell auth-overlay" role="dialog" aria-modal="true" aria-labelledby="authTitle" hidden>
       <div class="overlay-panel auth-panel">
-        <div class="panel-glow" aria-hidden="true"></div>
-        <div class="overlay-head">
-          <div>
-            <h2>Urban Pulse AI</h2>
+        <aside class="auth-brand-panel" aria-hidden="true">
+          <div class="auth-brand-lockup">
+            <span class="auth-brand-mark">
+              <svg viewBox="0 0 64 64" class="brand-mark-svg">
+                <defs>
+                  <linearGradient id="authBrandGradient" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stop-color="#4b8eff" />
+                    <stop offset="100%" stop-color="#adc6ff" />
+                  </linearGradient>
+                </defs>
+                <rect x="6" y="6" width="52" height="52" rx="18" fill="url(#authBrandGradient)" />
+                <path d="M20 38c3.4-7.8 9.5-14 18.5-18.5" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" />
+                <path d="M25 43c2.2-5.3 6.9-9.7 13.9-13" fill="none" stroke="#fff" stroke-opacity="0.75" stroke-width="3.25" stroke-linecap="round" />
+                <circle cx="43" cy="21" r="5.5" fill="#fff" />
+              </svg>
+            </span>
+            <span>Urban Pulse AI</span>
           </div>
-        </div>
 
-        <div class="segmented-toggle auth-toggle">
-          <button type="button" id="showLoginBtn" class="auth-toggle-btn is-active">Login</button>
-          <button type="button" id="showRegisterBtn" class="auth-toggle-btn">Register</button>
-        </div>
+          <div class="auth-brand-copy">
+            <p class="eyebrow">Bengaluru civic reporting</p>
+            <h1>Report clearly.<br />Follow every update.</h1>
+            <p>Submit local issues with evidence, location, and AI-assisted analysis. Track the response from one place.</p>
+          </div>
 
-        <form id="authForm" class="auth-form">
-          <label>
-            <span class="field-label">Role</span>
-            <select name="role" id="authRoleSelect">
-              <option value="Citizen">Citizen</option>
-              <option value="Admin">Admin</option>
-            </select>
-          </label>
+          <div class="auth-brand-foot">
+            <span class="status-led"></span>
+            <span>Citizen and administrator access</span>
+          </div>
+        </aside>
 
-          <label>
-            <span id="authIdentityLabel" class="field-label">Email ID</span>
-            <div class="auth-email-control">
-              <input type="email" id="authIdentity" name="email" placeholder="Enter email address" autocomplete="email" required />
-              <button type="button" id="sendOtpBtn" class="secondary-button auth-otp-action" hidden>Send OTP</button>
+        <div class="auth-form-panel">
+          <div class="overlay-head">
+            <div>
+              <p class="eyebrow">Account access</p>
+              <h2 id="authTitle">Urban Pulse AI</h2>
             </div>
-          </label>
-
-          <label>
-            <span class="field-label">Password</span>
-            <input type="password" id="authPassword" name="password" placeholder="Enter password" />
-          </label>
-
-          <button type="button" id="forgotPasswordBtn" class="auth-link-button">Forgot password?</button>
-
-          <label id="authOtpField" hidden>
-            <span class="field-label">OTP</span>
-            <input type="text" id="authOtp" name="otp" placeholder="Enter 6-digit OTP" inputmode="numeric" maxlength="6" />
-          </label>
-
-          <p id="otpTimerMessage" class="helper-text otp-timer-message" hidden></p>
-
-          <div class="auth-form-actions">
-            <button type="submit" id="authSubmitBtn" class="light-beam-button">Login</button>
           </div>
 
-          <p id="loginAttemptCounter" class="helper-text login-attempt-counter" hidden></p>
-        </form>
+          <div class="segmented-toggle auth-toggle">
+            <button type="button" id="showLoginBtn" class="auth-toggle-btn is-active">Login</button>
+            <button type="button" id="showRegisterBtn" class="auth-toggle-btn">Register</button>
+          </div>
 
-        <p id="authMessage" class="helper-text auth-message">Choose Admin or Citizen, then login or register with your email and password.</p>
+          <form id="authForm" class="auth-form">
+            <label>
+              <span class="field-label">Role</span>
+              <select name="role" id="authRoleSelect">
+                <option value="Citizen">Citizen</option>
+                <option value="Admin">Admin</option>
+              </select>
+            </label>
+
+            <label>
+              <span id="authIdentityLabel" class="field-label">Email ID</span>
+              <div class="auth-email-control">
+                <input type="email" id="authIdentity" name="email" placeholder="Enter email address" autocomplete="email" required />
+                <button type="button" id="sendOtpBtn" class="secondary-button auth-otp-action" hidden>Send OTP</button>
+              </div>
+            </label>
+
+            <label>
+              <span class="field-label">Password</span>
+              <input type="password" id="authPassword" name="password" placeholder="Enter password" autocomplete="current-password" />
+            </label>
+
+            <button type="button" id="forgotPasswordBtn" class="auth-link-button">Forgot password?</button>
+
+            <label id="authOtpField" hidden>
+              <span class="field-label">OTP</span>
+              <input type="text" id="authOtp" name="otp" placeholder="Enter 6-digit OTP" inputmode="numeric" autocomplete="one-time-code" maxlength="6" />
+            </label>
+
+            <p id="otpTimerMessage" class="helper-text otp-timer-message" hidden></p>
+
+            <div class="auth-form-actions">
+              <button type="submit" id="authSubmitBtn" class="light-beam-button">Login</button>
+            </div>
+
+            <p id="loginAttemptCounter" class="helper-text login-attempt-counter" hidden></p>
+          </form>
+
+          <p id="authMessage" class="helper-text auth-message">Choose Admin or Citizen, then login or register with your email and password.</p>
+        </div>
       </div>
     </div>
 
@@ -212,77 +240,6 @@
                   </div>
                 </div>
 
-                <div class="hero-story-visual">
-                  <div class="hero-visual-frame glass-card">
-                    <div class="hero-visual-backdrop" aria-hidden="true">
-                      <span class="hero-grid-ring ring-a"></span>
-                      <span class="hero-grid-ring ring-b"></span>
-                      <span class="hero-grid-ring ring-c"></span>
-                    </div>
-
-                    <div class="hero-stage-chrome">
-                      <div class="hero-stage-status">
-                        <span class="status-led"></span>
-                        <span class="eyebrow subtle">Urban Pulse</span>
-                      </div>
-                      <div class="hero-stage-readout">
-                        <span>City Health</span>
-                        <strong>Complaint response in one place</strong>
-                      </div>
-                    </div>
-
-                    <div class="hero-system-map" aria-hidden="true">
-                      <div class="hero-node hero-core-node">
-                        <span class="hero-node-kicker">Main view</span>
-                        <strong>Urban Pulse</strong>
-                        <p>Reports, updates, and admin tools</p>
-                      </div>
-
-                      <article class="hero-module hero-module-report">
-                        <span>Upload</span>
-                        <strong>Report</strong>
-                        <p>Photo, location, complaint</p>
-                      </article>
-
-                      <article class="hero-module hero-module-voice">
-                        <span>Voice</span>
-                        <strong>Voice note</strong>
-                        <p>Record and edit text</p>
-                      </article>
-
-                      <article class="hero-module hero-module-ai">
-                        <span>Analysis</span>
-                        <strong>AI summary</strong>
-                        <p>Description and confidence</p>
-                      </article>
-
-                      <article class="hero-module hero-module-escalation">
-                        <span>Export</span>
-                        <strong>PDF and email</strong>
-                        <p>Share the complaint</p>
-                      </article>
-
-                      <article class="hero-module hero-module-ops">
-                        <span>Admin</span>
-                        <strong>Dashboard</strong>
-                        <p>Metrics and status</p>
-                      </article>
-
-                      <article class="hero-module hero-module-map">
-                        <span>Location</span>
-                        <strong>Map</strong>
-                        <p>Live preview</p>
-                      </article>
-
-                      <article class="hero-module hero-module-alerts">
-                        <span>Queue</span>
-                        <strong>Alerts</strong>
-                        <p>Items that need attention</p>
-                      </article>
-                    </div>
-
-                  </div>
-                </div>
               </div>
 
               <div class="hero-liquid-dock" aria-label="Urban Pulse AI workspace shortcuts">
@@ -727,9 +684,14 @@
       </div>
     </div>
 
-    <button type="button" id="chatbotLauncher" class="chatbot-launcher" aria-label="Open assistant" hidden>
-      <span class="chatbot-launcher-core"></span>
-      <span class="chatbot-launcher-ring"></span>
+    <button type="button" id="chatbotLauncher" class="chatbot-launcher" aria-label="Open help assistant" hidden>
+      <span class="chatbot-launcher-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M7 18.2 3.8 21v-5.1A8.5 8.5 0 1 1 7 18.2Z"></path>
+          <path d="M8 10.5h8M8 14h5"></path>
+        </svg>
+      </span>
+      <span class="chatbot-launcher-label">Help</span>
     </button>
 
     <section id="postSubmitOverlay" class="overlay-shell post-submit-overlay" hidden aria-label="Complaint actions">
@@ -797,6 +759,7 @@
       </form>
     </section>
 
+    <script src="/vendor/liquid-glass/liquid-glass.js"></script>
     <script type="module" src="/liquid-ether.js"></script>
     <script type="module" src="/audio-transcriber.js"></script>
     <script src="/app.js"></script>
