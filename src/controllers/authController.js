@@ -74,6 +74,14 @@ function maskEmail(email) {
   return `${name.slice(0, 2)}***@${domain}`;
 }
 
+function buildOtpDeliveryMeta(email, emailResult = null) {
+  return {
+    recipient: maskEmail(email),
+    acceptedCount: Array.isArray(emailResult?.accepted) ? emailResult.accepted.length : 0,
+    rejectedCount: Array.isArray(emailResult?.rejected) ? emailResult.rejected.length : 0
+  };
+}
+
 function logAuthOtpEvent(event, payload = {}) {
   console.log(
     JSON.stringify({
@@ -307,6 +315,7 @@ async function requestRegistrationOtp(req, res, next) {
       message: `An OTP has been sent to ${email}. Enter it to complete registration.`,
       deliveryStatus: "sent",
       sent: true,
+      ...buildOtpDeliveryMeta(email, emailResult),
       expiresInSeconds: OTP_TTL_MS / 1000
     });
   } catch (error) {
@@ -335,6 +344,9 @@ async function requestPasswordResetOtp(req, res, next) {
         message: PASSWORD_RESET_MESSAGE,
         deliveryStatus: "skipped",
         sent: false,
+        recipient: maskEmail(email),
+        acceptedCount: 0,
+        rejectedCount: 0,
         expiresInSeconds: OTP_TTL_MS / 1000
       });
     }
@@ -375,6 +387,7 @@ async function requestPasswordResetOtp(req, res, next) {
       message: PASSWORD_RESET_MESSAGE,
       deliveryStatus: "sent",
       sent: true,
+      ...buildOtpDeliveryMeta(email, emailResult),
       expiresInSeconds: OTP_TTL_MS / 1000
     });
   } catch (error) {

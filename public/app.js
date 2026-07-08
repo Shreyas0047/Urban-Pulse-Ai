@@ -1292,6 +1292,15 @@ function getAuthSuccessMessage(mode, data) {
   return `Login successful. ${data.username} is now logged in as ${data.role}.`;
 }
 
+function formatOtpDeliveryMessage(baseMessage, data, fallbackEmail) {
+  const recipient = data?.recipient || fallbackEmail;
+  const acceptedCount = Number(data?.acceptedCount || 0);
+  const deliveryNote = recipient
+    ? ` SMTP accepted delivery for ${recipient}${acceptedCount ? ` (${acceptedCount} recipient${acceptedCount === 1 ? "" : "s"})` : ""}.`
+    : "";
+  return `${baseMessage}${deliveryNote}`;
+}
+
 async function requestRegistrationOtp() {
   try {
     assertOtpRequestInputs("register");
@@ -1316,7 +1325,11 @@ async function requestRegistrationOtp() {
 
     registrationOtpIssued = true;
     startOtpCountdown(payload.email, "register", data.expiresInSeconds);
-    authMessage.textContent = `${data.message} Verify the OTP within ${Math.floor((data.expiresInSeconds || 300) / 60)} minutes.`;
+    authMessage.textContent = formatOtpDeliveryMessage(
+      `${data.message} Verify the OTP within ${Math.floor((data.expiresInSeconds || 300) / 60)} minutes.`,
+      data,
+      payload.email
+    );
     setDashboardMessage(authMessage.textContent, "success");
     authOtpInput.focus();
   } catch (error) {
@@ -1370,7 +1383,7 @@ async function requestPasswordResetOtp() {
 
     passwordResetOtpIssued = true;
     startOtpCountdown(payload.email, "reset", data.expiresInSeconds);
-    authMessage.textContent = "Password reset OTP sent. Check your inbox and spam folder.";
+    authMessage.textContent = formatOtpDeliveryMessage("Password reset OTP sent. Check your inbox and spam folder.", data, payload.email);
     setDashboardMessage(authMessage.textContent, "success");
     authOtpInput.focus();
   } catch (error) {
