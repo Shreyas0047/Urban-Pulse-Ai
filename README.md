@@ -14,7 +14,7 @@
 
 Urban Pulse Ai helps citizens submit civic complaints with text, images, or voice, then uses a production-oriented AI pipeline to classify the issue, estimate severity, explain the decision, and route the complaint for review or escalation.
 
-The README uses GitHub-visible components only: badges, Mermaid diagrams, tables, and collapsible sections. GitHub does not run custom JavaScript or CSS animations inside README files, so the architecture visuals below are rendered natively by GitHub.
+
 
 ## Current System
 
