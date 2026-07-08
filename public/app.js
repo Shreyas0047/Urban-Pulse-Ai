@@ -416,18 +416,15 @@ function assertOtpRequestInputs(mode) {
   }
 }
 
-function startOtpCountdown(email, purpose = "register", expiresInSeconds = 300) {
+function startOtpCountdown(email, purpose = "register", expiresInSeconds = 300, deliveryDetail = "") {
   clearOtpTimer();
   otpSecondsRemaining = Number(expiresInSeconds || 300);
   sendOtpBtn.disabled = true;
   sendOtpBtn.textContent = "OTP sent";
 
   const updateOtpCountdown = () => {
-    const message =
-      purpose === "reset"
-        ? `If ${email} is registered, verify the OTP within ${otpSecondsRemaining}s.`
-        : `OTP sent to ${email}. Verify within ${otpSecondsRemaining}s.`;
-    setOtpTimerMessage(message, "active");
+    const recipientLabel = deliveryDetail || (purpose === "reset" ? "OTP request accepted" : `OTP sent to ${email}`);
+    setOtpTimerMessage(`${recipientLabel}. Verify within ${otpSecondsRemaining}s.`, "active");
   };
 
   updateOtpCountdown();
@@ -1292,19 +1289,18 @@ function getAuthSuccessMessage(mode, data) {
   return `Login successful. ${data.username} is now logged in as ${data.role}.`;
 }
 
-function formatOtpDeliveryMessage(baseMessage, data, fallbackEmail) {
+function formatOtpDeliveryDetail(data, fallbackEmail) {
   const recipient = data?.recipient || fallbackEmail;
   const acceptedCount = Number(data?.acceptedCount || 0);
-  const deliveryNote = recipient
-    ? ` SMTP accepted delivery for ${recipient}${acceptedCount ? ` (${acceptedCount} recipient${acceptedCount === 1 ? "" : "s"})` : ""}.`
-    : "";
-  return `${baseMessage}${deliveryNote}`;
+  return recipient
+    ? `Sent to ${recipient}${acceptedCount ? ` - mail server accepted ${acceptedCount}` : ""}`
+    : "OTP delivery accepted by the mail server.";
 }
 
-function formatOtpErrorMessage(error) {
-  const code = error?.code ? ` [${error.code}]` : "";
-  const retryNote = error?.retryable === false ? " This needs an admin SMTP fix." : "";
-  return `${error.message}${code}${retryNote}`;
+function formatOtpErrorDetail(error) {
+  const code = error?.code || "SMTP_ERROR";
+  const retryNote = error?.retryable === false ? "Admin SMTP settings need attention." : "Try again in a minute.";
+  return `${code} · ${retryNote}`;
 }
 
 async function requestRegistrationOtp() {
@@ -1330,12 +1326,8 @@ async function requestRegistrationOtp() {
     }
 
     registrationOtpIssued = true;
-    startOtpCountdown(payload.email, "register", data.expiresInSeconds);
-    authMessage.textContent = formatOtpDeliveryMessage(
-      `${data.message} Verify the OTP within ${Math.floor((data.expiresInSeconds || 300) / 60)} minutes.`,
-      data,
-      payload.email
-    );
+    startOtpCountdown(payload.email, "register", data.expiresInSeconds, formatOtpDeliveryDetail(data, payload.email));
+    authMessage.textContent = `OTP sent. Check your inbox and enter it within ${Math.floor((data.expiresInSeconds || 300) / 60)} minutes.`;
     setDashboardMessage(authMessage.textContent, "success");
     authOtpInput.focus();
   } catch (error) {
@@ -1344,10 +1336,10 @@ async function requestRegistrationOtp() {
     }
     const message =
       error.deliveryStatus === "not_sent"
-        ? `${formatOtpErrorMessage(error)} No OTP was sent.`
-        : formatOtpErrorMessage(error);
+        ? "OTP could not be sent. Please try again."
+        : error.message;
     clearOtpTimer();
-    setOtpTimerMessage(message, "expired");
+    setOtpTimerMessage(formatOtpErrorDetail(error), "expired");
     authMessage.textContent = message;
     setDashboardMessage(message, "error");
     sendOtpBtn.textContent = registrationOtpIssued ? "Resend OTP" : "Send OTP";
@@ -1388,8 +1380,8 @@ async function requestPasswordResetOtp() {
     }
 
     passwordResetOtpIssued = true;
-    startOtpCountdown(payload.email, "reset", data.expiresInSeconds);
-    authMessage.textContent = formatOtpDeliveryMessage("Password reset OTP sent. Check your inbox and spam folder.", data, payload.email);
+    startOtpCountdown(payload.email, "reset", data.expiresInSeconds, formatOtpDeliveryDetail(data, payload.email));
+    authMessage.textContent = "Password reset OTP sent. Check your inbox and spam folder.";
     setDashboardMessage(authMessage.textContent, "success");
     authOtpInput.focus();
   } catch (error) {
@@ -1398,10 +1390,10 @@ async function requestPasswordResetOtp() {
     }
     const message =
       error.deliveryStatus === "not_sent"
-        ? `${formatOtpErrorMessage(error)} No OTP was sent.`
-        : formatOtpErrorMessage(error);
+        ? "OTP could not be sent. Please try again."
+        : error.message;
     clearOtpTimer();
-    setOtpTimerMessage(message, "expired");
+    setOtpTimerMessage(formatOtpErrorDetail(error), "expired");
     authMessage.textContent = message;
     setDashboardMessage(message, "error");
     sendOtpBtn.textContent = passwordResetOtpIssued ? "Resend OTP" : "Send OTP";
