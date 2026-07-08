@@ -1301,6 +1301,12 @@ function formatOtpDeliveryMessage(baseMessage, data, fallbackEmail) {
   return `${baseMessage}${deliveryNote}`;
 }
 
+function formatOtpErrorMessage(error) {
+  const code = error?.code ? ` [${error.code}]` : "";
+  const retryNote = error?.retryable === false ? " This needs an admin SMTP fix." : "";
+  return `${error.message}${code}${retryNote}`;
+}
+
 async function requestRegistrationOtp() {
   try {
     assertOtpRequestInputs("register");
@@ -1338,8 +1344,8 @@ async function requestRegistrationOtp() {
     }
     const message =
       error.deliveryStatus === "not_sent"
-        ? `${error.message} No OTP was sent.`
-        : error.message;
+        ? `${formatOtpErrorMessage(error)} No OTP was sent.`
+        : formatOtpErrorMessage(error);
     clearOtpTimer();
     setOtpTimerMessage(message, "expired");
     authMessage.textContent = message;
@@ -1392,8 +1398,8 @@ async function requestPasswordResetOtp() {
     }
     const message =
       error.deliveryStatus === "not_sent"
-        ? `${error.message} No OTP was sent.`
-        : error.message;
+        ? `${formatOtpErrorMessage(error)} No OTP was sent.`
+        : formatOtpErrorMessage(error);
     clearOtpTimer();
     setOtpTimerMessage(message, "expired");
     authMessage.textContent = message;

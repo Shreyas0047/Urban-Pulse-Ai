@@ -115,8 +115,9 @@ function normalizeEmailError(error) {
   const code = error?.code || error?.responseCode || "SMTP_ERROR";
   const message = error?.response || error?.message || "SMTP request failed.";
   const details = `${code}: ${message}`;
+  const normalizedMessage = String(message).toLowerCase();
 
-  if (String(message).toLowerCase().includes("invalid login") || error?.responseCode === 535) {
+  if (normalizedMessage.includes("invalid login") || error?.responseCode === 535) {
     return createEmailDeliveryError(`${details} Check SMTP_USER and SMTP_PASS. Gmail requires an App Password, not the normal account password.`, {
       code: "SMTP_AUTH_FAILED",
       statusCode: 502,
@@ -125,7 +126,7 @@ function normalizeEmailError(error) {
     });
   }
 
-  if (String(message).toLowerCase().includes("self signed") || String(message).toLowerCase().includes("certificate")) {
+  if (normalizedMessage.includes("self signed") || normalizedMessage.includes("certificate")) {
     return createEmailDeliveryError(`${details} Check SMTP TLS settings for the provider.`, {
       code: "SMTP_TLS_FAILED",
       userMessage: "Email service TLS verification failed. The email was not sent. Contact the administrator."
@@ -136,6 +137,27 @@ function normalizeEmailError(error) {
     return createEmailDeliveryError(`${details} SMTP resolved to an unreachable network address. Set SMTP_FAMILY=4 to force IPv4.`, {
       code: "SMTP_NETWORK_UNREACHABLE",
       userMessage: "Email service cannot reach Gmail SMTP from this server. The email was not sent. Contact the administrator."
+    });
+  }
+
+  if (error?.code === "EAI_AGAIN" || error?.code === "ENOTFOUND") {
+    return createEmailDeliveryError(`${details} SMTP host DNS lookup failed from this server.`, {
+      code: "SMTP_DNS_FAILED",
+      userMessage: "Email service could not resolve the Gmail SMTP host. The email was not sent. Try again shortly."
+    });
+  }
+
+  if (error?.code === "ETIMEDOUT" || error?.code === "ESOCKET") {
+    return createEmailDeliveryError(`${details} SMTP connection timed out or the socket failed.`, {
+      code: "SMTP_CONNECTION_FAILED",
+      userMessage: "Email service could not connect to Gmail SMTP. The email was not sent. Try again shortly."
+    });
+  }
+
+  if (error?.code === "ECONNREFUSED" || error?.code === "ECONNRESET") {
+    return createEmailDeliveryError(`${details} SMTP connection was refused or reset.`, {
+      code: "SMTP_CONNECTION_RESET",
+      userMessage: "Email service connection was refused or reset. The email was not sent. Try again shortly."
     });
   }
 
