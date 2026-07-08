@@ -1075,52 +1075,8 @@ function setupHeroStorytelling() {
     return;
   }
 
-  const storyBeats = Array.from(storySection.querySelectorAll("[data-story-beat]"));
-  const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-  let frameRequested = false;
-
-  const applyStoryState = (progress) => {
-    const clampedProgress = Math.min(Math.max(progress, 0), 1);
-    const stepIndex = Math.min(storyBeats.length - 1, Math.floor(clampedProgress * storyBeats.length));
-
-    storySection.style.setProperty("--story-progress", clampedProgress.toFixed(4));
-    storySection.dataset.storyStep = String(stepIndex);
-    storyBeats.forEach((beat, index) => {
-      beat.classList.toggle("is-active", index === stepIndex);
-    });
-  };
-
-  const updateStoryProgress = () => {
-    frameRequested = false;
-
-    if (reducedMotionQuery.matches) {
-      applyStoryState(0);
-      return;
-    }
-
-    const totalScrollableDistance = Math.max(storySection.offsetHeight - window.innerHeight, 1);
-    const sectionTop = storySection.getBoundingClientRect().top;
-    const scrolledDistance = Math.min(Math.max(-sectionTop, 0), totalScrollableDistance);
-    applyStoryState(scrolledDistance / totalScrollableDistance);
-  };
-
-  const requestStoryFrame = () => {
-    if (frameRequested) {
-      return;
-    }
-
-    frameRequested = true;
-    window.requestAnimationFrame(updateStoryProgress);
-  };
-
-  updateStoryProgress();
-  window.addEventListener("scroll", requestStoryFrame, { passive: true });
-  window.addEventListener("resize", requestStoryFrame);
-  if (typeof reducedMotionQuery.addEventListener === "function") {
-    reducedMotionQuery.addEventListener("change", requestStoryFrame);
-  } else if (typeof reducedMotionQuery.addListener === "function") {
-    reducedMotionQuery.addListener(requestStoryFrame);
-  }
+  storySection.style.setProperty("--story-progress", "0");
+  storySection.dataset.storyStep = "static";
 }
 
 function setupAppNavigation() {

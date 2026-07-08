@@ -46,7 +46,7 @@ body {
   overflow-x: hidden;
   background: #101820;
   color: var(--text);
-  font-family: "Adwaita Sans", "Hanken Grotesk", "SF Pro Display", "SF Pro Text", Inter, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Adwaita Sans", "Hanken Grotesk", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
 }
@@ -3176,6 +3176,125 @@ select:focus {
   border-color: rgba(255, 68, 68, 0.3);
 }
 
+.feature-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.feature-card {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 14px;
+  align-items: start;
+  padding: 16px;
+  border-radius: 24px;
+  color: rgba(255, 255, 255, 0.92);
+  border-top: 1px solid rgba(255, 255, 255, 0.44);
+  border-left: 1px solid rgba(255, 255, 255, 0.38);
+  border-right: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.1)),
+    rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.14),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+}
+
+.feature-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 16px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.42);
+}
+
+.feature-card strong {
+  display: block;
+  letter-spacing: -0.03em;
+}
+
+.feature-card p {
+  margin: 6px 0 0;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.55;
+}
+
+.hero-stage {
+  min-height: auto;
+}
+
+.hero-sticky-shell {
+  position: relative;
+  top: auto;
+  min-height: calc(100vh - 128px);
+}
+
+.hero-grid-ring {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.hero-core-node {
+  transform: translate(-50%, -50%) rotate(-2deg);
+}
+
+.hero-module {
+  opacity: 1;
+}
+
+.hero-module-report {
+  top: 18%;
+  left: 18%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+}
+
+.hero-module-voice {
+  top: 16%;
+  left: 68%;
+  transform: translate(-50%, -50%) rotate(10deg);
+}
+
+.hero-module-ai {
+  top: 42%;
+  left: 80%;
+  transform: translate(-50%, -50%) rotate(7deg);
+}
+
+.hero-module-escalation {
+  top: 72%;
+  left: 70%;
+  transform: translate(-50%, -50%) rotate(-4deg);
+}
+
+.hero-module-ops {
+  top: 78%;
+  left: 28%;
+  transform: translate(-50%, -50%) rotate(7deg);
+}
+
+.hero-module-map {
+  top: 46%;
+  left: 14%;
+  transform: translate(-50%, -50%) rotate(-10deg);
+}
+
+.hero-module-alerts {
+  top: 49%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(1) rotate(5deg);
+  opacity: 1;
+}
+
 .section-shell,
 .glass-card,
 .overlay-panel,
@@ -3244,7 +3363,11 @@ select:focus {
 .hero-link,
 .permission-pill,
 .auth-toggle-btn,
-.ghost-link {
+.ghost-link,
+.danger-button,
+.auth-link-button {
+  min-height: 44px;
+  border-radius: 999px;
   border-color: rgba(255, 255, 255, 0.36);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.14)),
@@ -3264,6 +3387,72 @@ select {
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.62),
     0 12px 30px rgba(0, 0, 0, 0.06);
+}
+
+.light-beam-button,
+.secondary-button,
+.chip-button,
+.danger-button,
+.hero-link,
+.permission-pill,
+.auth-toggle-btn,
+.auth-link-button,
+.status-select,
+.user-role-select {
+  border-radius: 999px;
+}
+
+textarea,
+.complaint-input-panel,
+.upload-box,
+.upload-preview,
+.section-shell,
+.section-subpanel,
+.table-row,
+.issue-card,
+.metric-card,
+.insight-card,
+.map-summary-card,
+.detail-section,
+.detail-summary-card,
+.timeline-item {
+  border-radius: 24px;
+}
+
+.story-beat-list,
+.story-beat,
+.story-index {
+  display: none;
+}
+
+.story-beat.is-active {
+  transform: none;
+}
+
+.story-beat,
+.hero-core-node,
+.hero-module,
+.hero-grid-ring,
+.hero-visual-frame::after {
+  transition: none;
+}
+
+.hero-node,
+.hero-module {
+  will-change: auto;
+  animation: none;
+}
+
+@media (max-width: 920px) {
+  .feature-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .feature-card {
+    grid-template-columns: 1fr;
+  }
 }
 
 .metric-card:hover,
@@ -3675,6 +3864,106 @@ audio::-webkit-media-controls-panel {
     width: min(100vw - 24px, 360px);
     height: min(520px, calc(100vh - 24px));
   }
+}
+
+/* Final performance and iOS-shape overrides */
+.hero-stage {
+  min-height: auto;
+}
+
+.hero-sticky-shell {
+  position: relative;
+  top: auto;
+}
+
+.hero-core-node {
+  transform: translate(-50%, -50%) rotate(-2deg);
+}
+
+.hero-module,
+.hero-grid-ring {
+  transition: none;
+}
+
+.hero-module-report {
+  top: 18%;
+  left: 18%;
+}
+
+.hero-module-voice {
+  top: 16%;
+  left: 68%;
+}
+
+.hero-module-ai {
+  top: 42%;
+  left: 80%;
+}
+
+.hero-module-escalation {
+  top: 72%;
+  left: 70%;
+}
+
+.hero-module-ops {
+  top: 78%;
+  left: 28%;
+}
+
+.hero-module-map {
+  top: 46%;
+  left: 14%;
+}
+
+.hero-module-alerts {
+  top: 49%;
+  left: 50%;
+  opacity: 1;
+}
+
+.light-beam-button,
+.secondary-button,
+.chip-button,
+.danger-button,
+.hero-link,
+.permission-pill,
+.auth-toggle-btn,
+.auth-link-button,
+.admin-action-btn,
+.view-complaint-btn,
+.update-status-btn,
+.acknowledge-alert-btn,
+.save-user-btn,
+.toggle-user-btn,
+.delete-user-btn,
+.map-open-btn {
+  border-radius: 999px !important;
+}
+
+.segmented-toggle {
+  border-radius: 999px;
+}
+
+body,
+button,
+input,
+textarea,
+select,
+.brand-kicker,
+.eyebrow,
+.field-label,
+.footer-section-title,
+.panel-titlebar,
+.info-chip,
+.status-pill,
+.metric-card span,
+.insight-card span,
+.map-summary-card span,
+.post-submit-summary-row span,
+.detail-block span,
+.detail-summary-card span,
+.detail-section-label {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "Adwaita Sans", system-ui, sans-serif;
 }
 
 @media (prefers-reduced-motion: reduce) {
