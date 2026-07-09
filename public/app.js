@@ -145,7 +145,6 @@ let otpSecondsRemaining = 0;
 let dashboardDataCache = { complaints: [], users: [], digitalTwin: null, riskPredictions: null, incidentCommands: [] };
 let draftSaveTimer = null;
 let dashboardReloadTimer = null;
-const liquidGlassInstances = new Map();
 
 function emitAuthStateChange() {
   window.dispatchEvent(
@@ -169,45 +168,6 @@ function setDashboardMessage(message, type = "info") {
   dashboardMessage.textContent = message;
   dashboardMessage.dataset.state = type;
 }
-
-function ensureLiquidGlass(element, options = {}) {
-  if (!element || typeof window.liquidGlass !== "function") {
-    return null;
-  }
-
-  const existing = liquidGlassInstances.get(element);
-  if (existing) {
-    existing.refresh();
-    return existing;
-  }
-
-  const instance = window.liquidGlass(element, options);
-  liquidGlassInstances.set(element, instance);
-  element.classList.add(instance.supported ? "has-liquid-refraction" : "has-frosted-fallback");
-  element.dataset.glassEngine = instance.supported ? "refraction" : "frosted-fallback";
-  document.documentElement.dataset.glassEngine = instance.supported ? "refraction" : "frosted-fallback";
-  return instance;
-}
-
-function setupLiquidGlass() {
-  const topbar = document.querySelector(".topbar");
-  window.requestAnimationFrame(() => {
-    ensureLiquidGlass(topbar, {
-      scale: -118,
-      chroma: 8,
-      border: 0.12,
-      mapBlur: 10,
-      blur: 2,
-      saturate: 1.45,
-      fallbackBlur: 24
-    });
-  });
-}
-
-window.addEventListener("beforeunload", () => {
-  liquidGlassInstances.forEach((instance) => instance.destroy());
-  liquidGlassInstances.clear();
-});
 
 function loadAudioPreference() {
   try {
@@ -784,8 +744,10 @@ function loadSavedAuthState() {
 
 function openAuthOverlay(mode = "login") {
   authMode = mode;
+  window.UrbanPulseAuthCharacters?.reset();
   authOverlay.hidden = false;
   document.body.classList.add("auth-open");
+  document.body.classList.add("auth-screen-active");
   if (siteNav?.classList.contains("is-open")) {
     siteNav.classList.remove("is-open");
     mobileMenuToggle?.setAttribute("aria-expanded", "false");
@@ -831,17 +793,7 @@ function openAuthOverlay(mode = "login") {
         ? "Enter your registered email and new password, then request an OTP to reset securely."
         : "Choose Admin or Citizen, enter your email and password, then request an OTP to complete registration.";
 
-  window.requestAnimationFrame(() => {
-    ensureLiquidGlass(authOverlay.querySelector(".auth-panel"), {
-      scale: window.matchMedia("(max-width: 640px)").matches ? -90 : -138,
-      chroma: 8,
-      border: 0.11,
-      mapBlur: 10,
-      blur: 2.5,
-      saturate: 1.45,
-      fallbackBlur: 28
-    });
-  });
+  window.requestAnimationFrame(() => window.UrbanPulseLiquidGlass?.refresh());
 }
 
 function closeAuthOverlay() {
@@ -850,6 +802,7 @@ function closeAuthOverlay() {
     return;
   }
   authOverlay.hidden = true;
+  document.body.classList.remove("auth-screen-active");
   if (faqOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
@@ -4383,7 +4336,6 @@ setupHeroStorytelling();
 setupAboutVideoExperience();
 setupAppNavigation();
 setupGooeyInteractions();
-setupLiquidGlass();
 applyPermissionState();
 updateAudioToggleState();
 setPdfButtonState(false);

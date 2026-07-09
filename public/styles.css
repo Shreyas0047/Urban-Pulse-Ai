@@ -6891,3 +6891,581 @@ audio::-webkit-media-controls-panel {
     transition-duration: 0.01ms;
   }
 }
+
+/* React liquid-glass surfaces. Keep these rules scoped to the package mount. */
+[data-react-liquid-glass] {
+  position: relative;
+  isolation: isolate;
+}
+
+[data-react-liquid-glass] > :not(.react-liquid-glass-mount) {
+  z-index: 1;
+}
+
+.react-liquid-glass-mount {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.react-liquid-glass-mount > *,
+.react-liquid-glass-mount .glass,
+.react-liquid-glass-layer,
+.react-liquid-glass-fill {
+  width: 100%;
+  height: 100%;
+}
+
+.react-liquid-glass-fill {
+  display: block;
+}
+
+.react-liquid-glass-mount .relative {
+  position: relative;
+}
+
+.react-liquid-glass-mount .pointer-events-none {
+  pointer-events: none;
+}
+
+.react-liquid-glass-mount .mix-blend-overlay {
+  mix-blend-mode: overlay;
+}
+
+.react-liquid-glass-mount .opacity-0 {
+  opacity: 0;
+}
+
+.react-liquid-glass-mount .opacity-20 {
+  opacity: 0.2;
+}
+
+.react-liquid-glass-mount .opacity-100 {
+  opacity: 1;
+}
+
+.topbar[data-react-liquid-glass] {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.navigation-glass-shadow,
+.navigation-glass-refraction {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.navigation-glass-shadow {
+  background: rgba(18, 27, 39, 0.22);
+  box-shadow:
+    0 0 8px rgba(0, 0, 0, 0.03),
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    inset 3px 3px 0.5px -3.5px rgba(255, 255, 255, 0.09),
+    inset -3px -3px 0.5px -3.5px rgba(255, 255, 255, 0.85),
+    inset 1px 1px 1px -0.5px rgba(255, 255, 255, 0.6),
+    inset -1px -1px 1px -0.5px rgba(255, 255, 255, 0.6),
+    inset 0 0 6px 6px rgba(255, 255, 255, 0.12),
+    inset 0 0 2px 2px rgba(255, 255, 255, 0.06),
+    0 0 12px rgba(0, 0, 0, 0.15);
+}
+
+.navigation-glass-refraction {
+  background: rgba(255, 255, 255, 0.025);
+  -webkit-backdrop-filter: url("#navigation-container-glass") blur(14px) saturate(150%);
+  backdrop-filter: url("#navigation-container-glass") blur(14px) saturate(150%);
+}
+
+.navigation-glass-filter {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.auth-panel[data-react-liquid-glass] {
+  background: rgba(12, 19, 28, 0.2);
+  border-color: rgba(225, 241, 255, 0.2);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar[data-react-liquid-glass],
+  .auth-panel[data-react-liquid-glass] {
+    background: rgba(18, 28, 40, 0.72);
+    -webkit-backdrop-filter: blur(22px) saturate(135%);
+    backdrop-filter: blur(22px) saturate(135%);
+  }
+}
+
+/* GradientButton treatment for primary, high-intent actions. */
+.gradient-button {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 132px;
+  min-height: 51px;
+  padding: 14px 36px;
+  overflow: hidden;
+  border: 1px solid rgba(180, 217, 255, 0.42);
+  border-radius: 11px !important;
+  color: #fff;
+  font-family: "Adwaita Sans", "SF Pro Display", "Helvetica Neue", sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 19px;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.2), transparent 34%),
+    linear-gradient(100deg, #155eef 0%, #0b8fcf 52%, #15a59a 100%);
+  box-shadow:
+    0 14px 34px rgba(11, 111, 205, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(2, 25, 56, 0.28);
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    filter 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.gradient-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(105deg, transparent 25%, rgba(255, 255, 255, 0.24) 48%, transparent 70%);
+  transform: translateX(-115%);
+  transition: transform 500ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.gradient-button:hover {
+  color: #fff;
+  filter: brightness(1.08) saturate(1.06);
+  transform: translateY(-2px);
+  box-shadow:
+    0 19px 42px rgba(11, 111, 205, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(2, 25, 56, 0.24);
+}
+
+.gradient-button:hover::after {
+  transform: translateX(115%);
+}
+
+.gradient-button:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.gradient-button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 4px rgba(107, 180, 255, 0.24),
+    0 16px 36px rgba(11, 111, 205, 0.34);
+}
+
+.gradient-button:disabled,
+.gradient-button[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.5;
+  filter: grayscale(0.25);
+}
+
+.gradient-button-variant {
+  border-color: rgba(255, 213, 132, 0.5);
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.2), transparent 34%),
+    linear-gradient(100deg, #cb4d2c 0%, #e57c28 52%, #e3a32f 100%);
+  box-shadow:
+    0 14px 34px rgba(203, 77, 44, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(62, 20, 8, 0.26);
+}
+
+@media (max-width: 640px) {
+  .gradient-button {
+    width: 100%;
+    padding-inline: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gradient-button,
+  .gradient-button::after {
+    transition: none;
+  }
+
+  .gradient-button:hover,
+  .gradient-button:active {
+    transform: none;
+  }
+}
+
+/* Auth-only civic character scene. */
+.auth-brand-panel {
+  gap: 18px;
+  padding: clamp(28px, 3.5vw, 44px);
+}
+
+.auth-brand-copy .eyebrow {
+  margin-bottom: 10px;
+}
+
+.auth-brand-copy h1 {
+  font-size: clamp(2.7rem, 4.2vw, 4.5rem);
+}
+
+.auth-brand-copy > p:last-child {
+  margin-top: 16px;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.auth-character-stage {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  width: min(100%, 500px);
+  height: clamp(210px, 29vh, 270px);
+  min-height: 210px;
+  filter: drop-shadow(0 24px 22px rgba(0, 0, 0, 0.25));
+}
+
+.auth-character-stage::before {
+  content: "";
+  position: absolute;
+  inset: 18% 4% 0;
+  border-radius: 44%;
+  background: radial-gradient(circle, rgba(76, 149, 255, 0.14), transparent 67%);
+  filter: blur(18px);
+}
+
+.auth-character-ground {
+  position: absolute;
+  right: 2%;
+  bottom: 0;
+  left: 2%;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.28);
+  filter: blur(4px);
+}
+
+.civic-character {
+  --face-x: 0px;
+  --face-y: 0px;
+  --lean: 0deg;
+  position: absolute;
+  bottom: 3px;
+  overflow: visible;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-bottom: 0;
+  transform: skewX(var(--lean));
+  transform-origin: bottom center;
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, 0.13),
+    inset -12px -8px 22px rgba(0, 0, 0, 0.12);
+  transition:
+    height 650ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 300ms ease-out;
+}
+
+.civic-character-sanitation {
+  left: 3%;
+  z-index: 2;
+  width: 26%;
+  height: 73%;
+  border-radius: 20px 20px 5px 5px;
+  background: linear-gradient(160deg, #35bfa4, #147b78);
+}
+
+.civic-character-water {
+  left: 27%;
+  z-index: 3;
+  width: 24%;
+  height: 88%;
+  border-radius: 18px 18px 5px 5px;
+  background: linear-gradient(160deg, #4f94ff, #2454a7);
+}
+
+.civic-character-roads {
+  left: 50%;
+  z-index: 4;
+  width: 27%;
+  height: 79%;
+  border-radius: 20px 20px 5px 5px;
+  background: linear-gradient(160deg, #eeaf3f, #ba651f);
+}
+
+.civic-character-response {
+  right: 1%;
+  z-index: 1;
+  width: 23%;
+  height: 96%;
+  border-radius: 18px 18px 5px 5px;
+  background: linear-gradient(160deg, #e56e63, #983b45);
+}
+
+.character-cap {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  width: 72%;
+  height: 32px;
+  border-radius: 48px 48px 10px 10px;
+  transform: translateX(-50%);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.2);
+}
+
+.character-cap-sanitation {
+  background: #153e43;
+}
+
+.character-cap-water {
+  background: #b9d5ff;
+}
+
+.character-hard-hat {
+  top: -20px;
+  height: 38px;
+  background: #f4ce52;
+}
+
+.character-hard-hat::after {
+  content: "";
+  position: absolute;
+  right: -9px;
+  bottom: 3px;
+  left: -9px;
+  height: 7px;
+  border-radius: 999px;
+  background: #c7952f;
+}
+
+.character-response-helmet {
+  top: -21px;
+  height: 40px;
+  background: #17202b;
+}
+
+.character-response-helmet::after {
+  content: "";
+  position: absolute;
+  top: 11px;
+  left: 50%;
+  width: 25px;
+  height: 10px;
+  border-radius: 4px;
+  background: #efbf47;
+  transform: translateX(-50%);
+}
+
+.character-eyes {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  display: flex;
+  gap: clamp(14px, 2vw, 24px);
+  transform: translate(calc(-50% + var(--face-x)), var(--face-y));
+  transition:
+    transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 400ms ease;
+}
+
+.character-eye {
+  position: relative;
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #f8fbff;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.12);
+  transition: height 120ms ease;
+}
+
+.character-pupil {
+  --pupil-x: 0px;
+  --pupil-y: 0px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #111923;
+  transform: translate(var(--pupil-x), var(--pupil-y));
+  transition: transform 80ms ease-out;
+}
+
+.civic-character.is-blinking .character-eye {
+  height: 3px;
+}
+
+.auth-character-stage.is-typing .civic-character-sanitation .character-eyes,
+.auth-character-stage.is-typing .civic-character-water .character-eyes {
+  transform: translate(calc(-50% + 12px), 4px);
+}
+
+.auth-character-stage.is-typing .civic-character-roads .character-eyes,
+.auth-character-stage.is-typing .civic-character-response .character-eyes {
+  transform: translate(calc(-50% - 12px), 4px);
+}
+
+.auth-character-stage.is-typing .civic-character-water {
+  height: 92%;
+}
+
+.auth-character-stage.is-password-visible .civic-character:nth-of-type(odd) .character-eyes {
+  transform: translate(calc(-50% - 15px), -5px);
+}
+
+.auth-character-stage.is-password-visible .civic-character:nth-of-type(even) .character-eyes {
+  transform: translate(calc(-50% + 15px), -5px);
+}
+
+.character-badge {
+  position: absolute;
+  right: 10px;
+  bottom: 18px;
+  left: 10px;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.82);
+  font-family: "Adwaita Sans", "SF Pro Display", sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.character-detail {
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: 58%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 11px 0 rgba(19, 28, 39, 0.38);
+}
+
+.character-detail-water {
+  height: 20px;
+  background:
+    linear-gradient(90deg, transparent 20%, rgba(185, 213, 255, 0.7) 20% 28%, transparent 28% 72%, rgba(185, 213, 255, 0.7) 72% 80%, transparent 80%);
+  box-shadow: none;
+}
+
+.character-detail-roads {
+  background: rgba(30, 36, 43, 0.72);
+  box-shadow: 0 11px 0 rgba(244, 206, 82, 0.82);
+}
+
+.character-detail-response {
+  background: rgba(245, 247, 250, 0.88);
+  box-shadow: 0 11px 0 rgba(24, 31, 39, 0.78);
+}
+
+.auth-password-control {
+  position: relative;
+}
+
+.auth-password-control input {
+  padding-right: 52px;
+}
+
+.auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 11px;
+  color: rgba(220, 231, 249, 0.58);
+  background: transparent;
+  transform: translateY(-50%);
+  transition:
+    color 180ms ease,
+    background 180ms ease;
+}
+
+.auth-password-toggle:hover,
+.auth-password-toggle.is-visible {
+  color: #dbe8ff;
+  background: rgba(143, 182, 255, 0.1);
+}
+
+.auth-password-toggle:focus-visible {
+  outline: 2px solid rgba(143, 182, 255, 0.6);
+  outline-offset: 1px;
+}
+
+.auth-password-eye {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.auth-password-toggle.is-visible::after {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  transform: rotate(-42deg);
+}
+
+@media (max-height: 760px) and (min-width: 881px) {
+  .auth-brand-panel {
+    gap: 12px;
+    padding-block: 28px;
+  }
+
+  .auth-brand-copy h1 {
+    font-size: 2.8rem;
+  }
+
+  .auth-brand-copy > p:last-child {
+    display: none;
+  }
+
+  .auth-character-stage {
+    height: 210px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .civic-character,
+  .character-eyes,
+  .character-eye,
+  .character-pupil {
+    transition: none;
+  }
+}
+
+/* Keep the civic backdrop, but fully isolate authentication from dashboard UI. */
+body.auth-screen-active #mainDashboard,
+body.auth-screen-active .chatbot-launcher,
+body.auth-screen-active .chatbot-panel {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}

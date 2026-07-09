@@ -15,7 +15,7 @@
     <div class="scene-aurora scene-aurora-b" aria-hidden="true"></div>
 
     <div id="authOverlay" class="overlay-shell auth-overlay" role="dialog" aria-modal="true" aria-labelledby="authTitle" hidden>
-      <div class="overlay-panel auth-panel">
+      <div class="overlay-panel auth-panel" data-react-liquid-glass="authentication">
         <aside class="auth-brand-panel" aria-hidden="true">
           <div class="auth-brand-lockup">
             <span class="auth-brand-mark">
@@ -37,8 +37,52 @@
 
           <div class="auth-brand-copy">
             <p class="eyebrow">Bengaluru civic reporting</p>
-            <h1>Report clearly.<br />Follow every update.</h1>
-            <p>Submit local issues with evidence, location, and AI-assisted analysis. Track the response from one place.</p>
+            <h1>One city.<br />Every issue seen.</h1>
+            <p>Report local problems, attach evidence, and follow the response from one place.</p>
+          </div>
+
+          <div id="authCharacterStage" class="auth-character-stage">
+            <div class="auth-character-ground"></div>
+
+            <div class="civic-character civic-character-sanitation" data-auth-character data-look-x="12" data-look-y="8">
+              <span class="character-cap character-cap-sanitation"></span>
+              <span class="character-badge">Cleanliness</span>
+              <span class="character-eyes">
+                <i class="character-eye"><b class="character-pupil"></b></i>
+                <i class="character-eye"><b class="character-pupil"></b></i>
+              </span>
+              <span class="character-detail character-detail-sanitation"></span>
+            </div>
+
+            <div class="civic-character civic-character-water" data-auth-character data-look-x="10" data-look-y="7">
+              <span class="character-cap character-cap-water"></span>
+              <span class="character-badge">Water</span>
+              <span class="character-eyes">
+                <i class="character-eye"><b class="character-pupil"></b></i>
+                <i class="character-eye"><b class="character-pupil"></b></i>
+              </span>
+              <span class="character-detail character-detail-water"></span>
+            </div>
+
+            <div class="civic-character civic-character-roads" data-auth-character data-look-x="12" data-look-y="8">
+              <span class="character-cap character-hard-hat"></span>
+              <span class="character-badge">Roads</span>
+              <span class="character-eyes">
+                <i class="character-eye"><b class="character-pupil"></b></i>
+                <i class="character-eye"><b class="character-pupil"></b></i>
+              </span>
+              <span class="character-detail character-detail-roads"></span>
+            </div>
+
+            <div class="civic-character civic-character-response" data-auth-character data-look-x="9" data-look-y="7">
+              <span class="character-cap character-response-helmet"></span>
+              <span class="character-badge">Response</span>
+              <span class="character-eyes">
+                <i class="character-eye"><b class="character-pupil"></b></i>
+                <i class="character-eye"><b class="character-pupil"></b></i>
+              </span>
+              <span class="character-detail character-detail-response"></span>
+            </div>
           </div>
 
           <div class="auth-brand-foot">
@@ -79,7 +123,15 @@
 
             <label>
               <span class="field-label">Password</span>
-              <input type="password" id="authPassword" name="password" placeholder="Enter password" autocomplete="current-password" />
+              <div class="auth-password-control">
+                <input type="password" id="authPassword" name="password" placeholder="Enter password" autocomplete="current-password" />
+                <button type="button" id="authPasswordToggle" class="auth-password-toggle" aria-label="Show password" aria-pressed="false">
+                  <svg class="auth-password-eye" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"></path>
+                    <circle cx="12" cy="12" r="2.8"></circle>
+                  </svg>
+                </button>
+              </div>
             </label>
 
             <button type="button" id="forgotPasswordBtn" class="auth-link-button">Forgot password?</button>
@@ -92,7 +144,7 @@
             <p id="otpTimerMessage" class="helper-text otp-timer-message" hidden></p>
 
             <div class="auth-form-actions">
-              <button type="submit" id="authSubmitBtn" class="light-beam-button">Login</button>
+              <button type="submit" id="authSubmitBtn" class="light-beam-button gradient-button">Login</button>
             </div>
 
             <p id="loginAttemptCounter" class="helper-text login-attempt-counter" hidden></p>
@@ -147,7 +199,7 @@
 
     <div id="mainDashboard" class="app-shell">
       <div class="main-frame">
-        <header class="topbar">
+        <header class="topbar" data-react-liquid-glass="navigation">
           <a href="#heroStage" class="brand-lockup">
             <span class="brand-mark">
               <svg viewBox="0 0 64 64" class="brand-mark-svg" aria-hidden="true">
@@ -204,7 +256,7 @@
                     Urban Pulse AI helps citizens submit complaints and helps admins route, monitor, and respond to incidents faster.
                   </p>
                   <div class="hero-actions">
-                    <a href="#reportFormWorkspace" class="light-beam-button hero-button">Report an issue</a>
+                    <a href="#reportFormWorkspace" class="light-beam-button gradient-button hero-button">Report an issue</a>
                     <a href="#adminWorkspace" class="ghost-link hero-button">View dashboard</a>
                   </div>
 
@@ -481,7 +533,7 @@
                   </div>
 
                   <div class="form-actions">
-                    <button type="submit" id="complaintSubmitBtn" class="light-beam-button">Submit Report</button>
+                    <button type="submit" id="complaintSubmitBtn" class="light-beam-button gradient-button">Submit Report</button>
                     <button type="button" id="generatePdfBtn" class="secondary-button" disabled>Generate PDF</button>
                     <button type="button" id="emailBbmpBtn" class="secondary-button" disabled>Email Authority</button>
                   </div>
@@ -754,7 +806,7 @@
         <div class="post-submit-actions">
           <button type="button" id="modalGeneratePdfBtn" class="secondary-button">Generate PDF</button>
           <button type="button" id="modalEmailBbmpBtn" class="secondary-button">Email Authority</button>
-          <button type="button" id="informClosedOnesBtn" class="light-beam-button">Notify contacts</button>
+          <button type="button" id="informClosedOnesBtn" class="light-beam-button gradient-button gradient-button-variant">Notify contacts</button>
         </div>
         <form id="closeContactsForm" class="close-contacts-form" hidden>
           <p class="helper-text">Enter up to 5 email IDs to notify people about this issue.</p>
@@ -766,7 +818,7 @@
             <input type="email" name="contactEmail" placeholder="Email ID 5" autocomplete="email" />
           </div>
           <div class="post-submit-actions">
-            <button type="submit" id="sendCloseContactsBtn" class="light-beam-button">Send warning</button>
+            <button type="submit" id="sendCloseContactsBtn" class="light-beam-button gradient-button gradient-button-variant">Send warning</button>
             <button type="button" id="cancelCloseContactsBtn" class="chip-button">Cancel</button>
           </div>
         </form>
@@ -846,10 +898,11 @@
       </form>
     </section>
 
-    <script src="/vendor/liquid-glass/liquid-glass.js"></script>
     <script type="module" src="/liquid-ether.js"></script>
     <script type="module" src="/audio-transcriber.js"></script>
+    <script src="/liquid-glass-react.js"></script>
     <script src="/app.js"></script>
+    <script src="/auth-characters.js"></script>
     <script src="/chatbot.js"></script>
   </body>
 </html>
