@@ -1,5 +1,6 @@
 import base64
 import io
+from functools import lru_cache
 
 import numpy as np
 
@@ -7,6 +8,7 @@ from ai_config import VISION_CONFIDENCE_THRESHOLD, VISION_MAX_IMAGE_BYTES, VISIO
 from category_catalog import COMPLAINT_CATEGORIES, CATEGORY_BY_ID
 from model_runtime import cosine_similarity, get_vision_model
 from text_processing import normalize_text
+from threat_intelligence import build_threat_assessment
 
 try:
     from PIL import Image
@@ -32,6 +34,22 @@ CATEGORY_PROMPTS = {
     category["id"]: build_category_prompts(category)
     for category in COMPLAINT_CATEGORIES
 }
+
+
+@lru_cache(maxsize=None)
+def category_prompt_vectors(category_id):
+    model = get_vision_model()
+    if model is None:
+        return None
+
+    prompts = CATEGORY_PROMPTS.get(category_id)
+    if not prompts:
+        return None
+
+    try:
+        return np.array(model.encode(prompts, normalize_embeddings=True), dtype=float)
+    except Exception:
+        return None
 
 
 def decode_image(image_base64):
@@ -145,7 +163,9 @@ def clip_candidates(image):
         image_vector = np.array(model.encode([image], normalize_embeddings=True)[0], dtype=float)
         candidates = []
         for category in COMPLAINT_CATEGORIES:
-            prompt_vectors = np.array(model.encode(CATEGORY_PROMPTS[category["id"]], normalize_embeddings=True), dtype=float)
+            prompt_vectors = category_prompt_vectors(category["id"])
+            if prompt_vectors is None:
+                continue
             score = max(cosine_similarity(image_vector, prompt_vector) for prompt_vector in prompt_vectors)
             candidates.append(
                 {
@@ -161,6 +181,91 @@ def clip_candidates(image):
         return candidates
     except Exception:
         return []
+
+
+def image_passes(image):
+    if image is None:
+        return []
+
+    width, height = image.size
+    if width < 64 or height < 64:
+        return [("full", image)]
+
+    center_margin_x = int(width * 0.15)
+    center_margin_y = int(height * 0.15)
+    mid_x = width // 2
+    mid_y = height // 2
+
+    boxes = [
+        ("full", (0, 0, width, height)),
+        ("center", (center_margin_x, center_margin_y, width - center_margin_x, height - center_margin_y)),
+        ("top", (0, 0, width, max(mid_y, 1))),
+        ("bottom", (0, mid_y, width, height)),
+        ("left", (0, 0, max(mid_x, 1), height)),
+        ("right", (mid_x, 0, width, height)),
+    ]
+
+    passes = []
+    for name, box in boxes:
+        left, top, right, bottom = box
+        if right - left >= 32 and bottom - top >= 32:
+            passes.append((name, image.crop(box) if name != "full" else image))
+
+    return passes
+
+
+def clip_candidates_multi_pass(image):
+    passes = image_passes(image)
+    if not passes:
+        return [], {"passes": [], "aggregate": {}}
+
+    category_scores = {category["id"]: [] for category in COMPLAINT_CATEGORIES}
+    pass_summaries = []
+
+    for pass_name, pass_image in passes:
+        pass_candidates = clip_candidates(pass_image)
+        if not pass_candidates:
+            continue
+
+        top = pass_candidates[0]
+        pass_summaries.append(
+            {
+                "name": pass_name,
+                "topCategoryId": top.get("category_id"),
+                "topLabel": top.get("category_label") or top.get("label"),
+                "confidence": top.get("confidence", 0),
+            }
+        )
+
+        for candidate in pass_candidates:
+            category_id = candidate.get("category_id")
+            if category_id in category_scores:
+                category_scores[category_id].append(float(candidate.get("confidence") or 0))
+
+    aggregate_candidates = []
+    for category in COMPLAINT_CATEGORIES:
+        scores = category_scores.get(category["id"], [])
+        if not scores:
+            continue
+
+        score = max(scores) * 0.62 + (sum(scores) / len(scores)) * 0.38
+        aggregate_candidates.append(
+            {
+                "label": category["label"],
+                "category_id": category["id"],
+                "category_label": category["label"],
+                "confidence": round(clamp01(score), 3),
+                "source": "clip-multipass",
+                "passCount": len(scores),
+            }
+        )
+
+    aggregate_candidates.sort(key=lambda item: item["confidence"], reverse=True)
+    aggregate = {
+        "passCount": len(pass_summaries),
+        "topCategories": pass_summaries[:6],
+    }
+    return aggregate_candidates, {"passes": pass_summaries[:8], "aggregate": aggregate}
 
 
 def merge_candidates(clip_items, feature_items):
@@ -190,16 +295,38 @@ def merge_candidates(clip_items, feature_items):
     return candidates
 
 
-def detect_objects_from_features(image_features, image_hint, image_base64=None, image_mime_type=None):
+def detect_objects_from_features(
+    image_features,
+    image_hint,
+    image_base64=None,
+    image_mime_type=None,
+    previous_complaints=None,
+    recent_area_complaints=None,
+    location="",
+):
     feature_items = feature_signal_candidates(image_features, image_hint)
     image = decode_image(image_base64)
-    clip_items = clip_candidates(image)
+    clip_items, pass_diagnostics = clip_candidates_multi_pass(image)
     candidates = merge_candidates(clip_items, feature_items) if clip_items else feature_items
     has_text_context = bool(normalize_text(image_hint))
     threshold = VISION_CONFIDENCE_THRESHOLD if clip_items else (0.28 if not has_text_context else 0.34)
     detections = [item for item in candidates if item["confidence"] >= threshold]
     top_detection = detections[0] if detections else None
     fallback_used = not bool(clip_items)
+    threat_assessment = build_threat_assessment(
+        image=image,
+        image_base64=image_base64,
+        image_mime_type=image_mime_type,
+        image_features=image_features,
+        image_hint=image_hint,
+        candidates=candidates,
+        top_detection=top_detection,
+        pass_diagnostics=pass_diagnostics,
+        fallback_used=fallback_used,
+        previous_complaints=previous_complaints,
+        recent_area_complaints=recent_area_complaints,
+        location=location,
+    )
 
     return {
         "detections": detections[:6],
@@ -210,10 +337,14 @@ def detect_objects_from_features(image_features, image_hint, image_base64=None, 
         "fallbackUsed": fallback_used,
         "imageAccepted": image is not None,
         "imageMimeType": image_mime_type or "",
+        "passDiagnostics": pass_diagnostics,
+        "threatAssessment": threat_assessment,
         "confidenceBreakdown": {
             "clipTop": clip_items[0]["confidence"] if clip_items else 0,
             "featureTop": feature_items[0]["confidence"] if feature_items else 0,
             "fusedTop": top_detection["confidence"] if top_detection else 0,
+            "threatRisk": threat_assessment.get("riskScore", 0),
+            "threatConfidence": threat_assessment.get("confidence", 0),
         },
     }
 

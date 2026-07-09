@@ -1,8 +1,9 @@
 const env = require("../config/env");
+const { buildThreatAssessment } = require("./threatAssessment");
 const aiCategories = require("../../shared/aiCategories.json");
 
 const CATEGORY_ID_BY_ISSUE_TYPE = new Map(aiCategories.map((category) => [category.label, category.id]));
-const AI_EVALUATION_VERSION = "urban-pulse-ai-v2";
+const AI_EVALUATION_VERSION = "urban-pulse-threat-v1";
 
 const ISSUE_PROFILES = [
   {
@@ -1021,6 +1022,19 @@ function analyzeComplaintLocally(payload) {
   const cvBundle = buildCvResult(payload);
   const fusedIssue = fuseIssueDecision(nlpBundle, cvBundle, payload);
   const priority = predictPriority(payload, fusedIssue, nlpBundle.result, cvBundle.result);
+  const threatAssessment = buildThreatAssessment(payload, {
+    nlpBundle,
+    cvBundle,
+    fusedIssue,
+    priority
+  });
+  if (threatAssessment.threatLevel === "Critical" && threatAssessment.confidence >= 0.46 && priority.level !== "Critical") {
+    priority.level = "Critical";
+    priority.score = Math.max(priority.score, threatAssessment.riskScore, 0.86);
+  } else if (threatAssessment.threatLevel === "High" && threatAssessment.confidence >= 0.44 && ["Low", "Medium"].includes(priority.level)) {
+    priority.level = "High";
+    priority.score = Math.max(priority.score, threatAssessment.riskScore, 0.74);
+  }
   const alerts = buildAlerts(priority, payload.location, fusedIssue);
   const assignedAuthority = assignAuthority(priority, payload.location, fusedIssue);
   const mapLocation = buildMapLocation(payload.location);
@@ -1038,7 +1052,10 @@ function analyzeComplaintLocally(payload) {
       team: fusedIssue.team,
       confidence: Number((nlpBundle.result.confidence || 0).toFixed(2))
     },
-    cv: cvBundle.result,
+    cv: {
+      ...cvBundle.result,
+      threatAssessment
+    },
     priority,
     confidence: Number(confidence.toFixed(2)),
     status: priority.level === "Critical" ? "Escalated" : priority.level === "High" ? "In Progress" : "Queued",
@@ -1051,9 +1068,10 @@ function analyzeComplaintLocally(payload) {
     ],
     imageUpload: "Processed by local multimodal analyzer"
     ,
+    threatAssessment,
     aiMeta: {
       provider: "express",
-      engine: "local-keyword-feature-fusion-v3",
+      engine: "local-keyword-feature-fusion-threat-v4",
       model: "deterministic-rules",
       fallbackUsed: true,
       categoryId: fusedIssue.id || CATEGORY_ID_BY_ISSUE_TYPE.get(fusedIssue.issueType) || "general",
@@ -1061,7 +1079,12 @@ function analyzeComplaintLocally(payload) {
       visionProvider: "feature-fallback",
       visionFallbackUsed: true,
       evaluationVersion: AI_EVALUATION_VERSION,
-      machineHintIgnoredForClassification: true
+      machineHintIgnoredForClassification: true,
+      threatEngine: threatAssessment.engine,
+      threatStatus: threatAssessment.status,
+      threatLevel: threatAssessment.threatLevel,
+      threatRiskScore: threatAssessment.riskScore,
+      imageFingerprint: threatAssessment.integrity?.sha256 || ""
     }
   };
 }
@@ -1085,8 +1108,17 @@ async function analyzeComplaint(payload) {
       throw new Error(data.error || "AI microservice request failed");
     }
 
+    const threatAssessment = buildThreatAssessment(payload, {
+      remoteAnalysis: data
+    });
+
     return {
       ...data,
+      threatAssessment,
+      cv: {
+        ...(data.cv || {}),
+        threatAssessment
+      },
       aiMeta: {
         ...(data.aiMeta || {}),
         provider: data.aiMeta?.provider || "flask",
@@ -1098,7 +1130,12 @@ async function analyzeComplaint(payload) {
         visionProvider: data.aiMeta?.visionProvider || data.cv?.provider || "feature-fallback",
         visionFallbackUsed: Boolean(data.aiMeta?.visionFallbackUsed || data.cv?.fallbackUsed),
         evaluationVersion: data.aiMeta?.evaluationVersion || AI_EVALUATION_VERSION,
-        machineHintIgnoredForClassification: Boolean(data.aiMeta?.machineHintIgnoredForClassification)
+        machineHintIgnoredForClassification: Boolean(data.aiMeta?.machineHintIgnoredForClassification),
+        threatEngine: data.aiMeta?.threatEngine || threatAssessment.engine,
+        threatStatus: data.aiMeta?.threatStatus || threatAssessment.status,
+        threatLevel: data.aiMeta?.threatLevel || threatAssessment.threatLevel,
+        threatRiskScore: data.aiMeta?.threatRiskScore || threatAssessment.riskScore,
+        imageFingerprint: data.aiMeta?.imageFingerprint || threatAssessment.integrity?.sha256 || ""
       }
     };
   } catch (_error) {

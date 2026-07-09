@@ -74,6 +74,7 @@ def health():
                 "textImageConflictDetection": True,
                 "structuredExplainability": True,
                 "transcriptNormalization": True,
+                "threatDetection": True,
             },
         }
     )

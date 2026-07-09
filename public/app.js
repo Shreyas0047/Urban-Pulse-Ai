@@ -2301,8 +2301,9 @@ function renderAnalysis(result) {
   const routeText = result.routing?.unit ? ` ${result.routing.unit} is assigned.` : "";
   const broadcastText = result.broadcast?.triggered ? ` Emergency broadcast ${result.broadcast.status}.` : "";
   const weatherText = result.weather?.note ? ` Weather context: ${result.weather.note}` : "";
+  const threatText = result.threatAssessment?.threatLevel ? ` Threat level: ${result.threatAssessment.threatLevel}.` : "";
   setDashboardMessage(
-    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}.${routeText} Detected issue: ${result.nlp?.issueType || result.cv.detected}.${reviewText}${broadcastText}${weatherText}`,
+    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}.${routeText} Detected issue: ${result.nlp?.issueType || result.cv.detected}.${threatText}${reviewText}${broadcastText}${weatherText}`,
     result.explainability?.reviewRequired ? "info" : "success"
   );
 }
@@ -2333,6 +2334,7 @@ function buildSubmittedReport(payload, result) {
     incidentCommand: result.incidentCommand || result.explainability?.incidentCommand || null,
     weather: result.weather || result.explainability?.weather || null,
     civicEvidence: result.civicEvidence || result.explainability?.civicEvidence || null,
+    threatAssessment: result.threatAssessment || result.explainability?.threatAssessment || result.cv?.threatAssessment || null,
     status: result.status || "Queued",
     detection: result.cv?.detected || "No image analysis available",
     cvReason: result.cv?.reason || "Local AI matched the uploaded issue against known civic patterns.",
@@ -2535,12 +2537,83 @@ function renderCivicEvidenceReason(complaint) {
   return evidence.reason || "Civic search context was not available for this complaint.";
 }
 
+function getThreatAssessment(complaint) {
+  return complaint?.ai?.threatAssessment || complaint?.threatAssessment || complaint?.explainability?.threatAssessment || null;
+}
+
+function formatPercent(value) {
+  return Number.isFinite(Number(value)) ? `${Math.round(Number(value) * 100)}%` : "Not recorded";
+}
+
+function renderThreatSummary(threat) {
+  if (!threat) {
+    return "Threat assessment was not recorded for this complaint.";
+  }
+
+  return [
+    `Incident: ${threat.incident || "Civic incident"}`,
+    `Status: ${threat.status || "not available"}`,
+    `Confidence: ${formatPercent(threat.confidence)}`,
+    threat.safetyGate?.action ? `Safety action: ${threat.safetyGate.action.replaceAll("_", " ")}` : ""
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
+function renderThreatEvidence(threat) {
+  const relationships = (threat?.relationships || []).map((item) => `${item.severity || "Risk"}: ${item.label || item.rule}`);
+  const evidence = [...(threat?.visualEvidence || []), ...relationships].slice(0, 5);
+  if (!evidence.length) {
+    return "No structured threat evidence was stored.";
+  }
+
+  return evidence.map(escapeHtml).join("<br>");
+}
+
+function renderThreatIntegrity(threat) {
+  const integrity = threat?.integrity || {};
+  if (!integrity.status) {
+    return "No image integrity snapshot was stored.";
+  }
+
+  const shortHash = integrity.sha256 ? `${integrity.sha256.slice(0, 10)}...` : "not recorded";
+  return [
+    `Image check: ${integrity.status}`,
+    `Fingerprint: ${shortHash}`,
+    integrity.bytes ? `Size: ${Math.round(Number(integrity.bytes) / 1024)} KB` : "",
+    ...(integrity.notes || []).slice(0, 2)
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
+function renderThreatDuplicates(threat) {
+  const duplicate = threat?.duplicateCorrelation || {};
+  if (!duplicate.status) {
+    return "No duplicate or cluster signal was stored.";
+  }
+
+  return [
+    `Cluster risk: ${duplicate.clusterRisk || "normal"}`,
+    `Exact matches: ${duplicate.exactMatches || 0}`,
+    `Near matches: ${duplicate.nearMatches || 0}`,
+    `Related recent cases: ${duplicate.relatedRecentCount || 0}`,
+    duplicate.reason || ""
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
 function renderComplaintDetail(complaint) {
   complaintDetailTitle.textContent = complaint.type || "Complaint";
   const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
   const ageInDays = countDaysOpen(complaint.createdAt);
   const alternatives = Array.isArray(complaint.ai?.visionCandidates) ? complaint.ai.visionCandidates.slice(1, 4) : [];
   const timelineHistory = Array.isArray(complaint.statusHistory) ? [...complaint.statusHistory].reverse() : [];
+  const threat = getThreatAssessment(complaint);
   complaintDetailBody.innerHTML = `
     <div class="detail-case-layout">
       <section class="detail-hero">
@@ -2620,6 +2693,26 @@ function renderComplaintDetail(complaint) {
           <p class="detail-section-label">Incident command</p>
           <strong>${complaint.incidentCommand?.triggered ? escapeHtml(complaint.incidentCommand.incidentCode || "Command active") : "Not opened"}</strong>
           <p>${renderIncidentSummary(complaint)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Threat assessment</p>
+          <strong>${threat ? `${escapeHtml(threat.threatLevel || "Not assessed")} · ${formatPercent(threat.riskScore)}` : "Not recorded"}</strong>
+          <p>${renderThreatSummary(threat)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Threat evidence</p>
+          <strong>${threat?.hazards?.length ? pluralize(threat.hazards.length, "hazard") : "No hazards"}</strong>
+          <p>${renderThreatEvidence(threat)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Evidence quality</p>
+          <strong>${escapeHtml(threat?.integrity?.status || "Not checked")}</strong>
+          <p>${renderThreatIntegrity(threat)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Duplicate signal</p>
+          <strong>${escapeHtml(threat?.duplicateCorrelation?.clusterRisk || "Not checked")}</strong>
+          <p>${renderThreatDuplicates(threat)}</p>
         </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Weather context</p>
@@ -2777,6 +2870,13 @@ async function generatePdfReport(report, options = {}) {
     items.length
       ? items.map((item) => `${item.title || item.domain || "Reference"} - ${item.url}`)
       : ["No entries recorded."];
+  const threat = report.threatAssessment || {};
+  const threatEvidenceLines = [
+    ...(threat.visualEvidence || []),
+    ...(threat.relationships || []).map((item) => `${item.severity || "Risk"} - ${item.label || item.rule}`)
+  ].slice(0, 6);
+  const threatDuplicate = threat.duplicateCorrelation || {};
+  const threatIntegrity = threat.integrity || {};
 
   doc.setDrawColor(50, 76, 114);
   doc.setLineWidth(0.5);
@@ -2825,6 +2925,30 @@ async function generatePdfReport(report, options = {}) {
   drawRow("AI Engine", report.aiMeta?.engine || "Not recorded");
   drawRow("AI Provider", report.aiMeta?.provider || "Not recorded");
   drawRow("Vision Engine", report.aiMeta?.visionEngine || "Not recorded");
+  drawRow(
+    "Threat Level",
+    threat.threatLevel
+      ? `${threat.threatLevel} risk, ${formatPercent(threat.riskScore)} score, ${formatPercent(threat.confidence)} confidence`
+      : "Threat assessment not recorded."
+  );
+  drawRow(
+    "Threat Gate",
+    threat.safetyGate?.action
+      ? `${String(threat.safetyGate.action).replaceAll("_", " ")}. ${threat.safetyGate.reason || ""}`
+      : "No threat safety gate recorded."
+  );
+  drawRow(
+    "Evidence Quality",
+    threatIntegrity.status
+      ? `${threatIntegrity.status}. Fingerprint ${threatIntegrity.sha256 ? `${threatIntegrity.sha256.slice(0, 12)}...` : "not recorded"}. ${(threatIntegrity.notes || []).slice(0, 2).join(" ")}`
+      : "No image integrity snapshot recorded."
+  );
+  drawRow(
+    "Duplicate Signal",
+    threatDuplicate.status
+      ? `${threatDuplicate.clusterRisk || "normal"} cluster risk. Exact ${threatDuplicate.exactMatches || 0}, near ${threatDuplicate.nearMatches || 0}, related ${threatDuplicate.relatedRecentCount || 0}. ${threatDuplicate.reason || ""}`
+      : "No duplicate signal recorded."
+  );
   drawRow(
     "Weather Context",
     report.weather?.status === "available"
@@ -2887,6 +3011,9 @@ async function generatePdfReport(report, options = {}) {
   drawBulletsBox(report.notifications);
   drawRow("Emergency Broadcast", report.broadcast?.triggered ? `${report.broadcast.status || "created"} · ${report.broadcast.recipientCount || 0} recipient(s)` : "Not triggered");
   drawRow("Incident Command", report.incidentCommand?.triggered ? `${report.incidentCommand.incidentCode || "Opened"} · SLA ${formatDateTime(report.incidentCommand.slaDueAt)}` : "Not opened");
+  drawRow("Threat Evidence", "");
+  cursorY -= 8;
+  drawBulletsBox(threatEvidenceLines.length ? threatEvidenceLines : ["No structured threat evidence recorded."]);
   drawRow("Official Sources", "");
   cursorY -= 8;
   drawBulletsBox(evidenceLines(report.civicEvidence?.officialSources || []));

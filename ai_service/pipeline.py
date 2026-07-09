@@ -15,26 +15,35 @@ def category_to_team(category_id):
 
 
 def category_to_authority(priority, category_id):
-    if priority == "HIGH":
+    if str(priority or "").upper() in {"HIGH", "CRITICAL"}:
         return "Municipality"
     return CATEGORY_BY_ID.get(category_id, {}).get("authority", "Gram Panchayat")
 
 
 def build_alerts(priority, category_label, location):
-    if priority == "HIGH":
+    priority_value = str(priority or "").upper()
+    if priority_value == "CRITICAL":
+        return [
+            f"Emergency alert for {category_label}",
+            f"Residents near {location or 'the affected area'} should avoid the immediate hazard zone",
+        ]
+    if priority_value == "HIGH":
         return [
             f"High priority alert for {category_label}",
             f"Residents near {location or 'the affected area'} should remain cautious",
         ]
-    if priority == "MEDIUM":
+    if priority_value == "MEDIUM":
         return [f"Maintenance alert created for {category_label}"]
     return [f"Complaint logged for {category_label}"]
 
 
 def build_status(priority):
-    if priority == "HIGH":
+    priority_value = str(priority or "").upper()
+    if priority_value == "CRITICAL":
         return "Escalated"
-    if priority == "MEDIUM":
+    if priority_value == "HIGH":
+        return "Escalated"
+    if priority_value == "MEDIUM":
         return "In Progress"
     return "Queued"
 
@@ -46,6 +55,25 @@ def build_map_location(location):
     lat_offset = ((seed % 35) - 17) / 1000
     lng_offset = (((seed // 7) % 35) - 17) / 1000
     return {"lat": round(base_lat + lat_offset, 6), "lng": round(base_lng + lng_offset, 6)}
+
+
+def apply_threat_escalation(priority, priority_score, threat_assessment):
+    threat_level = (threat_assessment or {}).get("threatLevel")
+    threat_confidence = float((threat_assessment or {}).get("confidence") or 0)
+    risk_score = float((threat_assessment or {}).get("riskScore") or 0)
+    safety_gate = (threat_assessment or {}).get("safetyGate") or {}
+
+    if safety_gate.get("abstained"):
+        return priority, priority_score
+
+    if threat_level == "Critical" and threat_confidence >= 0.46:
+        return "CRITICAL", round(max(priority_score, risk_score, 0.86), 3)
+    if threat_level == "High" and threat_confidence >= 0.44 and str(priority or "").upper() not in {"CRITICAL", "HIGH"}:
+        return "HIGH", round(max(priority_score, risk_score, 0.74), 3)
+    if threat_level == "Medium" and str(priority or "").upper() == "LOW":
+        return "MEDIUM", round(max(priority_score, risk_score, 0.54), 3)
+
+    return priority, priority_score
 
 
 def run_hybrid_pipeline(payload):
@@ -72,11 +100,16 @@ def run_hybrid_pipeline(payload):
         visual_context_hint,
         payload.get("imageBase64"),
         payload.get("imageMimeType"),
+        payload.get("previousComplaints"),
+        payload.get("recentAreaComplaints"),
+        payload.get("location"),
     )
     final_categories = merge_multi_modal_categories(semantic_result["labels"], vision_result)
     sentiment_bundle = analyze_sentiment_and_severity(primary_text, final_categories)
     context_bundle = context_features(payload, semantic_result)
     priority, priority_score = predict_priority(primary_text, sentiment_bundle, final_categories, context_bundle["repeat_count"])
+    threat_assessment = vision_result.get("threatAssessment") or {}
+    priority, priority_score = apply_threat_escalation(priority, priority_score, threat_assessment)
 
     top_category = final_categories[0] if final_categories else None
     fallback = semantic_result["fallback"]
@@ -94,6 +127,7 @@ def run_hybrid_pipeline(payload):
         sentiment_bundle,
         priority,
         primary_text,
+        threat_assessment,
     )
     confidence = decision["confidence"]
 
@@ -111,6 +145,7 @@ def run_hybrid_pipeline(payload):
         "category_confidence": [item["confidence"] for item in final_categories] if final_categories else ([fallback["confidence"]] if fallback else []),
         "keywords": keyword_extract(primary_text, limit=6),
         "vision": vision_result,
+        "threatAssessment": threat_assessment,
         "context": context_bundle,
         "fallback": fallback,
         "decision": decision,
@@ -140,6 +175,8 @@ def run_hybrid_pipeline(payload):
             "provider": vision_result.get("provider", "feature-fallback"),
             "fallbackUsed": vision_result.get("fallbackUsed", True),
             "confidenceBreakdown": vision_result.get("confidenceBreakdown", {}),
+            "passDiagnostics": vision_result.get("passDiagnostics", {}),
+            "threatAssessment": threat_assessment,
         },
         "status": build_status(priority),
         "assignedAuthority": category_to_authority(priority, primary_category_id),
@@ -147,7 +184,9 @@ def run_hybrid_pipeline(payload):
         "alerts": build_alerts(priority, primary_category_label, payload.get("location")),
         "notifications": [
             "Admin dashboard updated",
-            "Users subscribed to the zone were notified" if priority != "HIGH" else "Residents received a high-priority warning",
+            "Residents received an emergency warning"
+            if priority == "CRITICAL"
+            else ("Residents received a high-priority warning" if priority == "HIGH" else "Users subscribed to the zone were notified"),
         ],
         "imageUpload": "Processed by modular hybrid AI pipeline",
         "aiMeta": {
@@ -164,5 +203,10 @@ def run_hybrid_pipeline(payload):
             "confidenceLabel": decision["confidenceLabel"],
             "reviewRequired": decision["reviewRequired"],
             "conflictDetected": decision["conflictDetected"],
+            "threatEngine": threat_assessment.get("engine", "visual-consensus-threat-v1"),
+            "threatStatus": threat_assessment.get("status", "not_available"),
+            "threatLevel": threat_assessment.get("threatLevel", "Not assessed"),
+            "threatRiskScore": threat_assessment.get("riskScore", 0),
+            "imageFingerprint": (threat_assessment.get("integrity") or {}).get("sha256", ""),
         },
     }

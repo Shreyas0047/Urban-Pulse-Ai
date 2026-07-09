@@ -29,6 +29,10 @@ services:
         generateValue: true
       - key: AI_SERVICE_URL
         sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: DEEPGRAM_MODEL
+        value: nova-3
       - key: WEATHERSTACK_API_KEY
         sync: false
       - key: WEATHERSTACK_BASE_URL

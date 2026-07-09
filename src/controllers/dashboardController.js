@@ -1,5 +1,6 @@
 const Complaint = require("../models/Complaint");
 const IncidentCommand = require("../models/IncidentCommand");
+const EmergencyBroadcast = require("../models/EmergencyBroadcast");
 const User = require("../models/User");
 const { buildCivicDigitalTwin } = require("../services/civicDigitalTwinService");
 const { buildCivicRiskPredictions } = require("../services/riskPredictionService");
@@ -209,7 +210,11 @@ async function getDashboard(req, res, next) {
 
 async function resetDashboard(req, res, next) {
   try {
-    await Complaint.deleteMany({});
+    await Promise.all([
+      Complaint.deleteMany({}),
+      IncidentCommand.deleteMany({}),
+      EmergencyBroadcast.deleteMany({})
+    ]);
     await getDashboard(req, res, next);
   } catch (error) {
     next(error);

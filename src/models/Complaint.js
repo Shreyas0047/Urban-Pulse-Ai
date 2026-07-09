@@ -142,7 +142,11 @@ const complaintSchema = new mongoose.Schema(
         }
       ],
       confidenceBreakdown: mongoose.Schema.Types.Mixed,
-      evaluationVersion: String
+      evaluationVersion: String,
+      threatAssessment: mongoose.Schema.Types.Mixed,
+      threatLevel: { type: String, default: "" },
+      riskScore: { type: Number, default: 0 },
+      imageFingerprint: { type: String, default: "" }
     }
   },
   {

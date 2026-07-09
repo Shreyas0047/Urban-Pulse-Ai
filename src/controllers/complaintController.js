@@ -31,6 +31,7 @@ async function analyzeAndCreateComplaint(req, res, next) {
       mapLocation: analysis.mapLocation,
       weather: analysis.weather,
       civicEvidence: analysis.civicEvidence,
+      threatAssessment: analysis.threatAssessment || analysis.explainability?.threatAssessment || analysis.cv?.threatAssessment || null,
       explainability: analysis.explainability,
       aiMeta: analysis.aiMeta,
       alerts: analysis.alerts,

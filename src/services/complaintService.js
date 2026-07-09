@@ -10,6 +10,12 @@ const LOW_CONFIDENCE_THRESHOLD = 0.52;
 const GEOCODE_TIMEOUT_MS = 3500;
 const MAX_AI_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_AI_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const PRIORITY_ORDER = {
+  Low: 1,
+  Medium: 2,
+  High: 3,
+  Critical: 4
+};
 
 function createHttpError(message, statusCode = 400) {
   const error = new Error(message);
@@ -110,6 +116,77 @@ function getConfidenceLabel(confidence) {
   if (confidence >= 0.78) return "High confidence";
   if (confidence >= LOW_CONFIDENCE_THRESHOLD) return "Medium confidence";
   return "Needs review";
+}
+
+function extractStoredThreatFields(complaint) {
+  const threatAssessment = complaint.ai?.threatAssessment || {};
+  return {
+    _id: String(complaint._id || ""),
+    threatFingerprint: complaint.ai?.imageFingerprint || threatAssessment.integrity?.sha256 || "",
+    threatDHash: threatAssessment.integrity?.dHash || "",
+    threatCategoryId: threatAssessment.incidentCategoryId || complaint.ai?.categoryId || "",
+    threatLevel: threatAssessment.threatLevel || complaint.ai?.threatLevel || "",
+    riskScore: threatAssessment.riskScore || complaint.ai?.riskScore || 0
+  };
+}
+
+function applyThreatPriority(analysis) {
+  const threatAssessment = analysis.threatAssessment || analysis.cv?.threatAssessment || null;
+  if (!threatAssessment?.threatLevel) {
+    return null;
+  }
+
+  analysis.threatAssessment = threatAssessment;
+  analysis.cv = {
+    ...(analysis.cv || {}),
+    threatAssessment
+  };
+
+  const currentPriority = canonicalPriority(analysis.priority?.level);
+  let nextPriority = currentPriority;
+  const threatConfidence = Number(threatAssessment.confidence || 0);
+  const threatRiskScore = Number(threatAssessment.riskScore || 0);
+
+  analysis.aiMeta = {
+    ...(analysis.aiMeta || {}),
+    threatEngine: threatAssessment.engine || analysis.aiMeta?.threatEngine || "visual-consensus-threat-v1",
+    threatStatus: threatAssessment.status || "not_available",
+    threatLevel: threatAssessment.threatLevel,
+    threatRiskScore,
+    imageFingerprint: threatAssessment.integrity?.sha256 || analysis.aiMeta?.imageFingerprint || ""
+  };
+
+  if (threatAssessment.safetyGate?.abstained) {
+    return threatAssessment;
+  }
+
+  if (threatAssessment.threatLevel === "Critical" && threatConfidence >= 0.46) {
+    nextPriority = "Critical";
+  } else if (threatAssessment.threatLevel === "High" && threatConfidence >= 0.44 && PRIORITY_ORDER[currentPriority] < PRIORITY_ORDER.High) {
+    nextPriority = "High";
+  } else if (threatAssessment.threatLevel === "Medium" && currentPriority === "Low") {
+    nextPriority = "Medium";
+  }
+
+  if (nextPriority !== currentPriority) {
+    analysis.priority = {
+      ...(analysis.priority || {}),
+      level: nextPriority,
+      score: Math.max(Number(analysis.priority?.score || 0), threatRiskScore, nextPriority === "Critical" ? 0.86 : nextPriority === "High" ? 0.74 : 0.54)
+    };
+    analysis.alerts = [
+      ...(analysis.alerts || []),
+      `Threat assessment raised severity to ${nextPriority}`
+    ];
+  }
+
+  return threatAssessment;
+}
+
+function statusForPriority(priority) {
+  if (priority === "Critical" || priority === "High") return "Escalated";
+  if (priority === "Medium") return "In Progress";
+  return "Queued";
 }
 
 function calibrateConfidence(rawConfidence, analysis, payload) {
@@ -246,7 +323,8 @@ async function createComplaintFromPayload(auth, payload) {
       location: complaint.location,
       priority: complaint.priority,
       status: complaint.status,
-      createdAt: complaint.createdAt
+      createdAt: complaint.createdAt,
+      ...extractStoredThreatFields(complaint)
     })),
     recentAreaComplaints: recentAreaComplaints.map((complaint) => ({
       type: complaint.type,
@@ -256,9 +334,11 @@ async function createComplaintFromPayload(auth, payload) {
       status: complaint.status,
       reporterUserId: complaint.reporterUserId,
       reporterUsername: complaint.reporterUsername,
-      createdAt: complaint.createdAt
+      createdAt: complaint.createdAt,
+      ...extractStoredThreatFields(complaint)
     }))
   });
+  const threatAssessment = applyThreatPriority(analysis);
   const geocoded = await geocodeLocation(location);
   const mapLocation = {
     lat: geocoded.lat,
@@ -276,9 +356,17 @@ async function createComplaintFromPayload(auth, payload) {
     imageHint,
     imageFeatures: payload.imageFeatures || null
   });
-  const reviewRequired = confidenceScore < LOW_CONFIDENCE_THRESHOLD || Boolean(analysis.decision?.reviewRequired || analysis.conflictDetected);
+  const threatReviewRequired = ["needs_review", "request_more_evidence"].includes(threatAssessment?.safetyGate?.action || "");
+  const reviewRequired =
+    confidenceScore < LOW_CONFIDENCE_THRESHOLD ||
+    Boolean(analysis.decision?.reviewRequired || analysis.conflictDetected) ||
+    Boolean(threatReviewRequired);
   analysis.reviewRequired = reviewRequired;
   analysis.priority.level = canonicalPriority(analysis.priority?.level);
+  analysis.status = analysis.status || statusForPriority(analysis.priority.level);
+  if (!reviewRequired && PRIORITY_ORDER[analysis.priority.level] > PRIORITY_ORDER[canonicalPriority(analysis.status)]) {
+    analysis.status = statusForPriority(analysis.priority.level);
+  }
   const finalStatus = reviewRequired ? "Needs Review" : analysis.status;
   const explanation = appendWeatherContext(buildAiExplanation(analysis, payload, reviewRequired, confidenceScore), weather);
   const routing = await routeComplaint({
@@ -356,7 +444,11 @@ async function createComplaintFromPayload(auth, payload) {
         source: candidate.source || ""
       })),
       confidenceBreakdown: analysis.cv?.confidenceBreakdown || {},
-      evaluationVersion: analysis.aiMeta?.evaluationVersion || "unknown"
+      evaluationVersion: analysis.aiMeta?.evaluationVersion || "unknown",
+      threatAssessment,
+      threatLevel: threatAssessment?.threatLevel || "",
+      riskScore: Number(threatAssessment?.riskScore || 0),
+      imageFingerprint: threatAssessment?.integrity?.sha256 || analysis.aiMeta?.imageFingerprint || ""
     }
   });
 
@@ -467,6 +559,7 @@ async function createComplaintFromPayload(auth, payload) {
     incidentCommand: incidentSummary,
     weather,
     civicEvidence,
+    threatAssessment,
     provider: analysis.aiMeta?.provider || "unknown",
     engine: analysis.aiMeta?.engine || "unknown",
     fallbackUsed: Boolean(analysis.aiMeta?.fallbackUsed),
@@ -475,7 +568,9 @@ async function createComplaintFromPayload(auth, payload) {
     visionProvider: analysis.aiMeta?.visionProvider || analysis.cv?.provider || "unknown",
     visionFallbackUsed: Boolean(analysis.aiMeta?.visionFallbackUsed || analysis.cv?.fallbackUsed),
     visionCandidates: (analysis.cv?.candidates || []).slice(0, 5),
-    confidenceBreakdown: analysis.cv?.confidenceBreakdown || {}
+    confidenceBreakdown: analysis.cv?.confidenceBreakdown || {},
+    threatLevel: threatAssessment?.threatLevel || "",
+    threatRiskScore: threatAssessment?.riskScore || 0
   };
 
   return { analysis, complaint };
