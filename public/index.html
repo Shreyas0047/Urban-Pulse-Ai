@@ -684,14 +684,26 @@
       </div>
     </div>
 
-    <button type="button" id="chatbotLauncher" class="chatbot-launcher" aria-label="Open help assistant" hidden>
-      <span class="chatbot-launcher-icon" aria-hidden="true">
+    <button
+      type="button"
+      id="chatbotLauncher"
+      class="chatbot-launcher floating-ai-button"
+      aria-label="Open Urban Pulse Assistant"
+      aria-controls="chatbotPanel"
+      aria-expanded="false"
+      hidden
+    >
+      <span class="chatbot-launcher-sheen" aria-hidden="true"></span>
+      <span class="chatbot-launcher-icon chatbot-launcher-bot" aria-hidden="true">
         <svg viewBox="0 0 24 24">
-          <path d="M7 18.2 3.8 21v-5.1A8.5 8.5 0 1 1 7 18.2Z"></path>
-          <path d="M8 10.5h8M8 14h5"></path>
+          <rect x="4" y="7" width="16" height="12" rx="4"></rect>
+          <path d="M12 3v4M8 12h.01M16 12h.01M9 16h6"></path>
         </svg>
       </span>
-      <span class="chatbot-launcher-label">Help</span>
+      <span class="chatbot-launcher-icon chatbot-launcher-close" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+      </span>
+      <span class="chatbot-launcher-pulse" aria-hidden="true"></span>
     </button>
 
     <section id="postSubmitOverlay" class="overlay-shell post-submit-overlay" hidden aria-label="Complaint actions">
@@ -740,22 +752,62 @@
       </div>
     </section>
 
-    <section id="chatbotPanel" class="chatbot-panel" hidden aria-label="Community assistant">
+    <section id="chatbotPanel" class="chatbot-panel" hidden role="dialog" aria-label="Urban Pulse Assistant">
       <header id="chatbotHeader" class="chatbot-header">
-        <div>
-          <strong>Help</strong>
-          <p id="chatbotStatusText">Ask about status, complaints, FAQs, or navigation.</p>
+        <div class="chatbot-heading">
+          <span class="chatbot-online-dot" aria-hidden="true"></span>
+          <div>
+            <strong>Urban Pulse Assistant</strong>
+            <p id="chatbotStatusText">Ask about complaints, status, FAQs, or navigation.</p>
+          </div>
         </div>
-        <button type="button" id="chatbotClearBtn" class="chip-button">Clear</button>
+        <div class="chatbot-header-actions">
+          <span class="chatbot-model-badge">Civic AI</span>
+          <button type="button" id="chatbotCloseBtn" class="chatbot-icon-button" aria-label="Close assistant">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>
+          </button>
+        </div>
       </header>
       <div id="chatbotMessages" class="chatbot-messages"></div>
-      <div id="chatbotTyping" class="chatbot-typing" hidden>Bot is typing...</div>
-      <div class="chatbot-actions">
-        <button type="button" id="chatbotUseTranscriptBtn" class="chip-button" disabled>Use voice transcript</button>
+      <div id="chatbotTyping" class="chatbot-typing" hidden>
+        <span></span><span></span><span></span>
+        <em>Assistant is responding</em>
       </div>
       <form id="chatbotForm" class="chatbot-form">
-        <textarea id="chatbotInput" rows="2" maxlength="1000" placeholder="Type a message"></textarea>
-        <button type="submit" id="chatbotSendBtn" class="light-beam-button">Send</button>
+        <textarea
+          id="chatbotInput"
+          rows="4"
+          maxlength="1000"
+          placeholder="Ask about a complaint, report an issue, or find something in the dashboard..."
+        ></textarea>
+        <div class="chatbot-composer-controls">
+          <div class="chatbot-tool-group">
+            <button type="button" id="chatbotUseTranscriptBtn" class="chatbot-tool-button" aria-label="Use voice transcript" data-tooltip="Use voice transcript" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+                <path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8"></path>
+              </svg>
+            </button>
+            <button type="button" id="chatbotClearBtn" class="chatbot-tool-button" aria-label="Clear chat history" data-tooltip="Clear history">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 10v7M14 10v7"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="chatbot-send-group">
+            <span id="chatbotCharCount" class="chatbot-char-count">0/1000</span>
+            <button type="submit" id="chatbotSendBtn" class="chatbot-send-button" aria-label="Send message" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m22 2-7 20-4-9-9-4Z"></path>
+                <path d="M22 2 11 13"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="chatbot-composer-foot">
+          <span>Press <kbd>Shift + Enter</kbd> for a new line</span>
+          <span class="chatbot-ready-state"><i></i> Ready</span>
+        </div>
       </form>
     </section>
 

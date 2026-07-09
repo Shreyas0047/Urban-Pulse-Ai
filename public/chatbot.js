@@ -2,6 +2,7 @@
   const launcher = document.getElementById("chatbotLauncher");
   const panel = document.getElementById("chatbotPanel");
   const header = document.getElementById("chatbotHeader");
+  const closeBtn = document.getElementById("chatbotCloseBtn");
   const clearBtn = document.getElementById("chatbotClearBtn");
   const messagesRoot = document.getElementById("chatbotMessages");
   const typingRoot = document.getElementById("chatbotTyping");
@@ -10,20 +11,24 @@
   const sendBtn = document.getElementById("chatbotSendBtn");
   const useTranscriptBtn = document.getElementById("chatbotUseTranscriptBtn");
   const statusText = document.getElementById("chatbotStatusText");
+  const charCountRoot = document.getElementById("chatbotCharCount");
 
   if (!launcher || !panel || !form || !input) {
     return;
   }
 
   const position = {
-    x: window.innerWidth - 136,
-    y: window.innerHeight - 76
+    x: window.innerWidth - 88,
+    y: window.innerHeight - 88
   };
-  const animationDurationMs = 220;
+  const animationDurationMs = 300;
+  const maxMessageLength = Number(input.maxLength || 1000);
 
   let isOpen = false;
   let isAnimating = false;
   let dragState = null;
+  let suppressNextClick = false;
+  let isLoading = false;
   let historyLoadedForUser = "";
 
   function getApp() {
@@ -43,8 +48,8 @@
   }
 
   function clampPosition() {
-    const launcherWidth = launcher.offsetWidth || 112;
-    const launcherHeight = launcher.offsetHeight || 52;
+    const launcherWidth = launcher.offsetWidth || 64;
+    const launcherHeight = launcher.offsetHeight || 64;
     position.x = Math.max(16, Math.min(position.x, window.innerWidth - launcherWidth - 16));
     position.y = Math.max(16, Math.min(position.y, window.innerHeight - launcherHeight - 16));
   }
@@ -57,9 +62,9 @@
   }
 
   function updatePanelPosition() {
-    const panelWidth = 360;
-    const panelHeight = 520;
-    const launcherWidth = launcher.offsetWidth || 112;
+    const panelWidth = panel.offsetWidth || Math.min(500, window.innerWidth - 32);
+    const panelHeight = panel.offsetHeight || Math.min(640, window.innerHeight - 32);
+    const launcherWidth = launcher.offsetWidth || 64;
     const left = Math.max(16, Math.min(position.x - panelWidth + launcherWidth, window.innerWidth - panelWidth - 16));
     const top = Math.max(16, Math.min(position.y - panelHeight - 18, window.innerHeight - panelHeight - 16));
     panel.style.left = `${left}px`;
@@ -92,9 +97,20 @@
   }
 
   function setLoading(isLoading) {
-    sendBtn.disabled = isLoading;
+    window.requestAnimationFrame(() => {
+      sendBtn.disabled = isLoading || !input.value.trim();
+    });
     input.disabled = isLoading;
+    clearBtn.disabled = isLoading;
+    useTranscriptBtn.disabled = isLoading || !getTranscript();
     setTyping(isLoading);
+  }
+
+  function updateComposerState() {
+    const length = input.value.length;
+    charCountRoot.textContent = `${length}/${maxMessageLength}`;
+    charCountRoot.dataset.nearLimit = length >= maxMessageLength * 0.9 ? "true" : "false";
+    sendBtn.disabled = isLoading || !input.value.trim();
   }
 
   function updateTranscriptButton() {
@@ -169,6 +185,8 @@
 
     isAnimating = true;
     isOpen = true;
+    launcher.setAttribute("aria-expanded", "true");
+    launcher.setAttribute("aria-label", "Close Urban Pulse Assistant");
     panel.hidden = false;
     updatePanelPosition();
     updateTranscriptButton();
@@ -189,6 +207,8 @@
 
     isAnimating = true;
     isOpen = false;
+    launcher.setAttribute("aria-expanded", "false");
+    launcher.setAttribute("aria-label", "Open Urban Pulse Assistant");
     panel.classList.remove("is-open");
     window.setTimeout(() => {
       panel.hidden = true;
@@ -197,7 +217,8 @@
   }
 
   launcher.addEventListener("click", async (event) => {
-    if (dragState?.moved) {
+    if (suppressNextClick) {
+      suppressNextClick = false;
       event.preventDefault();
       return;
     }
@@ -210,6 +231,8 @@
     await loadHistory();
     openPanel();
   });
+
+  closeBtn.addEventListener("click", closePanel);
 
   clearBtn.addEventListener("click", async (event) => {
     event.preventDefault();
@@ -233,6 +256,8 @@
       pointerId: event.pointerId,
       offsetX: event.clientX - position.x,
       offsetY: event.clientY - position.y,
+      startX: event.clientX,
+      startY: event.clientY,
       moved: false
     };
     launcher.setPointerCapture(event.pointerId);
@@ -245,7 +270,9 @@
 
     position.x = event.clientX - dragState.offsetX;
     position.y = event.clientY - dragState.offsetY;
-    dragState.moved = true;
+    if (Math.hypot(event.clientX - dragState.startX, event.clientY - dragState.startY) > 5) {
+      dragState.moved = true;
+    }
     updateLauncherPosition();
   });
 
@@ -254,6 +281,7 @@
       return;
     }
     launcher.releasePointerCapture(event.pointerId);
+    suppressNextClick = dragState.moved;
     dragState = null;
   }
 
@@ -268,7 +296,32 @@
       return;
     }
     input.value = transcript;
+    updateComposerState();
     input.focus();
+  });
+
+  input.addEventListener("input", updateComposerState);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (!sendBtn.disabled) {
+        form.requestSubmit();
+      }
+    }
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!isOpen || panel.contains(event.target) || launcher.contains(event.target)) {
+      return;
+    }
+    closePanel();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isOpen) {
+      closePanel();
+      launcher.focus();
+    }
   });
 
   form.addEventListener("submit", async (event) => {
@@ -281,6 +334,8 @@
 
     renderMessage({ sender: "user", content: message });
     input.value = "";
+    updateComposerState();
+    isLoading = true;
     setLoading(true);
 
     try {
@@ -297,7 +352,9 @@
       renderMessage({ sender: "bot", content: error.message || "The assistant could not respond right now." });
       statusText.textContent = error.message || "The assistant could not respond right now.";
     } finally {
+      isLoading = false;
       setLoading(false);
+      updateComposerState();
     }
   });
 
@@ -311,5 +368,6 @@
 
   updateLauncherPosition();
   updateTranscriptButton();
+  updateComposerState();
   loadHistory().catch(() => {});
 })();
