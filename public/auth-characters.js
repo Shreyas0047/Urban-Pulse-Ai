@@ -16,6 +16,8 @@
   let frameId = 0;
   let typingTimer = 0;
   let blinkTimer = 0;
+  let expressionTimer = 0;
+  let expressionResolve = null;
 
   function setTyping(active) {
     stage.classList.toggle("is-typing", active);
@@ -93,6 +95,46 @@
     updatePasswordState();
   }
 
+  function resetExpression() {
+    window.clearTimeout(expressionTimer);
+    expressionTimer = 0;
+    stage.classList.remove("is-celebrating", "is-angry");
+    if (expressionResolve) {
+      expressionResolve();
+      expressionResolve = null;
+    }
+  }
+
+  function celebrate(duration = 2000) {
+    resetExpression();
+    if (reducedMotion.matches) {
+      return Promise.resolve();
+    }
+
+    stage.classList.add("is-celebrating");
+    return new Promise((resolve) => {
+      expressionResolve = resolve;
+      expressionTimer = window.setTimeout(() => {
+        stage.classList.remove("is-celebrating");
+        expressionTimer = 0;
+        expressionResolve = null;
+        resolve();
+      }, duration);
+    });
+  }
+
+  function getAngry(duration = 1300) {
+    resetExpression();
+    if (reducedMotion.matches) {
+      return;
+    }
+
+    stage.classList.add("is-angry");
+    expressionTimer = window.setTimeout(() => {
+      stage.classList.remove("is-angry");
+    }, duration);
+  }
+
   [identityInput, passwordInput].forEach((input) => {
     input.addEventListener("focus", () => setTyping(true));
     input.addEventListener("input", () => {
@@ -116,6 +158,11 @@
   scheduleBlink();
 
   window.UrbanPulseAuthCharacters = {
-    reset: resetPasswordVisibility
+    reset() {
+      resetExpression();
+      resetPasswordVisibility();
+    },
+    celebrate,
+    angry: getAngry
   };
 })();

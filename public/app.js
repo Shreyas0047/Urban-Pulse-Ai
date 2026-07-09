@@ -4238,12 +4238,16 @@ authForm.addEventListener("submit", async (event) => {
     setOtpTimerMessage("");
     sendOtpBtn.textContent = "Send OTP";
     authForm.reset();
+    if (authMode === "login") {
+      await window.UrbanPulseAuthCharacters?.celebrate?.(2000);
+    }
     closeAuthOverlay();
     goToMainDashboard();
     await loadDashboard();
   } catch (error) {
     if (authMode === "login") {
       recordClientLoginFailure();
+      window.UrbanPulseAuthCharacters?.angry?.();
     }
     authMessage.textContent = error.message;
     authMessage.dataset.state = "error";
