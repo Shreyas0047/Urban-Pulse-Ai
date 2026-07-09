@@ -1133,6 +1133,122 @@ function setupHeroStorytelling() {
   storySection.dataset.storyStep = "static";
 }
 
+function setupAboutVideoExperience() {
+  const experience = document.getElementById("aboutVideoExperience");
+  const sticky = experience?.querySelector(".about-video-sticky");
+  const frame = document.getElementById("aboutVideoFrame");
+  const video = document.getElementById("aboutCivicVideo");
+  const titleLeft = document.getElementById("aboutVideoTitleLeft");
+  const titleRight = document.getElementById("aboutVideoTitleRight");
+  const scrollCue = document.getElementById("aboutVideoScrollCue");
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (!experience || !sticky || !frame || !video || !titleLeft || !titleRight || !scrollCue) {
+    return;
+  }
+
+  let animationFrame = 0;
+  let videoLoaded = false;
+  let isInViewport = false;
+
+  function loadVideo() {
+    if (videoLoaded || reducedMotion) {
+      return;
+    }
+
+    video.querySelectorAll("source[data-src]").forEach((source) => {
+      source.src = source.dataset.src;
+    });
+    video.load();
+    videoLoaded = true;
+  }
+
+  function syncPlayback() {
+    if (reducedMotion || aboutView?.hidden || !isInViewport || document.hidden) {
+      video.pause();
+      return;
+    }
+
+    loadVideo();
+    video.play().catch(() => {});
+  }
+
+  function render() {
+    animationFrame = 0;
+
+    if (aboutView?.hidden) {
+      return;
+    }
+
+    if (reducedMotion) {
+      experience.dataset.reducedMotion = "true";
+      return;
+    }
+
+    const rect = experience.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const stickyTop = Math.min(104, viewportHeight * 0.12);
+    const travel = Math.max(1, rect.height - viewportHeight);
+    const progress = Math.min(1, Math.max(0, (stickyTop - rect.top) / travel));
+    const easedProgress = 1 - Math.pow(1 - progress, 3);
+    const mobile = window.innerWidth < 768;
+    const startWidth = mobile ? 240 : 320;
+    const startHeight = mobile ? 340 : 400;
+    const maxWidth = Math.max(startWidth, sticky.clientWidth - (mobile ? 16 : 48));
+    const maxHeight = Math.max(startHeight, sticky.clientHeight - (mobile ? 32 : 48));
+    const expandedWidth = Math.min(maxWidth, 1380);
+    const expandedHeight = Math.min(maxHeight, expandedWidth * 0.58);
+    const width = startWidth + (expandedWidth - startWidth) * easedProgress;
+    const height = startHeight + (expandedHeight - startHeight) * easedProgress;
+    const titleTravel = (mobile ? window.innerWidth * 0.28 : window.innerWidth * 0.38) * progress;
+    const titleOpacity = Math.max(0, 1 - progress * 1.3);
+    const cueOpacity = Math.max(0, 1 - progress * 4);
+
+    experience.style.setProperty("--about-video-progress", progress.toFixed(4));
+    frame.style.width = `${Math.round(width)}px`;
+    frame.style.height = `${Math.round(height)}px`;
+    titleLeft.style.transform = `translate3d(${-titleTravel}px, 0, 0)`;
+    titleRight.style.transform = `translate3d(${titleTravel}px, 0, 0)`;
+    titleLeft.style.opacity = String(titleOpacity);
+    titleRight.style.opacity = String(titleOpacity);
+    scrollCue.style.opacity = String(cueOpacity);
+    experience.dataset.expanded = progress >= 0.92 ? "true" : "false";
+  }
+
+  function queueRender() {
+    if (!animationFrame) {
+      animationFrame = window.requestAnimationFrame(render);
+    }
+  }
+
+  const visibilityObserver = new IntersectionObserver(
+    ([entry]) => {
+      isInViewport = entry.isIntersecting;
+      if (isInViewport) {
+        loadVideo();
+        queueRender();
+      }
+      syncPlayback();
+    },
+    { rootMargin: "160px 0px", threshold: 0.01 }
+  );
+
+  visibilityObserver.observe(experience);
+
+  const viewObserver = new MutationObserver(() => {
+    queueRender();
+    syncPlayback();
+  });
+  if (aboutView) {
+    viewObserver.observe(aboutView, { attributes: true, attributeFilter: ["hidden"] });
+  }
+
+  window.addEventListener("scroll", queueRender, { passive: true });
+  window.addEventListener("resize", queueRender);
+  document.addEventListener("visibilitychange", syncPlayback);
+  queueRender();
+}
+
 function setupAppNavigation() {
   const navigationLinks = Array.from(
     document.querySelectorAll('.brand-lockup[href^="#"], .site-nav a[href^="#"], .hero-actions a[href^="#"]')
@@ -4264,6 +4380,7 @@ setupComplaintInputMode();
 setupMobileMenu();
 setupRevealAnimations();
 setupHeroStorytelling();
+setupAboutVideoExperience();
 setupAppNavigation();
 setupGooeyInteractions();
 setupLiquidGlass();

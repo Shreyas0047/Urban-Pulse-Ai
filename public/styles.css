@@ -4708,6 +4708,254 @@ select,
   }
 }
 
+/* About-only scroll-expand civic video */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.about-shell {
+  overflow: visible;
+}
+
+.about-video-experience {
+  --about-video-progress: 0;
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  height: 190vh;
+  min-height: 1100px;
+  isolation: isolate;
+}
+
+.about-video-sticky {
+  position: sticky;
+  top: 88px;
+  width: 100%;
+  height: calc(100vh - 112px);
+  min-height: 590px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(205, 218, 245, 0.12);
+  border-radius: 26px;
+  background: #090d15;
+  box-shadow:
+    0 34px 90px rgba(0, 0, 0, 0.38),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.about-video-backdrop {
+  position: absolute;
+  inset: -24px;
+  z-index: 0;
+  pointer-events: none;
+  opacity: calc(0.88 - var(--about-video-progress));
+  background:
+    linear-gradient(rgba(5, 9, 15, 0.34), rgba(5, 9, 15, 0.62)),
+    url("/civic-reporting-background.webp") center / cover no-repeat;
+  filter: blur(9px) saturate(92%);
+  transform: scale(1.05);
+}
+
+.about-video-frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  width: 320px;
+  height: 400px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 22px;
+  background: #0b1019;
+  box-shadow:
+    0 30px 74px rgba(0, 0, 0, 0.5),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.09);
+  transform: translate3d(-50%, -50%, 0);
+  will-change: width, height;
+}
+
+.about-video-experience[data-expanded="true"] .about-video-frame {
+  border-radius: 14px;
+}
+
+.about-video-frame video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: 68% center;
+  background: #0b1019;
+}
+
+.about-video-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(4, 8, 14, 0.1), rgba(4, 8, 14, 0.28)),
+    radial-gradient(circle at center, transparent 42%, rgba(3, 7, 12, 0.18));
+}
+
+.about-video-title {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 2vw, 28px);
+  pointer-events: none;
+  color: #eef3ff;
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 5.8vw, 5.9rem);
+  font-weight: 680;
+  line-height: 0.94;
+  letter-spacing: -0.065em;
+  text-align: center;
+  text-shadow: 0 16px 44px rgba(0, 0, 0, 0.62);
+}
+
+.about-video-title span {
+  display: block;
+  will-change: transform, opacity;
+}
+
+.about-video-scroll-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 26px;
+  z-index: 4;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: rgba(236, 241, 250, 0.76);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transform: translateX(-50%);
+  text-shadow: 0 5px 16px rgba(0, 0, 0, 0.6);
+  will-change: opacity;
+}
+
+.about-video-scroll-cue span {
+  position: relative;
+  width: 20px;
+  height: 30px;
+  border: 1px solid rgba(236, 241, 250, 0.46);
+  border-radius: 999px;
+}
+
+.about-video-scroll-cue span::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  width: 3px;
+  height: 6px;
+  border-radius: 999px;
+  background: #eef3ff;
+  transform: translateX(-50%);
+  animation: about-scroll-cue 1.8s ease-in-out infinite;
+}
+
+@keyframes about-scroll-cue {
+  50% {
+    opacity: 0.35;
+    transform: translate(-50%, 8px);
+  }
+}
+
+.about-video-experience + .about-grid {
+  position: relative;
+  z-index: 4;
+  margin-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .about-video-experience {
+    height: 175vh;
+    min-height: 940px;
+  }
+
+  .about-video-sticky {
+    top: 78px;
+    height: calc(100dvh - 94px);
+    min-height: 520px;
+    border-radius: 20px;
+  }
+
+  .about-video-title {
+    padding-inline: 14px;
+    flex-direction: column;
+    gap: 6px;
+    font-size: clamp(2.4rem, 12vw, 4.2rem);
+  }
+
+  .about-video-frame video {
+    object-position: 72% center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-video-experience {
+    height: auto;
+    min-height: 0;
+  }
+
+  .about-video-sticky {
+    position: relative;
+    top: auto;
+    height: auto;
+    min-height: 0;
+    padding: 18px;
+    display: grid;
+    gap: 18px;
+  }
+
+  .about-video-backdrop,
+  .about-video-scroll-cue {
+    display: none;
+  }
+
+  .about-video-frame {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 16 / 9;
+    transform: none;
+    will-change: auto;
+  }
+
+  .about-video-title {
+    order: -1;
+    padding: 10px 0 0;
+    font-size: clamp(2rem, 7vw, 3.4rem);
+  }
+
+  .about-video-title span {
+    opacity: 1 !important;
+    transform: none !important;
+    will-change: auto;
+  }
+
+  .about-scroll-cue {
+    animation: none;
+  }
+}
+
 /* Urban Pulse dark liquid-glass system
    This final layer intentionally normalizes the older visual experiments above. */
 :root {
