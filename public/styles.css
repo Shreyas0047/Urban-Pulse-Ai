@@ -7569,3 +7569,46 @@ body.auth-screen-active .chatbot-panel {
 .auth-panel[data-react-liquid-glass]::before {
   display: none;
 }
+
+.auth-panel[data-react-liquid-glass] .react-liquid-glass-mount > span:last-child {
+  display: none;
+}
+
+/* Shared transparent project logo. */
+.project-logo {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.project-logo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+.project-logo-nav {
+  width: 110px;
+}
+
+.project-logo-auth {
+  width: 210px;
+  margin: -28px 0 -20px -16px;
+}
+
+.footer-title {
+  min-height: 96px;
+  margin-bottom: 14px;
+}
+
+.project-logo-footer {
+  width: 150px;
+  margin-left: -10px;
+}
+
+@media (max-width: 640px) {
+  .project-logo-nav {
+    width: 94px;
+  }
+}

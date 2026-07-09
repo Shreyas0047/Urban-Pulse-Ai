@@ -29,7 +29,6 @@ const emailProgress = document.getElementById("emailProgress");
 const emailProgressLabel = document.getElementById("emailProgressLabel");
 const emailProgressValue = document.getElementById("emailProgressValue");
 const emailProgressFill = document.getElementById("emailProgressFill");
-const audioToggleBtn = document.getElementById("audioToggleBtn");
 const dashboardMessage = document.getElementById("dashboardMessage");
 const issueTokenBtn = document.getElementById("issueTokenBtn");
 const logoutBtn = document.getElementById("logoutBtn");
@@ -112,7 +111,6 @@ const complaintDetailTitle = document.getElementById("complaintDetailTitle");
 const complaintDetailBody = document.getElementById("complaintDetailBody");
 
 const storageKey = "smart-community-auth";
-const audioStorageKey = "smart-community-audio-enabled";
 const draftStorageKey = "smart-community-report-draft-v1";
 let authState = null;
 let authMode = "login";
@@ -121,7 +119,7 @@ let currentImageInsight = null;
 let currentImageDataUrl = null;
 let currentImageAiPayload = null;
 let lastSubmittedReport = null;
-let audioEnabled = true;
+let audioEnabled = false;
 let audioContext = null;
 let masterGain = null;
 let effectsGain = null;
@@ -138,6 +136,8 @@ let voiceRecordingStartedAt = 0;
 let isVoiceRecording = false;
 let registrationOtpIssued = false;
 let passwordResetOtpIssued = false;
+let registrationOtpContext = null;
+let passwordResetOtpContext = null;
 let loginAttemptsRemaining = 4;
 let loginLockTimer = null;
 let otpTimer = null;
@@ -167,25 +167,6 @@ const permissionMeta = {
 function setDashboardMessage(message, type = "info") {
   dashboardMessage.textContent = message;
   dashboardMessage.dataset.state = type;
-}
-
-function loadAudioPreference() {
-  try {
-    const saved = localStorage.getItem(audioStorageKey);
-    if (saved !== null) {
-      audioEnabled = saved === "true";
-    }
-  } catch (_error) {
-    audioEnabled = true;
-  }
-}
-
-function saveAudioPreference() {
-  try {
-    localStorage.setItem(audioStorageKey, String(audioEnabled));
-  } catch (_error) {
-    // ignore localStorage failures
-  }
 }
 
 function normalizeSearchValue(value) {
@@ -319,11 +300,6 @@ function restoreReportDraft() {
   }
 }
 
-function updateAudioToggleState() {
-  audioToggleBtn.textContent = audioEnabled ? "Sound On" : "Sound Off";
-  audioToggleBtn.dataset.state = audioEnabled ? "enabled" : "muted";
-}
-
 function resetLoginAttemptState() {
   loginAttemptsRemaining = 4;
   authSubmitBtn.disabled = false;
@@ -386,6 +362,44 @@ function clearOtpTimer() {
   otpSecondsRemaining = 0;
 }
 
+function normalizeAuthEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function invalidateOtpState(purpose, message = "") {
+  if (purpose === "register") {
+    registrationOtpIssued = false;
+    registrationOtpContext = null;
+  } else {
+    passwordResetOtpIssued = false;
+    passwordResetOtpContext = null;
+  }
+  clearOtpTimer();
+  sendOtpBtn.disabled = false;
+  sendOtpBtn.textContent = "Send OTP";
+  if (message) {
+    setOtpTimerMessage(message, "expired");
+  }
+}
+
+function registrationOtpMatchesCurrentForm() {
+  return Boolean(
+    registrationOtpIssued &&
+      registrationOtpContext &&
+      registrationOtpContext.email === normalizeAuthEmail(authIdentityInput.value) &&
+      registrationOtpContext.password === authPasswordInput.value &&
+      registrationOtpContext.role === authRoleSelect.value
+  );
+}
+
+function passwordResetOtpMatchesCurrentForm() {
+  return Boolean(
+    passwordResetOtpIssued &&
+      passwordResetOtpContext &&
+      passwordResetOtpContext.email === normalizeAuthEmail(authIdentityInput.value)
+  );
+}
+
 function setOtpTimerMessage(message, state = "") {
   if (!otpTimerMessage) {
     return;
@@ -434,8 +448,10 @@ function startOtpCountdown(email, purpose = "register", expiresInSeconds = 300, 
       clearOtpTimer();
       if (purpose === "reset") {
         passwordResetOtpIssued = false;
+        passwordResetOtpContext = null;
       } else {
         registrationOtpIssued = false;
+        registrationOtpContext = null;
       }
       sendOtpBtn.disabled = false;
       sendOtpBtn.textContent = "Resend OTP";
@@ -719,7 +735,12 @@ function clearAuthState(message) {
 }
 
 function logoutCurrentUser(message = "Logged out successfully.") {
+  const previousRole = authState?.role;
   clearAuthState(message);
+  resetLoginAttemptState();
+  if (previousRole && authRoleSelect) {
+    authRoleSelect.value = previousRole;
+  }
   openAuthOverlay("login");
 }
 
@@ -777,6 +798,8 @@ function openAuthOverlay(mode = "login") {
   forgotPasswordBtn.style.display = mode === "login" ? "" : "none";
   registrationOtpIssued = false;
   passwordResetOtpIssued = false;
+  registrationOtpContext = null;
+  passwordResetOtpContext = null;
   clearOtpTimer();
   sendOtpBtn.disabled = false;
   sendOtpBtn.textContent = "Send OTP";
@@ -1405,6 +1428,11 @@ async function requestRegistrationOtp() {
     }
 
     registrationOtpIssued = true;
+    registrationOtpContext = {
+      email: normalizeAuthEmail(payload.email),
+      password: String(payload.password || ""),
+      role: String(payload.role || "")
+    };
     startOtpCountdown(payload.email, "register", data.expiresInSeconds, formatOtpDeliveryDetail(data, payload.email));
     authMessage.textContent = `OTP sent. Check your inbox and enter it within ${Math.floor((data.expiresInSeconds || 300) / 60)} minutes.`;
     setDashboardMessage(authMessage.textContent, "success");
@@ -1459,6 +1487,9 @@ async function requestPasswordResetOtp() {
     }
 
     passwordResetOtpIssued = true;
+    passwordResetOtpContext = {
+      email: normalizeAuthEmail(payload.email)
+    };
     startOtpCountdown(payload.email, "reset", data.expiresInSeconds, formatOtpDeliveryDetail(data, payload.email));
     authMessage.textContent = "Password reset OTP sent. Check your inbox and spam folder.";
     setDashboardMessage(authMessage.textContent, "success");
@@ -1889,20 +1920,25 @@ async function apiRequest(path, options = {}) {
     throw new Error("Unable to reach the server. Make sure the app is running and refresh the page.");
   }
 
-  const data = await response.json();
+  const responseText = await response.text();
+  let data = {};
+  try {
+    data = responseText ? JSON.parse(responseText) : {};
+  } catch (_error) {
+    data = {};
+  }
 
   if (!response.ok) {
-    const errorMessage = data.error || "Request failed";
-    const isAuthFailure =
-      response.status === 401 ||
-      response.status === 403 ||
-      /jwt|token|bearer|permission denied/i.test(errorMessage);
+    const errorMessage = data.error || `Request failed with status ${response.status}.`;
+    const isAuthFailure = response.status === 401 || /jwt|token|bearer/i.test(errorMessage);
 
     if (isAuthFailure && authState?.token) {
       clearAuthState("Your previous session is no longer valid. Please login again.");
+      openAuthOverlay("login");
     }
 
     const error = new Error(errorMessage);
+    error.status = response.status;
     error.code = data.code || "";
     error.deliveryStatus = data.deliveryStatus || "";
     error.retryable = data.retryable;
@@ -4036,6 +4072,24 @@ showLoginBtn.addEventListener("click", () => openAuthOverlay("login"));
 showRegisterBtn.addEventListener("click", () => openAuthOverlay("register"));
 forgotPasswordBtn?.addEventListener("click", () => openAuthOverlay("reset-password"));
 sendOtpBtn?.addEventListener("click", requestActiveOtp);
+authIdentityInput?.addEventListener("input", () => {
+  if (authMode === "register" && registrationOtpIssued && !registrationOtpMatchesCurrentForm()) {
+    invalidateOtpState("register", "Email changed. Request a new registration OTP.");
+  }
+  if (authMode === "reset-password" && passwordResetOtpIssued && !passwordResetOtpMatchesCurrentForm()) {
+    invalidateOtpState("reset", "Email changed. Request a new password reset OTP.");
+  }
+});
+authPasswordInput?.addEventListener("input", () => {
+  if (authMode === "register" && registrationOtpIssued && !registrationOtpMatchesCurrentForm()) {
+    invalidateOtpState("register", "Password changed. Request a new registration OTP.");
+  }
+});
+authRoleSelect?.addEventListener("change", () => {
+  if (authMode === "register" && registrationOtpIssued && !registrationOtpMatchesCurrentForm()) {
+    invalidateOtpState("register", "Role changed. Request a new registration OTP.");
+  }
+});
 issueTokenBtn.addEventListener("click", () => openAuthOverlay("login"));
 logoutBtn?.addEventListener("click", () => logoutCurrentUser());
 openFaqLink?.addEventListener("click", (event) => {
@@ -4133,77 +4187,47 @@ emailBbmpBtn.addEventListener("click", async () => {
     emailBbmpBtn.disabled = !lastSubmittedReport;
   }
 });
-audioToggleBtn.addEventListener("click", async () => {
-  audioEnabled = !audioEnabled;
-  saveAudioPreference();
-  updateAudioToggleState();
-
-  if (audioEnabled) {
-    await unlockAudio();
-    setDashboardMessage("Interface sound enabled.", "success");
-  } else {
-    stopAmbientLoop();
-    setDashboardMessage("Interface sound muted.", "info");
-  }
-});
 reportLocationInput.addEventListener("input", (event) => {
   updateLiveLocationMap(event.target.value);
 });
 previewLocationBtn.addEventListener("click", showTypedLocationOnMap);
 useLiveLocationBtn?.addEventListener("click", useLiveLocation);
 
-document.addEventListener(
-  "pointerdown",
-  async (event) => {
-    const button = event.target.closest("button");
-    if (!button) {
-      return;
-    }
-
-    await unlockAudio();
-    playButtonSound(button);
-  },
-  true
-);
-
-document.addEventListener(
-  "keydown",
-  async (event) => {
-    if (event.key !== "Enter" && event.key !== " ") {
-      return;
-    }
-
-    const button = event.target.closest("button");
-    if (!button) {
-      return;
-    }
-
-    await unlockAudio();
-    playButtonSound(button);
-  },
-  true
-);
-
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const submittedMode = authMode;
 
   try {
     authSubmitBtn.disabled = true;
+    showLoginBtn.disabled = true;
+    showRegisterBtn.disabled = true;
     const formData = new FormData(authForm);
     const payload = Object.fromEntries(formData.entries());
 
-    if (authMode === "register" && !registrationOtpIssued) {
-      throw new Error("Send the OTP to your email before completing registration.");
+    if (submittedMode === "register") {
+      if (!registrationOtpIssued) {
+        throw new Error("Send the OTP to your email before completing registration.");
+      }
+      if (!registrationOtpMatchesCurrentForm()) {
+        invalidateOtpState("register");
+        throw new Error("Your registration details changed. Request a new OTP before completing registration.");
+      }
     }
 
-    if (authMode === "reset-password" && !passwordResetOtpIssued) {
-      throw new Error("Send the OTP to your email before resetting the password.");
+    if (submittedMode === "reset-password") {
+      if (!passwordResetOtpIssued) {
+        throw new Error("Send the OTP to your email before resetting the password.");
+      }
+      if (!passwordResetOtpMatchesCurrentForm()) {
+        invalidateOtpState("reset");
+        throw new Error("Your email changed. Request a new OTP before resetting the password.");
+      }
     }
 
     const endpoint =
-      authMode === "login"
+      submittedMode === "login"
         ? "/api/auth/login"
-        : authMode === "reset-password"
+        : submittedMode === "reset-password"
           ? "/api/auth/password-reset"
           : "/api/auth/register";
     const data = await apiRequest(endpoint, {
@@ -4211,14 +4235,19 @@ authForm.addEventListener("submit", async (event) => {
       body: JSON.stringify(payload)
     });
 
-    if (authMode === "reset-password") {
+    if (submittedMode === "reset-password") {
       const successMessage = data.message || "Password reset successful. You can now log in with your new password.";
+      const previousRole = authRoleSelect?.value;
       setDashboardMessage(successMessage, "success");
       passwordResetOtpIssued = false;
+      passwordResetOtpContext = null;
       clearOtpTimer();
       setOtpTimerMessage("");
       sendOtpBtn.textContent = "Send OTP";
       authForm.reset();
+      if (previousRole && authRoleSelect) {
+        authRoleSelect.value = previousRole;
+      }
       openAuthOverlay("login");
       authMessage.textContent = successMessage;
       authMessage.dataset.state = "success";
@@ -4229,23 +4258,29 @@ authForm.addEventListener("submit", async (event) => {
     saveAuthState();
     applyPermissionState();
     resetLoginAttemptState();
-    const successMessage = getAuthSuccessMessage(authMode, data);
+    const successMessage = getAuthSuccessMessage(submittedMode, data);
     authMessage.textContent = successMessage;
     setDashboardMessage(successMessage, "success");
     registrationOtpIssued = false;
     passwordResetOtpIssued = false;
+    registrationOtpContext = null;
+    passwordResetOtpContext = null;
     clearOtpTimer();
     setOtpTimerMessage("");
     sendOtpBtn.textContent = "Send OTP";
+    const authenticatedRole = data.role;
     authForm.reset();
-    if (authMode === "login") {
+    if (authenticatedRole && authRoleSelect) {
+      authRoleSelect.value = authenticatedRole;
+    }
+    if (submittedMode === "login") {
       await window.UrbanPulseAuthCharacters?.celebrate?.(2000);
     }
     closeAuthOverlay();
     goToMainDashboard();
     await loadDashboard();
   } catch (error) {
-    if (authMode === "login") {
+    if (submittedMode === "login" && error.status === 401) {
       recordClientLoginFailure();
       window.UrbanPulseAuthCharacters?.angry?.();
     }
@@ -4253,6 +4288,8 @@ authForm.addEventListener("submit", async (event) => {
     authMessage.dataset.state = "error";
     setDashboardMessage(error.message, "error");
   } finally {
+    showLoginBtn.disabled = false;
+    showRegisterBtn.disabled = false;
     if (!loginLockTimer) {
       authSubmitBtn.disabled = false;
     }
@@ -4331,7 +4368,6 @@ window.smartCommunityApp = {
 };
 
 loadSavedAuthState();
-loadAudioPreference();
 setupImageUpload();
 setupComplaintInputMode();
 setupMobileMenu();
@@ -4341,7 +4377,6 @@ setupAboutVideoExperience();
 setupAppNavigation();
 setupGooeyInteractions();
 applyPermissionState();
-updateAudioToggleState();
 setPdfButtonState(false);
 resetComposer();
 restoreReportDraft();

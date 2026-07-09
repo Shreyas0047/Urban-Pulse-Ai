@@ -109,27 +109,37 @@ function assertLoginNotLocked(req, email) {
     return;
   }
 
-  if (Date.now() > bucket.lockUntil) {
+  const now = Date.now();
+  const windowExpiresAt = bucket.windowExpiresAt || bucket.lockUntil || 0;
+  if (now > windowExpiresAt) {
     loginFailureBuckets.delete(key);
     return;
   }
 
-  throw createHttpError("Too many failed login attempts. Please wait a few minutes and try again.", 429);
+  if (bucket.count >= LOGIN_LOCK_THRESHOLD && bucket.lockUntil && now < bucket.lockUntil) {
+    throw createHttpError("Too many failed login attempts. Please wait a few minutes and try again.", 429);
+  }
 }
 
 function recordLoginFailure(req, email) {
   const key = getLoginAttemptKey(req, email);
   const now = Date.now();
   const bucket = loginFailureBuckets.get(key);
+  const windowExpiresAt = bucket?.windowExpiresAt || bucket?.lockUntil || 0;
 
-  if (!bucket || now > bucket.lockUntil) {
-    loginFailureBuckets.set(key, { count: 1, lockUntil: now + LOGIN_LOCK_WINDOW_MS });
+  if (!bucket || now > windowExpiresAt) {
+    loginFailureBuckets.set(key, {
+      count: 1,
+      windowExpiresAt: now + LOGIN_LOCK_WINDOW_MS,
+      lockUntil: 0
+    });
     return;
   }
 
   bucket.count += 1;
   if (bucket.count >= LOGIN_LOCK_THRESHOLD) {
     bucket.lockUntil = now + LOGIN_LOCK_WINDOW_MS;
+    bucket.windowExpiresAt = bucket.lockUntil;
   }
 }
 

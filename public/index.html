@@ -18,21 +18,9 @@
       <div class="overlay-panel auth-panel" data-react-liquid-glass="authentication">
         <aside class="auth-brand-panel" aria-hidden="true">
           <div class="auth-brand-lockup">
-            <span class="auth-brand-mark">
-              <svg viewBox="0 0 64 64" class="brand-mark-svg">
-                <defs>
-                  <linearGradient id="authBrandGradient" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stop-color="#4b8eff" />
-                    <stop offset="100%" stop-color="#adc6ff" />
-                  </linearGradient>
-                </defs>
-                <rect x="6" y="6" width="52" height="52" rx="18" fill="url(#authBrandGradient)" />
-                <path d="M20 38c3.4-7.8 9.5-14 18.5-18.5" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" />
-                <path d="M25 43c2.2-5.3 6.9-9.7 13.9-13" fill="none" stroke="#fff" stroke-opacity="0.75" stroke-width="3.25" stroke-linecap="round" />
-                <circle cx="43" cy="21" r="5.5" fill="#fff" />
-              </svg>
+            <span class="project-logo project-logo-auth">
+              <img src="/urban-pulse-logo-transparent.png" alt="Urban Pulse" />
             </span>
-            <span>Urban Pulse AI</span>
           </div>
 
           <div class="auth-brand-copy">
@@ -124,7 +112,7 @@
             <label>
               <span class="field-label">Password</span>
               <div class="auth-password-control">
-                <input type="password" id="authPassword" name="password" placeholder="Enter password" autocomplete="current-password" />
+                <input type="password" id="authPassword" name="password" placeholder="Enter password" autocomplete="current-password" minlength="8" maxlength="128" required />
                 <button type="button" id="authPasswordToggle" class="auth-password-toggle" aria-label="Show password" aria-pressed="false">
                   <svg class="auth-password-eye" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"></path>
@@ -201,24 +189,8 @@
       <div class="main-frame">
         <header class="topbar" data-react-liquid-glass="navigation">
           <a href="#heroStage" class="brand-lockup">
-            <span class="brand-mark">
-              <svg viewBox="0 0 64 64" class="brand-mark-svg" aria-hidden="true">
-                <defs>
-                  <linearGradient id="brandGradient" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stop-color="#4d8eff" />
-                    <stop offset="50%" stop-color="#adc6ff" />
-                    <stop offset="100%" stop-color="#ffb95f" />
-                  </linearGradient>
-                </defs>
-                <rect x="6" y="6" width="52" height="52" rx="18" fill="url(#brandGradient)" />
-                <path d="M20 38c3.4-7.8 9.5-14 18.5-18.5" fill="none" stroke="#fff" stroke-width="4.5" stroke-linecap="round" />
-                <path d="M25 43c2.2-5.3 6.9-9.7 13.9-13" fill="none" stroke="#fff" stroke-opacity="0.75" stroke-width="3.25" stroke-linecap="round" />
-                <circle cx="43" cy="21" r="5.5" fill="#fff" />
-              </svg>
-            </span>
-            <span class="brand-copy">
-              <span class="brand-kicker">Civic complaint and city health platform</span>
-              <strong>Urban Pulse AI</strong>
+            <span class="project-logo project-logo-nav">
+              <img src="/urban-pulse-logo-transparent.png" alt="Urban Pulse" />
             </span>
           </a>
 
@@ -230,15 +202,14 @@
 
           <nav id="siteNav" class="site-nav">
             <a href="#heroStage" class="nav-link is-active">Home</a>
-            <a href="#aboutView" class="nav-link">About</a>
+            <a href="#adminWorkspace" class="nav-link">Dashboard</a>
             <a href="#reportFormWorkspace" class="nav-link">Report</a>
             <a href="#complaintsWorkspace" class="nav-link">Complaints</a>
-            <a href="#adminWorkspace" class="nav-link">Dashboard</a>
             <a href="#alertsWorkspace" class="nav-link">Alerts</a>
             <a href="#mapWorkspace" class="nav-link">Map</a>
+            <a href="#aboutView" class="nav-link">About</a>
             <span id="navTubelight" class="nav-tubelight" aria-hidden="true"></span>
             <div class="nav-actions">
-              <button type="button" id="audioToggleBtn" class="chip-button">Sound On</button>
               <button type="button" id="issueTokenBtn" class="light-beam-button">Login</button>
               <button type="button" id="logoutBtn" class="chip-button" hidden>Logout</button>
             </div>
@@ -250,7 +221,6 @@
             <div class="hero-sticky-shell">
               <div class="hero-grid hero-story-grid">
                 <div class="hero-copy hero-story-copy">
-                  <p class="eyebrow">Report and manage local issues</p>
                   <h1>Report civic issues. Track response. Understand city health.</h1>
                   <p class="hero-text">
                     Urban Pulse AI helps citizens submit complaints and helps admins route, monitor, and respond to incidents faster.
@@ -421,7 +391,7 @@
             <div class="section-head">
               <div>
                 <p class="eyebrow">Reporting</p>
-                <h2>Submit a complaint and review the result without leaving the page.</h2>
+                <h2>Submit a complaint.</h2>
               </div>
               <button type="button" id="resetDashboardBtn" class="chip-button">Reset</button>
             </div>
@@ -620,7 +590,6 @@
               </div>
               <div class="section-head compact ops-subhead">
                 <div>
-                  <p class="eyebrow">Civic digital twin</p>
                   <h2>City Health</h2>
                 </div>
               </div>
@@ -751,7 +720,11 @@
         </main>
 
         <footer class="page-footer" data-reveal>
-          <p class="footer-title">Urban Pulse</p>
+          <div class="footer-title">
+            <span class="project-logo project-logo-footer">
+              <img src="/urban-pulse-logo-transparent.png" alt="Urban Pulse" loading="lazy" />
+            </span>
+          </div>
           <div class="footer-meta">
             <section class="footer-links-block">
               <p class="footer-section-title">Links</p>
