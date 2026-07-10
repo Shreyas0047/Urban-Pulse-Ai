@@ -3,12 +3,19 @@ const { analyzeComplaint } = require("./aiClient");
 const { createEmergencyBroadcast } = require("./broadcastService");
 const { fetchCivicEvidence } = require("./civicEvidenceService");
 const { createIncidentCommand, summarizeIncidentCommand } = require("./incidentCommandService");
+const { attachComplaintToCluster } = require("./incidentClusterService");
+const { initializeFollowUp } = require("./followUpService");
 const { canonicalPriority, routeComplaint } = require("./routingService");
 const { fetchWeatherSnapshot } = require("./weatherService");
+const { extractAreaIntelligence } = require("../utils/localAlerts");
 
 const LOW_CONFIDENCE_THRESHOLD = 0.52;
 const GEOCODE_TIMEOUT_MS = 3500;
 const MAX_AI_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_LOCATION_LENGTH = 240;
+const MAX_COMPLAINT_TEXT_LENGTH = 2500;
+const MAX_IMAGE_HINT_LENGTH = 800;
+const MAX_VOICE_TRANSCRIPT_LENGTH = 3500;
 const ALLOWED_AI_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PRIORITY_ORDER = {
   Low: 1,
@@ -63,6 +70,15 @@ function normalizeImagePayload(payload) {
     imageBase64,
     imageMimeType
   };
+}
+
+function normalizeLimitedText(value, fieldName, maxLength) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (normalized.length > maxLength) {
+    throw createHttpError(`${fieldName} is too long. Keep it under ${maxLength} characters.`, 413);
+  }
+
+  return normalized;
 }
 
 async function geocodeLocation(location) {
@@ -279,10 +295,10 @@ function logAiDecision({ auth, location, analysis, confidenceScore, reviewRequir
 }
 
 async function createComplaintFromPayload(auth, payload) {
-  const location = String(payload.location || "").trim();
-  const textComplaint = String(payload.textComplaint || "").trim();
-  const imageHint = String(payload.imageHint || "").trim();
-  const voiceTranscript = String(payload.voiceTranscript || "").trim();
+  const location = normalizeLimitedText(payload.location, "Location", MAX_LOCATION_LENGTH);
+  const textComplaint = normalizeLimitedText(payload.textComplaint, "Complaint description", MAX_COMPLAINT_TEXT_LENGTH);
+  const imageHint = normalizeLimitedText(payload.imageHint, "Image summary", MAX_IMAGE_HINT_LENGTH);
+  const voiceTranscript = normalizeLimitedText(payload.voiceTranscript, "Voice transcript", MAX_VOICE_TRANSCRIPT_LENGTH);
   const imagePayload = normalizeImagePayload(payload);
 
   if (!location) {
@@ -296,10 +312,20 @@ async function createComplaintFromPayload(auth, payload) {
   const previousComplaintFilter = auth.userId
     ? { reporterUserId: String(auth.userId || "") }
     : { reporterUsername: auth.username };
-  const recentAreaFilter = location ? { location: new RegExp(location.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") } : {};
+  const preliminaryAreaIntelligence = extractAreaIntelligence({ location });
+  const recentAreaTerms = (preliminaryAreaIntelligence.matchingTerms || [])
+    .filter((term) => String(term || "").trim().length >= 3)
+    .slice(0, 8);
+  const recentAreaFilter = recentAreaTerms.length
+    ? {
+        $or: recentAreaTerms.map((term) => ({
+          location: new RegExp(String(term).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+        }))
+      }
+    : {};
   const [previousComplaints, recentAreaComplaints, activeRoutingComplaints] = await Promise.all([
     Complaint.find(previousComplaintFilter).sort({ createdAt: -1 }).limit(5).lean(),
-    location
+    recentAreaTerms.length
       ? Complaint.find(recentAreaFilter).sort({ createdAt: -1 }).limit(8).lean()
       : Promise.resolve([]),
     Complaint.find({ status: { $in: ["Queued", "Needs Review", "In Progress", "Escalated"] } })
@@ -339,6 +365,7 @@ async function createComplaintFromPayload(auth, payload) {
     }))
   });
   const threatAssessment = applyThreatPriority(analysis);
+  analysis.threatAssessment = threatAssessment;
   const geocoded = await geocodeLocation(location);
   const mapLocation = {
     lat: geocoded.lat,
@@ -375,6 +402,12 @@ async function createComplaintFromPayload(auth, payload) {
     mapLocation,
     activeComplaints: activeRoutingComplaints
   });
+  const areaIntelligence = extractAreaIntelligence({
+    location,
+    routing,
+    mapLocation
+  });
+  analysis.areaIntelligence = areaIntelligence;
   analysis.assignedAuthority = routing.authority;
   analysis.nlp.team = routing.department || analysis.nlp.team;
   analysis.alerts = [
@@ -405,10 +438,15 @@ async function createComplaintFromPayload(auth, payload) {
     assignedAuthority: routing.authority,
     routing,
     mapLocation,
+    areaIntelligence,
     weather,
     civicEvidence,
     description: analysis.unifiedText || "No complaint text provided.",
     alerts: analysis.alerts,
+    followUp: initializeFollowUp({
+      priority: analysis.priority.level,
+      status: finalStatus
+    }),
     statusHistory: [
       {
         status: finalStatus,
@@ -452,6 +490,18 @@ async function createComplaintFromPayload(auth, payload) {
     }
   });
 
+  let incidentCluster = null;
+  try {
+    incidentCluster = await attachComplaintToCluster(complaint);
+    analysis.incidentCluster = incidentCluster;
+  } catch (error) {
+    complaint.alerts = [
+      ...(complaint.alerts || []),
+      `Incident clustering skipped: ${error.message || "unknown clustering error"}`
+    ];
+    await complaint.save();
+  }
+
   let broadcast = null;
   try {
     broadcast = await createEmergencyBroadcast({
@@ -461,7 +511,9 @@ async function createComplaintFromPayload(auth, payload) {
       mapLocation,
       confidenceScore,
       recentAreaComplaints,
-      triggeredBy: auth.username || "system"
+      areaIntelligence,
+      triggeredBy: auth.username || "system",
+      triggeredByUserId: auth.userId || ""
     });
   } catch (error) {
     complaint.alerts = [

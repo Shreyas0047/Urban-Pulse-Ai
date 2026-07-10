@@ -445,7 +445,7 @@ async function sendEmergencyBroadcastEmail({ emails, complaint, routing, message
   }
 
   const bodyLines = [
-    "Emergency civic alert from Urban Pulse AI.",
+    "Local civic alert from Urban Pulse AI.",
     "",
     message,
     "",
@@ -455,15 +455,18 @@ async function sendEmergencyBroadcastEmail({ emails, complaint, routing, message
     `Assigned unit: ${routing?.unit || complaint.assignedAuthority}`,
     `Department: ${routing?.department || "Response team"}`,
     "",
-    "Please avoid the affected area if needed and follow local authority instructions.",
+    "Why you are receiving this:",
+    "You are an admin, a nearby prior reporter, or you opted in to local alerts for this area.",
     "",
-    "This alert was generated because the complaint was classified as high-risk."
+    "Please avoid the affected area if needed, follow local authority instructions, and do not put yourself at risk while checking the issue.",
+    "",
+    "This alert was generated because the AI classified the complaint as a serious local risk."
   ];
 
   const info = await sendMail({
     purpose: "emergency_broadcast",
     to: safeEmails,
-    subject: `Emergency civic alert: ${complaint.type}`,
+    subject: `Local civic alert: ${complaint.type} near ${complaint.location}`,
     text: bodyLines.join("\n")
   });
 

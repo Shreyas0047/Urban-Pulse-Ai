@@ -83,6 +83,13 @@ const mapComplaintList = document.getElementById("mapComplaintList");
 const mapVisibleCount = document.getElementById("mapVisibleCount");
 const mapHotspotLabel = document.getElementById("mapHotspotLabel");
 const mapPriorityWatch = document.getElementById("mapPriorityWatch");
+const localAlertsForm = document.getElementById("localAlertsForm");
+const localAlertsEnabled = document.getElementById("localAlertsEnabled");
+const localAlertAreasInput = document.getElementById("localAlertAreasInput");
+const localAlertSeverityThreshold = document.getElementById("localAlertSeverityThreshold");
+const localAlertAreasList = document.getElementById("localAlertAreasList");
+const localAlertsMessage = document.getElementById("localAlertsMessage");
+const saveLocalAlertsBtn = document.getElementById("saveLocalAlertsBtn");
 const userManagementWorkspace = document.getElementById("userManagementWorkspace");
 const userSearchInput = document.getElementById("userSearchInput");
 const userStateFilter = document.getElementById("userStateFilter");
@@ -92,6 +99,7 @@ const complaintStatusFilter = document.getElementById("complaintStatusFilter");
 const complaintSortSelect = document.getElementById("complaintSortSelect");
 const clearComplaintFiltersBtn = document.getElementById("clearComplaintFiltersBtn");
 const adminInsights = document.getElementById("adminInsights");
+const incidentClusterPanel = document.getElementById("incidentClusterPanel");
 const locationMapFrame = document.getElementById("locationMapFrame");
 const liveLocationStatus = document.getElementById("liveLocationStatus");
 const pageFooter = document.querySelector(".page-footer");
@@ -119,6 +127,7 @@ let currentImageInsight = null;
 let currentImageDataUrl = null;
 let currentImageAiPayload = null;
 let lastSubmittedReport = null;
+let localAlertPreferences = null;
 let audioEnabled = false;
 let audioContext = null;
 let masterGain = null;
@@ -1373,6 +1382,10 @@ function applyPermissionState() {
     alertsList.innerHTML = `<div class="table-row"><span>Login as Admin to manage alerts.</span></div>`;
   }
 
+  if (!hasToken) {
+    renderLocalAlertPreferences(null);
+  }
+
   document.querySelectorAll('.nav-link[href="#adminWorkspace"], .nav-link[href="#alertsWorkspace"]').forEach((link) => {
     link.hidden = !permissions.includes("view_dashboard");
   });
@@ -1982,6 +1995,10 @@ function renderMetrics(metrics) {
   if (incidentCount) {
     incidentCount.textContent = metrics?.activeIncidents || 0;
   }
+  const clusterCount = document.getElementById("clusterCount");
+  if (clusterCount) {
+    clusterCount.textContent = metrics?.activeClusters || 0;
+  }
 }
 
 function getFilteredComplaints(complaints = []) {
@@ -2240,6 +2257,32 @@ function renderIncidentCommands(commands = []) {
     .join("");
 }
 
+function renderIncidentClusters(clusters = []) {
+  if (!incidentClusterPanel) return;
+
+  if (!clusters.length) {
+    incidentClusterPanel.innerHTML = `<div class="table-row empty-state"><span>No merged incident clusters yet. Similar reports will group here automatically.</span></div>`;
+    return;
+  }
+
+  incidentClusterPanel.innerHTML = clusters
+    .map(
+      (cluster) => `
+        <div class="table-row">
+          <div>
+            <strong>${escapeHtml(cluster.clusterCode || "Cluster")}: ${escapeHtml(cluster.title || cluster.issueType || "Civic incident")}</strong>
+            <span>${escapeHtml(cluster.area || cluster.location || "Unknown area")} · ${escapeHtml(cluster.issueType || "Issue")}</span>
+          </div>
+          <div>
+            <strong>${cluster.mergedCount || cluster.complaintIds?.length || 1} reports</strong>
+            <span>${escapeHtml(cluster.matchReason || "Similarity-based incident grouping")} · ${Math.round(Number(cluster.confidence || 0) * 100)}%</span>
+          </div>
+        </div>
+      `
+    )
+    .join("");
+}
+
 function formatTokenLabel(value) {
   return String(value || "")
     .toLowerCase()
@@ -2332,8 +2375,12 @@ function buildSubmittedReport(payload, result) {
     routing: result.routing || result.explainability?.routing || null,
     broadcast: result.broadcast || result.explainability?.broadcast || null,
     incidentCommand: result.incidentCommand || result.explainability?.incidentCommand || null,
+    incidentCluster: result.incidentCluster || null,
+    followUp: result.followUp || null,
+    verification: result.verification || null,
     weather: result.weather || result.explainability?.weather || null,
     civicEvidence: result.civicEvidence || result.explainability?.civicEvidence || null,
+    areaIntelligence: result.areaIntelligence || result.explainability?.areaIntelligence || null,
     threatAssessment: result.threatAssessment || result.explainability?.threatAssessment || result.cv?.threatAssessment || null,
     status: result.status || "Queued",
     detection: result.cv?.detected || "No image analysis available",
@@ -2474,6 +2521,23 @@ function renderBroadcastSummary(complaint) {
     .join("<br>");
 }
 
+function renderAreaIntelligenceSummary(complaint) {
+  const area = complaint.areaIntelligence || {};
+  if (!area.provider) {
+    return "Area intelligence was not recorded for this complaint.";
+  }
+
+  return [
+    area.likelyArea ? `Likely area: ${area.likelyArea}` : "",
+    (area.landmarkHints || []).length ? `Landmarks: ${(area.landmarkHints || []).slice(0, 3).join(", ")}` : "",
+    (area.wardHints || []).length ? `Ward hints: ${(area.wardHints || []).slice(0, 3).join(", ")}` : "",
+    `Match confidence: ${formatPercent(area.confidence)}`
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
 function renderIncidentSummary(complaint) {
   const incident = complaint.incidentCommand || {};
   if (!incident.triggered) {
@@ -2485,6 +2549,54 @@ function renderIncidentSummary(complaint) {
     `Status: ${incident.status || "Active"}`,
     incident.slaDueAt ? `SLA: ${formatDateTime(incident.slaDueAt)}` : "",
     incident.summary || ""
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
+function renderIncidentClusterSummary(complaint) {
+  const cluster = complaint.incidentCluster || {};
+  if (!cluster.clusterId && !cluster.clusterCode) {
+    return "No related incident cluster was linked yet.";
+  }
+
+  return [
+    cluster.clusterCode ? `Cluster: ${cluster.clusterCode}` : "",
+    cluster.clustered ? `Merged reports: ${cluster.mergedCount || 1}` : "Initial report in this cluster",
+    cluster.matchReason || "",
+    `Match confidence: ${formatPercent(cluster.confidence)}`
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
+function renderFollowUpSummary(complaint) {
+  const followUp = complaint.followUp || {};
+  if (!followUp.nextDueAt && followUp.status !== "closed") {
+    return "No automatic follow-up schedule was recorded.";
+  }
+
+  return [
+    `Status: ${followUp.status || "scheduled"}`,
+    followUp.nextDueAt ? `Next check: ${formatDateTime(followUp.nextDueAt)}` : "",
+    `Follow-ups generated: ${followUp.count || 0}`,
+    followUp.escalationNote || followUp.reason || ""
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
+function renderVerificationSummary(complaint) {
+  const summary = complaint.verification?.summary || {};
+  return [
+    `Citizen status: ${String(summary.citizenStatus || "unverified").replace(/_/g, " ")}`,
+    `Still there: ${summary.stillThere || 0}`,
+    `Resolved: ${summary.resolved || 0}`,
+    `Got worse: ${summary.gotWorse || 0}`,
+    summary.lastVoteAt ? `Last vote: ${formatDateTime(summary.lastVoteAt)}` : ""
   ]
     .filter(Boolean)
     .map(escapeHtml)
@@ -2690,9 +2802,34 @@ function renderComplaintDetail(complaint) {
           <p>${renderBroadcastSummary(complaint)}</p>
         </section>
         <section class="detail-support-card">
+          <p class="detail-section-label">Area intelligence</p>
+          <strong>${escapeHtml(complaint.areaIntelligence?.likelyArea || "Area inferred")}</strong>
+          <p>${renderAreaIntelligenceSummary(complaint)}</p>
+        </section>
+        <section class="detail-support-card">
           <p class="detail-section-label">Incident command</p>
           <strong>${complaint.incidentCommand?.triggered ? escapeHtml(complaint.incidentCommand.incidentCode || "Command active") : "Not opened"}</strong>
           <p>${renderIncidentSummary(complaint)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Incident cluster</p>
+          <strong>${escapeHtml(complaint.incidentCluster?.clusterCode || "Not clustered")}</strong>
+          <p>${renderIncidentClusterSummary(complaint)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Auto follow-up</p>
+          <strong>${escapeHtml(complaint.followUp?.status || "scheduled")}</strong>
+          <p>${renderFollowUpSummary(complaint)}</p>
+        </section>
+        <section class="detail-support-card">
+          <p class="detail-section-label">Citizen verification</p>
+          <strong>${escapeHtml((complaint.verification?.summary?.citizenStatus || "unverified").replace(/_/g, " "))}</strong>
+          <p>${renderVerificationSummary(complaint)}</p>
+          <div class="verification-actions" data-complaint-id="${escapeHtml(complaint._id)}">
+            <button type="button" class="chip-button verification-vote-btn" data-vote="still_there">Still there</button>
+            <button type="button" class="chip-button verification-vote-btn" data-vote="resolved">Looks resolved</button>
+            <button type="button" class="chip-button verification-vote-btn" data-vote="got_worse">Got worse</button>
+          </div>
         </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Threat assessment</p>
@@ -2747,6 +2884,26 @@ function renderComplaintDetail(complaint) {
   `;
   complaintDetailOverlay.hidden = false;
   document.body.classList.add("auth-open");
+  complaintDetailBody.querySelectorAll(".verification-vote-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const complaintId = button.closest(".verification-actions")?.dataset.complaintId;
+      if (!complaintId) return;
+
+      try {
+        button.disabled = true;
+        const data = await apiRequest(`/api/complaints/${complaintId}/verification`, {
+          method: "POST",
+          body: JSON.stringify({ vote: button.dataset.vote })
+        });
+        setDashboardMessage(data.message || "Citizen verification recorded.", "success");
+        await openComplaintDetail(complaintId);
+        await loadDashboard();
+      } catch (error) {
+        setDashboardMessage(error.message, "error");
+        button.disabled = false;
+      }
+    });
+  });
 }
 
 async function openComplaintDetail(complaintId) {
@@ -3010,6 +3167,30 @@ async function generatePdfReport(report, options = {}) {
   cursorY -= 8;
   drawBulletsBox(report.notifications);
   drawRow("Emergency Broadcast", report.broadcast?.triggered ? `${report.broadcast.status || "created"} · ${report.broadcast.recipientCount || 0} recipient(s)` : "Not triggered");
+  drawRow(
+    "Auto Follow-up",
+    report.followUp
+      ? `${report.followUp.status || "scheduled"} · next ${report.followUp.nextDueAt ? formatDateTime(report.followUp.nextDueAt) : "not scheduled"} · ${report.followUp.count || 0} generated`
+      : "Not recorded"
+  );
+  drawRow(
+    "Citizen Verification",
+    report.verification?.summary
+      ? `${String(report.verification.summary.citizenStatus || "unverified").replace(/_/g, " ")} · ${report.verification.summary.total || 0} vote(s)`
+      : "No citizen votes recorded"
+  );
+  drawRow(
+    "Area Intelligence",
+    report.areaIntelligence?.provider
+      ? `${report.areaIntelligence.likelyArea || "Area inferred"} · ${(report.areaIntelligence.landmarkHints || []).slice(0, 2).join(", ") || "No landmark"} · ${formatPercent(report.areaIntelligence.confidence)}`
+      : "Not recorded"
+  );
+  drawRow(
+    "Incident Cluster",
+    report.incidentCluster?.clusterCode
+      ? `${report.incidentCluster.clusterCode} · ${report.incidentCluster.clustered ? `${report.incidentCluster.mergedCount || 1} merged report(s)` : "initial cluster report"} · ${report.incidentCluster.matchReason || "clustered"}`
+      : "Not clustered"
+  );
   drawRow("Incident Command", report.incidentCommand?.triggered ? `${report.incidentCommand.incidentCode || "Opened"} · SLA ${formatDateTime(report.incidentCommand.slaDueAt)}` : "Not opened");
   drawRow("Threat Evidence", "");
   cursorY -= 8;
@@ -3332,6 +3513,104 @@ function renderUserManagement(users = []) {
       }
     });
   });
+}
+
+function renderLocalAlertPreferences(preferences = null) {
+  const enabled = Boolean(preferences?.enabled);
+  const areas = Array.isArray(preferences?.areas) ? preferences.areas : [];
+  const threshold = preferences?.severityThreshold || "High";
+
+  localAlertsEnabled.checked = enabled;
+  localAlertSeverityThreshold.value = threshold;
+  localAlertAreasInput.value = areas.map((area) => area.label || area.normalized || "").filter(Boolean).join(", ");
+
+  if (!authState?.token) {
+    localAlertAreasList.innerHTML = `<div class="table-row empty-state"><span>Login to manage local alert areas.</span></div>`;
+    localAlertsMessage.textContent = "";
+    saveLocalAlertsBtn.disabled = true;
+    localAlertsEnabled.disabled = true;
+    localAlertAreasInput.disabled = true;
+    localAlertSeverityThreshold.disabled = true;
+    return;
+  }
+
+  saveLocalAlertsBtn.disabled = false;
+  localAlertsEnabled.disabled = false;
+  localAlertAreasInput.disabled = false;
+  localAlertSeverityThreshold.disabled = false;
+
+  if (!areas.length) {
+    localAlertAreasList.innerHTML = `<div class="table-row empty-state"><span>No alert areas saved yet. Add area names separated by commas.</span></div>`;
+    return;
+  }
+
+  localAlertAreasList.innerHTML = areas
+    .map(
+      (area) => `
+        <article class="table-row">
+          <div>
+            <strong>${escapeHtml(area.label || "Saved area")}</strong>
+            <span>${enabled ? `Email alerts enabled for ${escapeHtml(threshold)} severity and above.` : "Saved, but email alerts are disabled."}</span>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function parseLocalAlertAreasInput() {
+  return localAlertAreasInput.value
+    .split(",")
+    .map((label) => label.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .map((label) => ({ label }));
+}
+
+async function loadLocalAlertPreferences() {
+  if (!authState?.token) {
+    localAlertPreferences = null;
+    renderLocalAlertPreferences(null);
+    return;
+  }
+
+  try {
+    const data = await apiRequest("/api/local-alert-preferences", { method: "GET" });
+    localAlertPreferences = data.preferences || null;
+    renderLocalAlertPreferences(localAlertPreferences);
+  } catch (error) {
+    localAlertsMessage.textContent = error.message;
+  }
+}
+
+async function saveLocalAlertPreferences(event) {
+  event.preventDefault();
+
+  try {
+    if (!authState?.token) {
+      throw new Error("Login before saving local alert areas.");
+    }
+
+    saveLocalAlertsBtn.disabled = true;
+    localAlertsMessage.textContent = "Saving local alert areas...";
+    const data = await apiRequest("/api/local-alert-preferences", {
+      method: "PATCH",
+      body: JSON.stringify({
+        enabled: localAlertsEnabled.checked,
+        severityThreshold: localAlertSeverityThreshold.value,
+        areas: parseLocalAlertAreasInput()
+      })
+    });
+
+    localAlertPreferences = data.preferences || null;
+    renderLocalAlertPreferences(localAlertPreferences);
+    localAlertsMessage.textContent = data.message || "Local alert areas saved.";
+    setDashboardMessage(localAlertsMessage.textContent, "success");
+  } catch (error) {
+    localAlertsMessage.textContent = error.message;
+    setDashboardMessage(error.message, "error");
+  } finally {
+    saveLocalAlertsBtn.disabled = false;
+  }
 }
 
 function markerColor(status) {
@@ -3840,6 +4119,7 @@ function renderLoggedOutState() {
   renderDigitalTwin(null);
   renderRiskPredictions(null);
   renderIncidentCommands([]);
+  renderIncidentClusters([]);
   document.getElementById("recentComplaints").innerHTML = `<div class="table-row empty-state"><span>Login to view recent complaints.</span></div>`;
   document.getElementById("complaintsList").innerHTML = `<div class="table-row empty-state"><span>Login to view your complaint history.</span></div>`;
   document.getElementById("adminTable").innerHTML = `<div class="table-row empty-state"><span>Login as Admin to access the command center.</span></div>`;
@@ -3870,6 +4150,7 @@ function renderDashboardLoadingState() {
   const digitalTwinPanel = document.getElementById("digitalTwinPanel");
   const riskPredictionPanel = document.getElementById("riskPredictionPanel");
   const incidentCommandPanel = document.getElementById("incidentCommandPanel");
+  const incidentClusterPanel = document.getElementById("incidentClusterPanel");
   if (digitalTwinPanel) {
     digitalTwinPanel.innerHTML = `${skeleton}${skeleton}`;
   }
@@ -3878,6 +4159,9 @@ function renderDashboardLoadingState() {
   }
   if (incidentCommandPanel) {
     incidentCommandPanel.innerHTML = `${skeleton}${skeleton}`;
+  }
+  if (incidentClusterPanel) {
+    incidentClusterPanel.innerHTML = `${skeleton}${skeleton}`;
   }
   alertsList.innerHTML = `${skeleton}${skeleton}`;
   userManagementList.innerHTML = `${skeleton}${skeleton}`;
@@ -3960,7 +4244,8 @@ async function loadDashboard() {
     users: data.manageableUsers || [],
     digitalTwin: data.digitalTwin || null,
     riskPredictions: data.riskPredictions || null,
-    incidentCommands: data.incidentCommands || []
+    incidentCommands: data.incidentCommands || [],
+    incidentClusters: data.incidentClusters || []
   };
   renderMetrics(data.metrics);
   renderRecentComplaints(data.complaints);
@@ -3969,10 +4254,12 @@ async function loadDashboard() {
   renderDigitalTwin(data.digitalTwin || null);
   renderRiskPredictions(data.riskPredictions || null);
   renderIncidentCommands(data.incidentCommands || []);
+  renderIncidentClusters(data.incidentClusters || []);
   renderAdminTable(data.complaints);
   renderAlerts(data.complaints);
   renderMap(data.complaints);
   renderUserManagement(data.manageableUsers || []);
+  await loadLocalAlertPreferences();
 
   if (data.auth) {
     authState = { ...authState, role: data.auth.role, username: data.auth.username, permissions: data.auth.permissions };
@@ -4274,6 +4561,7 @@ closeContactsForm?.addEventListener("submit", async (event) => {
     sendCloseContactsBtn.disabled = false;
   }
 });
+localAlertsForm?.addEventListener("submit", saveLocalAlertPreferences);
 generatePdfBtn.addEventListener("click", async () => {
   try {
     const result = await generatePdfReport(lastSubmittedReport, { download: true });

@@ -60,9 +60,33 @@ const complaintSchema = new mongoose.Schema(
       riskScore: { type: Number, default: 0 },
       summary: { type: String, default: "" }
     },
+    incidentCluster: {
+      clustered: { type: Boolean, default: false },
+      clusterId: { type: mongoose.Schema.Types.ObjectId, ref: "IncidentCluster", default: null },
+      clusterCode: { type: String, default: "" },
+      title: { type: String, default: "" },
+      confidence: { type: Number, default: 0 },
+      matchReason: { type: String, default: "" },
+      mergedCount: { type: Number, default: 1 },
+      matchedComplaintIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Complaint" }]
+    },
     mapLocation: {
       lat: Number,
       lng: Number
+    },
+    areaIntelligence: {
+      provider: { type: String, default: "" },
+      likelyArea: { type: String, default: "" },
+      matchedAreas: [{ type: String }],
+      landmarkHints: [{ type: String }],
+      wardHints: [{ type: String }],
+      normalizedLocation: { type: String, default: "" },
+      matchingTerms: [{ type: String }],
+      confidence: { type: Number, default: 0 },
+      mapLocation: {
+        lat: { type: Number, default: null },
+        lng: { type: Number, default: null }
+      }
     },
     weather: {
       status: { type: String, default: "unavailable" },
@@ -107,6 +131,33 @@ const complaintSchema = new mongoose.Schema(
     },
     description: { type: String, required: true },
     alerts: [{ type: String }],
+    followUp: {
+      status: { type: String, default: "scheduled", enum: ["scheduled", "due", "overdue", "closed"] },
+      nextDueAt: { type: Date, default: null },
+      lastGeneratedAt: { type: Date, default: null },
+      count: { type: Number, default: 0 },
+      reason: { type: String, default: "" },
+      escalationNote: { type: String, default: "" }
+    },
+    verification: {
+      summary: {
+        stillThere: { type: Number, default: 0 },
+        resolved: { type: Number, default: 0 },
+        gotWorse: { type: Number, default: 0 },
+        total: { type: Number, default: 0 },
+        citizenStatus: { type: String, default: "unverified" },
+        lastVoteAt: { type: Date, default: null }
+      },
+      votes: [
+        {
+          userId: { type: String, default: "" },
+          username: { type: String, default: "" },
+          vote: { type: String, enum: ["still_there", "resolved", "got_worse"] },
+          note: { type: String, default: "" },
+          createdAt: { type: Date, default: Date.now }
+        }
+      ]
+    },
     statusHistory: [
       {
         status: { type: String, required: true },

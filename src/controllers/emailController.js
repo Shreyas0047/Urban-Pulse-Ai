@@ -1,4 +1,6 @@
 const { sendBbmpComplaintEmail, sendCloseContactsComplaintEmail } = require("../services/emailService");
+const Complaint = require("../models/Complaint");
+const mongoose = require("mongoose");
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_SUBJECT_LENGTH = 180;
@@ -61,6 +63,31 @@ function validateReport(report) {
   };
 }
 
+async function assertReportComplaintAccess(req, report) {
+  if (!report.complaintId || report.complaintId === "Pending") {
+    throw createHttpError("A saved complaint ID is required before sending email.", 400);
+  }
+  if (!mongoose.Types.ObjectId.isValid(report.complaintId)) {
+    throw createHttpError("A valid complaint ID is required before sending email.", 400);
+  }
+
+  const complaint = await Complaint.findById(report.complaintId).lean();
+  if (!complaint) {
+    throw createHttpError("Complaint not found.", 404);
+  }
+
+  const canViewDashboard = req.auth?.permissions?.includes("view_dashboard");
+  const ownsComplaint =
+    (req.auth?.userId && complaint.reporterUserId === String(req.auth.userId)) ||
+    complaint.reporterUsername === req.auth?.username;
+
+  if (!canViewDashboard && !ownsComplaint) {
+    throw createHttpError("Permission denied for this complaint email.", 403);
+  }
+
+  return complaint;
+}
+
 function validateCloseContactEmails(emails) {
   if (!Array.isArray(emails)) {
     throw createHttpError("Contact emails must be provided as a list.", 400);
@@ -87,6 +114,7 @@ function validateCloseContactEmails(emails) {
 async function emailBbmpComplaint(req, res, next) {
   try {
     const report = validateReport(req.body.report);
+    await assertReportComplaintAccess(req, report);
     const pdfBase64 = validateAttachment(req.body.pdfBase64);
     const filename = sanitizeFilename(req.body.filename);
     const subject = normalizeText(req.body.subject || report.textComplaint || report.issueType || "Community complaint report", MAX_SUBJECT_LENGTH);
@@ -111,6 +139,7 @@ async function emailBbmpComplaint(req, res, next) {
 async function informCloseContacts(req, res, next) {
   try {
     const report = validateReport(req.body.report);
+    await assertReportComplaintAccess(req, report);
     const emails = validateCloseContactEmails(req.body.emails);
     const emailResult = await sendCloseContactsComplaintEmail({
       emails,

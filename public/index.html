@@ -587,6 +587,10 @@
                   <span>Incidents</span>
                   <strong id="incidentCount">0</strong>
                 </div>
+                <div class="metric-card">
+                  <span>Clusters</span>
+                  <strong id="clusterCount">0</strong>
+                </div>
               </div>
               <div class="section-head compact ops-subhead">
                 <div>
@@ -608,6 +612,13 @@
                 </div>
               </div>
               <div id="incidentCommandPanel" class="table-list command-room-list"></div>
+              <div class="section-head compact ops-subhead">
+                <div>
+                  <p class="eyebrow">Merged reports</p>
+                  <h2>Incident Clusters</h2>
+                </div>
+              </div>
+              <div id="incidentClusterPanel" class="table-list command-room-list"></div>
               <div id="adminTable" class="table-list"></div>
             </article>
 
@@ -694,6 +705,35 @@
                 ></iframe>
                 </div>
               </div>
+            </article>
+
+            <article id="localAlertsWorkspace" class="management-panel section-subpanel">
+              <div class="section-head compact">
+                <div>
+                  <p class="eyebrow">Local alerts</p>
+                  <h2>Area email alerts</h2>
+                </div>
+              </div>
+              <p class="helper-text">Add areas you care about. Urban Pulse will email you when a serious complaint is reported near a matching area.</p>
+              <form id="localAlertsForm" class="close-contacts-form">
+                <label class="toggle-row">
+                  <input type="checkbox" id="localAlertsEnabled" />
+                  <span>Send me local alert emails</span>
+                </label>
+                <div class="list-toolbar">
+                  <input type="text" id="localAlertAreasInput" placeholder="Whitefield, Indiranagar, KR Puram" maxlength="480" />
+                  <select id="localAlertSeverityThreshold">
+                    <option value="High">High and Critical</option>
+                    <option value="Critical">Critical only</option>
+                    <option value="Medium">Medium and above</option>
+                  </select>
+                </div>
+                <div class="post-submit-actions">
+                  <button type="submit" id="saveLocalAlertsBtn" class="light-beam-button gradient-button gradient-button-variant">Save alert areas</button>
+                </div>
+              </form>
+              <div id="localAlertAreasList" class="table-list"></div>
+              <p id="localAlertsMessage" class="helper-text"></p>
             </article>
 
             <article id="userManagementWorkspace" class="management-panel section-subpanel">

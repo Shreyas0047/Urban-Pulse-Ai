@@ -3,12 +3,17 @@ const dotenv = require("dotenv");
 
 dotenv.config();
 
+const jwtSecret = process.env.JWT_SECRET || "smart-community-demo-secret";
+if (process.env.NODE_ENV === "production" && jwtSecret === "smart-community-demo-secret") {
+  throw new Error("JWT_SECRET must be set to a strong secret in production.");
+}
+
 module.exports = {
   port: Number(process.env.PORT || 3000),
   publicDir: path.join(__dirname, "..", "..", "public"),
   receiptsDir: path.join(__dirname, "..", "..", "receipts"),
   mongoUri: process.env.MONGODB_URI || "",
-  jwtSecret: process.env.JWT_SECRET || "smart-community-demo-secret",
+  jwtSecret,
   tokenTtlSeconds: 60 * 60 * 8,
   aiServiceUrl: String(process.env.AI_SERVICE_URL || "http://127.0.0.1:5000").trim(),
   deepgramApiKey: String(process.env.DEEPGRAM_API_KEY || "").trim(),

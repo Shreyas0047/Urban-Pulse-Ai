@@ -88,6 +88,11 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | Civic evidence | Zenserp official-source links and public incident context | Integrated |
 | Quota guard | MongoDB-backed monthly usage limits for Weatherstack and Zenserp | Integrated |
 | Emergency broadcast | In-app/email-ready broadcast records for high-risk complaints | Integrated |
+| Local area alerts | Users can opt in to area-based email alerts for serious nearby complaints | Integrated |
+| AI area understanding | Extracts likely area, landmarks, ward hints, and matching terms from messy complaint locations | Integrated |
+| AI complaint clustering | Groups likely duplicate reports into durable incident clusters without deleting individual complaints | Integrated |
+| Auto follow-up scheduler | Creates due/overdue follow-up notes for unresolved complaints based on priority | Integrated |
+| Citizen verification voting | Lets users confirm whether an issue is still present, resolved, or getting worse | Integrated |
 | Incident command | SLA, checklist, timeline, command status, risk score | Integrated |
 | Admin dashboard | Metrics, filters, complaint review, alerts, user management | Integrated |
 | Operations map | Complaint markers, hotspot summary, focused complaint preview | Integrated |
@@ -507,6 +512,9 @@ All protected endpoints require a bearer token from login or registration.
 | `DELETE` | `/api/chatbot/history` | Clear chatbot history |
 | `POST` | `/api/email-bbmp` | Send complaint PDF to configured authority email |
 | `POST` | `/api/inform-close-contacts` | Email close contacts about a complaint |
+| `GET` | `/api/local-alert-preferences` | Load the signed-in user's local alert areas |
+| `PATCH` | `/api/local-alert-preferences` | Save opt-in local alert areas and severity threshold |
+| `POST` | `/api/complaints/:id/verification` | Record a citizen verification vote for a complaint |
 
 ### AI Service Endpoints
 
@@ -524,10 +532,11 @@ All protected endpoints require a bearer token from login or registration.
 | `User` | Citizen/Admin accounts, role, disabled state, login metadata |
 | `RegistrationOtp` | Mongo-backed registration OTP records with TTL |
 | `PasswordResetOtp` | Mongo-backed password reset OTP records with TTL |
-| `Complaint` | Main complaint record with AI, routing, weather, civic evidence, threat, map, alerts, history |
+| `Complaint` | Main complaint record with AI, routing, weather, civic evidence, threat, map, alerts, follow-ups, verification votes, and history |
 | `DepartmentUnit` | Configurable department routing unit registry |
 | `EmergencyBroadcast` | High-risk broadcast audit and delivery status |
 | `IncidentCommand` | Command-room record with SLA, checklist, timeline, assigned unit |
+| `IncidentCluster` | Similar complaint cluster with merged report count, confidence, match reason, and linked complaints |
 | `ExternalApiUsage` | Monthly quota counters for Weatherstack and Zenserp |
 | `ChatSession` | Chatbot messages and pending complaint draft state |
 
@@ -700,9 +709,14 @@ The reset endpoint clears complaints, incident command records, and emergency br
 
 - API keys and SMTP credentials must stay server-side.
 - JWT secret must be unique and strong in production.
+- Production startup refuses the local demo JWT secret when `NODE_ENV=production`.
 - OTPs are hashed before storage and expire after 5 minutes.
 - Password reset responses do not reveal whether an email is registered.
 - Complaint image payloads are size-limited and MIME-validated before AI analysis.
+- Complaint text, location, voice transcript, and audio uploads are length/size-limited server-side.
+- Authority and close-contact email endpoints verify complaint ownership before sending.
+- User-management actions preserve at least one active admin account.
+- Local area email alerts are opt-in and use saved area names instead of continuous background tracking.
 - External provider failures do not expose API keys to the frontend, PDFs, stored complaints, or logs.
 
 ## Roadmap
@@ -714,11 +728,36 @@ Strong future directions:
 - Push notifications for nearby users.
 - Admin-configurable department routing rules.
 - Human-in-the-loop AI correction feedback to improve future classifications.
-- Real duplicate image clustering with vector or perceptual-hash indexing.
+- Advanced vector/perceptual-hash clustering for larger production datasets.
 - Geo-fenced incident broadcasts based on real coordinates.
 - Public status page for selected resolved complaints.
 - CI workflow for syntax checks and AI regression tests.
 - Docker Compose setup for local development.
+
+### Local Alert Intelligence
+
+The current local-alert system is intentionally privacy-safe: users manually opt in to saved area names, and the platform emails them only when a serious matching complaint triggers a broadcast. AI area understanding now turns messy complaint locations into structured signals such as likely area, landmark hints, ward hints, normalized location text, and matching terms. These signals improve local alert matching without continuous background tracking.
+
+| Extension | What It Adds | Why It Matters |
+| --- | --- | --- |
+| Radius-based saved areas | Let users save an area with an approximate radius, such as 2 km around Whitefield | More accurate than plain text matching while staying opt-in |
+| Category preferences | Users choose alert categories like road safety, water/sewage, electricity, garbage, security, or tree obstruction | Reduces irrelevant emails |
+| Alert digest mode | Send daily or weekly summaries for Medium/High issues while keeping Critical alerts immediate | Prevents notification fatigue |
+| AI urgency gate | AI decides whether nearby users should be notified based on severity, confidence, weather, and threat assessment | Avoids sending alerts for low-risk complaints |
+| Alert history dashboard | Show which complaint triggered local alerts, matched areas, recipient count, and email delivery status | Gives admins auditability |
+| Unsubscribe controls | Add a one-click disable link or clear preference-management action in every local alert email | Improves trust and production readiness |
+
+### Major Extension Ideas
+
+| Extension | Description |
+| --- | --- |
+| Authority response portal | Give department users their own portal to update assigned complaints, add response notes, and upload resolution proof |
+| Resolution proof system | Require resolver note, after-photo, timestamp, and optional citizen confirmation before marking sensitive complaints resolved |
+| Public civic transparency page | Show selected resolved complaints, current public alerts, and area-wise civic trends without login |
+| AI feedback learning loop | Allow admins to correct category, severity, routing, and threat decisions, then use those corrections in future evaluation datasets |
+| SLA escalation engine | Track response deadlines by issue type and department, then escalate overdue cases automatically |
+| Complaint conversation thread | Give every complaint a citizen-admin follow-up thread with AI summaries of updates |
+| Ward intelligence profile | Build a profile for each ward with repeated issue types, risk trends, department load, and monthly improvement score |
 
 ## Contributing
 

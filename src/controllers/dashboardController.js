@@ -1,8 +1,10 @@
 const Complaint = require("../models/Complaint");
 const IncidentCommand = require("../models/IncidentCommand");
+const IncidentCluster = require("../models/IncidentCluster");
 const EmergencyBroadcast = require("../models/EmergencyBroadcast");
 const User = require("../models/User");
 const { buildCivicDigitalTwin } = require("../services/civicDigitalTwinService");
+const { refreshFollowUpsForComplaints } = require("../services/followUpService");
 const { buildCivicRiskPredictions } = require("../services/riskPredictionService");
 
 const iotReadings = [
@@ -133,15 +135,20 @@ async function getDashboard(req, res, next) {
       userState: String(req.query.userState || "").trim()
     };
 
-    const [allComplaints, users, incidentCommands] = await Promise.all([
-      Complaint.find(complaintFilter).sort({ createdAt: -1 }).lean(),
+    const [complaintDocs, users, incidentCommands, incidentClusters] = await Promise.all([
+      Complaint.find(complaintFilter).sort({ createdAt: -1 }),
       canDeleteUsers
         ? User.find({}, { username: 1, email: 1, role: 1, disabledAt: 1, disabledBy: 1, lastLoginAt: 1, createdAt: 1 }).sort({ role: 1, username: 1 }).lean()
         : Promise.resolve([]),
       canViewDashboard
         ? IncidentCommand.find({ commandStatus: { $in: ["Active", "Monitoring"] } }).sort({ riskScore: -1, slaDueAt: 1 }).limit(12).lean()
+        : Promise.resolve([]),
+      canViewDashboard
+        ? IncidentCluster.find({ status: { $in: ["active", "monitoring"] } }).sort({ mergedCount: -1, lastReportedAt: -1 }).limit(12).lean()
         : Promise.resolve([])
     ]);
+    await refreshFollowUpsForComplaints(complaintDocs);
+    const allComplaints = complaintDocs.map((complaint) => complaint.toObject());
 
     const complaintMatches = allComplaints
       .map((complaint) => ({
@@ -159,6 +166,7 @@ async function getDashboard(req, res, next) {
     const departmentCounts = countBy(complaints, (item) => item.routing?.department || item.ai?.recommendedTeam);
     const statusCounts = countBy(complaints, (item) => item.status);
     const broadcastCount = complaints.filter((item) => item.broadcast?.triggered).length;
+    const clusteredComplaintCount = complaints.filter((item) => item.incidentCluster?.clustered).length;
     const digitalTwin = canViewDashboard ? buildCivicDigitalTwin(allComplaints) : buildCivicDigitalTwin(complaints);
     const riskPredictions = canViewDashboard ? buildCivicRiskPredictions(allComplaints) : buildCivicRiskPredictions(complaints);
     const activeIncidentCount = complaints.filter(hasActiveIncident).length;
@@ -170,6 +178,8 @@ async function getDashboard(req, res, next) {
         criticalAlerts: complaints.filter((item) => item.priority === "Critical").length,
         emergencyBroadcasts: broadcastCount,
         activeIncidents: activeIncidentCount,
+        activeClusters: incidentClusters.length,
+        clusteredComplaints: clusteredComplaintCount,
         civicHealthScore: digitalTwin.cityHealthScore,
         highestPredictedRisk: riskPredictions.summary.highestRiskScore,
         avgConfidence: complaints.length
@@ -187,6 +197,8 @@ async function getDashboard(req, res, next) {
         totalLoadedAlerts: alertComplaints.reduce((sum, complaint) => sum + (Array.isArray(complaint.alerts) ? complaint.alerts.length : 0), 0),
         emergencyBroadcasts: broadcastCount,
         activeIncidents: activeIncidentCount,
+        activeClusters: incidentClusters.length,
+        clusteredComplaints: clusteredComplaintCount,
         civicHealthScore: digitalTwin.cityHealthScore,
         civicHealthBand: digitalTwin.cityHealthBand,
         highestPredictedRisk: riskPredictions.summary.highestRiskScore,
@@ -195,6 +207,7 @@ async function getDashboard(req, res, next) {
       digitalTwin,
       riskPredictions,
       incidentCommands,
+      incidentClusters,
       iotReadings: canViewSensors ? iotReadings : [],
       manageableUsers,
       auth: {
@@ -213,6 +226,7 @@ async function resetDashboard(req, res, next) {
     await Promise.all([
       Complaint.deleteMany({}),
       IncidentCommand.deleteMany({}),
+      IncidentCluster.deleteMany({}),
       EmergencyBroadcast.deleteMany({})
     ]);
     await getDashboard(req, res, next);

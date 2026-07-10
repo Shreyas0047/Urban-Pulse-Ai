@@ -21,15 +21,29 @@ function serializeUser(user) {
   };
 }
 
+function isSameUser(user, auth) {
+  return (
+    (auth.userId && String(user._id) === String(auth.userId)) ||
+    user.username === auth.username
+  );
+}
+
+async function hasAnotherActiveAdmin(userId) {
+  const count = await User.countDocuments({
+    _id: { $ne: userId },
+    role: "Admin",
+    disabledAt: null
+  });
+  return count > 0;
+}
+
 async function updateUser(req, res, next) {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
       throw createHttpError("User not found.", 404);
     }
-    const updatingCurrentUser =
-      (req.auth.userId && String(user._id) === String(req.auth.userId)) ||
-      user.username === req.auth.username;
+    const updatingCurrentUser = isSameUser(user, req.auth);
 
     if (req.body.role !== undefined) {
       const nextRole = String(req.body.role || "").trim();
@@ -39,6 +53,12 @@ async function updateUser(req, res, next) {
       if (updatingCurrentUser && nextRole !== user.role) {
         throw createHttpError("You cannot change your own active admin role.", 400);
       }
+      if (user.role === "Admin" && nextRole !== "Admin" && user.disabledAt === null) {
+        const anotherAdminExists = await hasAnotherActiveAdmin(user._id);
+        if (!anotherAdminExists) {
+          throw createHttpError("At least one active admin account must remain.", 400);
+        }
+      }
       user.role = nextRole;
     }
 
@@ -46,6 +66,12 @@ async function updateUser(req, res, next) {
       const disabled = Boolean(req.body.disabled);
       if (disabled && updatingCurrentUser) {
         throw createHttpError("You cannot disable your own active admin account.", 400);
+      }
+      if (disabled && user.role === "Admin" && user.disabledAt === null) {
+        const anotherAdminExists = await hasAnotherActiveAdmin(user._id);
+        if (!anotherAdminExists) {
+          throw createHttpError("At least one active admin account must remain.", 400);
+        }
       }
       user.disabledAt = disabled ? new Date() : null;
       user.disabledBy = disabled ? req.auth.username : "";
@@ -66,9 +92,18 @@ async function deleteUser(req, res, next) {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
-      const error = new Error("User not found.");
-      error.statusCode = 404;
-      throw error;
+      throw createHttpError("User not found.", 404);
+    }
+
+    if (isSameUser(user, req.auth)) {
+      throw createHttpError("You cannot delete your own active admin account.", 400);
+    }
+
+    if (user.role === "Admin" && user.disabledAt === null) {
+      const anotherAdminExists = await hasAnotherActiveAdmin(user._id);
+      if (!anotherAdminExists) {
+        throw createHttpError("At least one active admin account must remain.", 400);
+      }
     }
 
     await User.deleteOne({ _id: user._id });

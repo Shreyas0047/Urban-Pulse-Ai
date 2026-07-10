@@ -2,6 +2,7 @@ const EmergencyBroadcast = require("../models/EmergencyBroadcast");
 const User = require("../models/User");
 const { isEmailConfigured, sendEmergencyBroadcastEmail } = require("./emailService");
 const { canonicalPriority } = require("./routingService");
+const { areaMatchesLocation, meetsSeverityThreshold } = require("../utils/localAlerts");
 
 const DANGEROUS_CATEGORY_IDS = new Set([
   "safety_fire",
@@ -34,8 +35,18 @@ function shouldTriggerEmergencyBroadcast(analysis, confidenceScore) {
   return confidenceScore >= 0.52 && (!conflictDetected || !reviewRequired);
 }
 
-function buildEmergencyMessage({ complaint, routing }) {
-  return `${canonicalPriority(complaint.priority)} priority ${complaint.type} reported at ${complaint.location}. ${routing.unit} has been assigned under ${routing.department}.`;
+function buildEmergencyMessage({ complaint, routing, analysis }) {
+  const priority = canonicalPriority(complaint.priority);
+  const threat = analysis?.threatAssessment || analysis?.aiMeta?.threatAssessment || {};
+  const threatLevel = threat.threatLevel ? `${threat.threatLevel} threat` : `${priority} priority`;
+  const action =
+    threat?.safetyGate?.action === "escalate_immediately"
+      ? "Avoid the affected spot and wait for responders."
+      : priority === "Critical"
+        ? "Stay alert and avoid the affected spot if it is unsafe."
+        : "Use caution around the affected spot until responders inspect it.";
+
+  return `${threatLevel} ${complaint.type} reported at ${complaint.location}. ${routing.unit} has been assigned under ${routing.department}. ${action}`;
 }
 
 function nearbyReporterKeys(recentAreaComplaints) {
@@ -52,8 +63,42 @@ function nearbyReporterKeys(recentAreaComplaints) {
   return { usernames, userIds };
 }
 
-async function resolveRecipients({ recentAreaComplaints }) {
+function buildLocationParts({ complaint, routing, areaIntelligence }) {
+  const intelligence = areaIntelligence || complaint.areaIntelligence || {};
+  return [
+    complaint.location,
+    routing?.ward,
+    routing?.unit,
+    routing?.department,
+    intelligence.likelyArea,
+    ...(intelligence.matchedAreas || []),
+    ...(intelligence.landmarkHints || []),
+    ...(intelligence.wardHints || []),
+    ...(intelligence.matchingTerms || [])
+  ].filter(Boolean);
+}
+
+function localAlertMatch(user, locationParts, priority) {
+  const preferences = user.localAlertPreferences || {};
+  if (!preferences.enabled || !meetsSeverityThreshold(priority, preferences.severityThreshold || "High")) {
+    return null;
+  }
+
+  const matchedArea = (preferences.areas || []).find((area) =>
+    areaMatchesLocation(area.normalized || area.label, locationParts)
+  );
+
+  if (!matchedArea) {
+    return null;
+  }
+
+  return matchedArea.label || matchedArea.normalized || "saved area";
+}
+
+async function resolveRecipients({ complaint, routing, recentAreaComplaints, triggeredByUserId, areaIntelligence }) {
   const { usernames, userIds } = nearbyReporterKeys(recentAreaComplaints);
+  const priority = canonicalPriority(complaint.priority);
+  const locationParts = buildLocationParts({ complaint, routing, areaIntelligence });
   const filters = [
     { role: "Admin", disabledAt: null }
   ];
@@ -66,17 +111,41 @@ async function resolveRecipients({ recentAreaComplaints }) {
     filters.push({ _id: { $in: [...userIds] }, disabledAt: null });
   }
 
-  const users = await User.find({ $or: filters }, { email: 1, role: 1, username: 1 }).lean().catch(() => []);
+  filters.push({
+    "localAlertPreferences.enabled": true,
+    disabledAt: null
+  });
+
+  const users = await User.find(
+    { $or: filters },
+    { email: 1, role: 1, username: 1, localAlertPreferences: 1 }
+  ).lean().catch(() => []);
   const seen = new Set();
 
   return users
-    .filter((user) => user.email)
-    .map((user) => ({
-      email: String(user.email).toLowerCase(),
-      role: user.role,
-      reason: user.role === "Admin" ? "admin responder" : "nearby prior reporter",
-      status: "pending"
-    }))
+    .filter((user) => user.email && String(user._id) !== String(triggeredByUserId || ""))
+    .map((user) => {
+      const matchedArea = localAlertMatch(user, locationParts, priority);
+      const isPriorReporter =
+        usernames.has(String(user.username || "").trim()) ||
+        userIds.has(String(user._id || "").trim());
+
+      if (user.role !== "Admin" && !matchedArea && !isPriorReporter) {
+        return null;
+      }
+
+      return {
+        email: String(user.email).toLowerCase(),
+        role: user.role,
+        reason: user.role === "Admin"
+          ? "admin responder"
+          : matchedArea
+            ? `local alert area: ${matchedArea}`
+            : "nearby prior reporter",
+        status: "pending"
+      };
+    })
+    .filter(Boolean)
     .filter((recipient) => {
       if (seen.has(recipient.email)) return false;
       seen.add(recipient.email);
@@ -84,13 +153,13 @@ async function resolveRecipients({ recentAreaComplaints }) {
     });
 }
 
-async function createEmergencyBroadcast({ complaint, analysis, routing, mapLocation, confidenceScore, recentAreaComplaints, triggeredBy }) {
+async function createEmergencyBroadcast({ complaint, analysis, routing, mapLocation, confidenceScore, recentAreaComplaints, areaIntelligence, triggeredBy, triggeredByUserId }) {
   if (!shouldTriggerEmergencyBroadcast(analysis, confidenceScore)) {
     return null;
   }
 
-  const recipients = await resolveRecipients({ recentAreaComplaints });
-  const message = buildEmergencyMessage({ complaint, routing });
+  const recipients = await resolveRecipients({ complaint, routing, recentAreaComplaints, triggeredByUserId, areaIntelligence });
+  const message = buildEmergencyMessage({ complaint, routing, analysis });
   const channels = ["in-app", "email", "sms-ready"];
   const broadcast = await EmergencyBroadcast.create({
     complaintId: complaint._id,
@@ -99,7 +168,7 @@ async function createEmergencyBroadcast({ complaint, analysis, routing, mapLocat
     severity: canonicalPriority(complaint.priority),
     location: complaint.location,
     mapLocation,
-      radiusKm: canonicalPriority(complaint.priority) === "Critical" ? 4 : 2,
+    radiusKm: canonicalPriority(complaint.priority) === "Critical" ? 4 : 2,
     channels,
     recipients,
     message,
