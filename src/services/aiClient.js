@@ -1324,7 +1324,7 @@ function detectIntentLocally(message, history = []) {
       },
       {
         patterns: ["bbmp", "email", "mail", "portal", "pdf", "receipt", "download"],
-        response: "The system can generate a PDF complaint summary and support the BBMP email flow from the dashboard."
+        response: "The system can generate a PDF complaint summary and use the verified authority handoff available for the complaint city."
       }
     ];
 

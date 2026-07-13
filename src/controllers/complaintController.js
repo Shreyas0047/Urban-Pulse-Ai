@@ -181,7 +181,7 @@ async function getComplaint(req, res, next) {
     res.json({
       complaint,
       intelligence: buildComplaintIntelligence(complaint),
-      reviewOptions: canReview ? getReviewOptions() : null,
+      reviewOptions: canReview ? getReviewOptions(complaint.cityId) : null,
       decisionAudit,
       authorityTicket
     });

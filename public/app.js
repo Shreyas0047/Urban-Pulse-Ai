@@ -1,4 +1,10 @@
 const form = document.getElementById("complaintForm");
+const reportCitySelect = document.getElementById("reportCity");
+const citySelectionCard = document.getElementById("citySelectionCard");
+const citySelectionTitle = document.getElementById("citySelectionTitle");
+const citySelectionStatus = document.getElementById("citySelectionStatus");
+const cityOfficialChannel = document.getElementById("cityOfficialChannel");
+const refreshCitiesBtn = document.getElementById("refreshCitiesBtn");
 const reportLocationInput = document.getElementById("reportLocation");
 const complaintInputMode = document.getElementById("complaintInputMode");
 const typedComplaintField = document.getElementById("typedComplaintField");
@@ -192,6 +198,7 @@ let otpSecondsRemaining = 0;
 let dashboardDataCache = { complaints: [], users: [], digitalTwin: null, riskPredictions: null, incidentCommands: [], civicIntelligence: null, communityCases: [] };
 let draftSaveTimer = null;
 let dashboardReloadTimer = null;
+let cityRegistryState = { ready: false, registryVersion: "", defaultCityId: "", cities: [] };
 
 function emitAuthStateChange() {
   window.dispatchEvent(
@@ -274,6 +281,7 @@ function updateDraftStatus(message, state = "") {
 
 function buildReportDraftPayload() {
   return {
+    cityId: reportCitySelect?.value || "",
     location: reportLocationInput?.value || "",
     complaintInputMode: complaintInputMode?.value || "text",
     typedComplaint: typedComplaintInput?.value || "",
@@ -335,6 +343,9 @@ function restoreReportDraft() {
       return;
     }
 
+    const savedCity = cityRegistryState.cities.find((city) => city.id === draft.cityId && city.reportingEnabled);
+    reportCitySelect.value = savedCity?.id || cityRegistryState.defaultCityId || "";
+    renderSelectedCity();
     reportLocationInput.value = String(draft.location || "");
     complaintInputMode.value = draft.complaintInputMode === "voice" ? "voice" : "text";
     typedComplaintInput.value = String(draft.typedComplaint || "");
@@ -344,6 +355,68 @@ function restoreReportDraft() {
     updateDraftStatus("Saved draft restored.", "restored");
   } catch (_error) {
     updateDraftStatus("Draft saving is ready.", "");
+  }
+}
+
+function selectedCity() {
+  return cityRegistryState.cities.find((city) => city.id === reportCitySelect?.value) || null;
+}
+
+function updateComplaintSubmitAvailability() {
+  const canSubmit = Boolean(authState?.permissions?.includes("submit_complaint"));
+  complaintSubmitBtn.disabled = !canSubmit || !cityRegistryState.ready || !selectedCity()?.reportingEnabled;
+}
+
+function renderSelectedCity() {
+  const city = selectedCity();
+  const isAvailable = Boolean(city?.reportingEnabled);
+  citySelectionCard.dataset.state = isAvailable ? "available" : cityRegistryState.ready ? "planned" : "loading";
+  citySelectionTitle.textContent = city ? `${city.name}, ${city.state}` : "Select a city";
+  citySelectionStatus.textContent = city
+    ? isAvailable
+      ? `Reporting is open for this jurisdiction. Default civic authority: ${city.defaultAuthority}.`
+      : "This city is planned but reporting is not open yet."
+    : "Choose an available city before entering complaint details.";
+  const portalUrl = city?.officialChannels?.portalUrl || "";
+  cityOfficialChannel.hidden = !portalUrl;
+  if (portalUrl) cityOfficialChannel.href = portalUrl;
+  updateComplaintSubmitAvailability();
+}
+
+async function initializeCitySelector() {
+  reportCitySelect.disabled = true;
+  refreshCitiesBtn.hidden = true;
+  citySelectionCard.dataset.state = "loading";
+  citySelectionTitle.textContent = "Checking city availability";
+  citySelectionStatus.textContent = "The reporting registry is loading.";
+  try {
+    const data = await apiRequest("/api/cities", { method: "GET" });
+    const cities = Array.isArray(data.cities) ? data.cities : [];
+    if (!cities.length) throw new Error("No city records are currently available.");
+    cityRegistryState = {
+      ready: true,
+      registryVersion: String(data.registryVersion || ""),
+      defaultCityId: String(data.defaultCityId || ""),
+      cities
+    };
+    reportCitySelect.innerHTML = cities.map((city) => {
+      const suffix = city.reportingEnabled ? "" : " - Coming soon";
+      return `<option value="${escapeHtml(city.id)}" ${city.reportingEnabled ? "" : "disabled"}>${escapeHtml(city.name)}, ${escapeHtml(city.state)}${suffix}</option>`;
+    }).join("");
+    const defaultCity = cities.find((city) => city.id === data.defaultCityId && city.reportingEnabled) || cities.find((city) => city.reportingEnabled);
+    reportCitySelect.value = defaultCity?.id || "";
+    reportCitySelect.disabled = !defaultCity;
+    renderSelectedCity();
+  } catch (error) {
+    cityRegistryState = { ready: false, registryVersion: "", defaultCityId: "", cities: [] };
+    reportCitySelect.innerHTML = '<option value="">City list unavailable</option>';
+    citySelectionCard.dataset.state = "error";
+    citySelectionTitle.textContent = "City availability could not be loaded";
+    citySelectionStatus.textContent = error.message;
+    cityOfficialChannel.hidden = true;
+    refreshCitiesBtn.hidden = false;
+    updateComplaintSubmitAvailability();
+    throw error;
   }
 }
 
@@ -749,6 +822,15 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function safeExternalHref(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" ? url.href : "";
+  } catch (_error) {
+    return "";
+  }
+}
+
 function getAuthHeaders() {
   if (!authState?.token) {
     return { "Content-Type": "application/json" };
@@ -916,6 +998,7 @@ function renderPostSubmitSummary(report) {
 
   postSubmitSummary.innerHTML = [
     ["Complaint ID", report.complaintId || "Pending"],
+    ["City", report.city?.name || "Bengaluru"],
     ["Severity", report.priority || "Low"],
     ["Issue", report.issueType || "Complaint"],
     ["Location", report.location || "Unknown"]
@@ -1404,7 +1487,7 @@ function applyPermissionState() {
   issueTokenBtn.hidden = hasToken;
   logoutBtn.hidden = !hasToken;
   renderPermissions(permissions);
-  complaintSubmitBtn.disabled = !permissions.includes("submit_complaint");
+  updateComplaintSubmitAvailability();
   resetDashboardBtn.disabled = !permissions.includes("reset_dashboard");
   adminActionCenter.innerHTML = permissions
     .filter((permission) => permissionMeta[permission])
@@ -2678,6 +2761,7 @@ function renderRoutingSummary(complaint) {
   return [
     `${routing.department || "Response department"} · ${routing.unit || "Response unit"}`,
     `${routing.ward || "Ward not inferred"} · ${routing.escalationLevel || "Routine"} · ${workload}`,
+    `Handoff: ${routing.handoff?.mode === "manual_portal" ? "official portal, manual submission" : routing.handoff?.mode || "not configured"}`,
     routing.routingReason || ""
   ]
     .filter(Boolean)
@@ -2940,6 +3024,7 @@ function renderHumanReviewPanel(complaint, reviewOptions = null) {
   const outcomeValue = ["confirmed", "corrected", "insufficient_evidence"].includes(review.status)
     ? review.status
     : "confirmed";
+  const reviewRoutingUnits = Array.isArray(reviewOptions.routingUnits) ? reviewOptions.routingUnits : [];
 
   return `
     <section class="detail-support-card human-review-card">
@@ -2968,7 +3053,9 @@ function renderHumanReviewPanel(complaint, reviewOptions = null) {
           </select>
         </label>
         <label>Department
-          <input class="human-review-department" type="text" maxlength="120" value="${escapeHtml(complaint.routing?.department || complaint.ai?.recommendedTeam || "Help Desk")}" />
+          <select class="human-review-department">
+            ${reviewRoutingUnits.map((unit) => `<option value="${escapeHtml(unit.department)}" data-unit-id="${escapeHtml(unit.unitId)}" data-categories="${escapeHtml((unit.handlesCategoryIds || []).join(","))}" ${unit.department === complaint.routing?.department ? "selected" : ""}>${escapeHtml(unit.department)} · ${escapeHtml(unit.unitName)}</option>`).join("")}
+          </select>
         </label>
         <label class="human-review-reason-field">Reviewer reasoning
           <textarea class="human-review-reason" minlength="15" maxlength="500" required placeholder="State the visible evidence and explain why this decision is justified."></textarea>
@@ -3013,15 +3100,32 @@ function renderAuthorityTicketPanel(complaint, ticket = null, canReview = false)
   if (!canReview) return "";
   const status = String(ticket?.status || "not created").replace(/_/g, " ");
   const canRetry = ticket && ["failed", "not_configured"].includes(ticket.status) && (!ticket.nextRetryAt || new Date(ticket.nextRetryAt) <= new Date());
+  const portalUrl = safeExternalHref(ticket?.portalUrl || complaint.routing?.handoff?.portalUrl || complaint.routing?.portalUrl);
+  const awaitingManualSubmission = ticket?.adapter === "manual_portal" && ticket.status === "awaiting_manual_submission";
   return `
     <section class="detail-support-card authority-ticket-card" data-authority-ticket-id="${escapeHtml(ticket?._id || "")}" data-complaint-id="${escapeHtml(complaint._id)}">
       <div class="human-review-heading">
         <div><p class="detail-section-label">Authority ticket</p><strong>${escapeHtml(status)}</strong></div>
         <span>${escapeHtml(ticket?.ticketCode || "Not submitted")}</span>
       </div>
-      <p>${ticket ? `${escapeHtml(ticket.adapter)} adapter · ${ticket.attemptCount || 0} attempt(s)${ticket.externalReference ? `<br>External reference: ${escapeHtml(ticket.externalReference)}` : ""}${ticket.lastError ? `<br>${escapeHtml(ticket.lastError)}` : ""}` : "Create a tracked authority submission after reviewing the AI decision."}</p>
+      <p>${ticket ? `${escapeHtml(String(ticket.adapter).replace(/_/g, " "))} · ${ticket.attemptCount || 0} confirmed attempt(s)${ticket.externalReference ? `<br>External reference: ${escapeHtml(ticket.externalReference)}` : ""}${ticket.lastError ? `<br>${escapeHtml(ticket.lastError)}` : ""}` : "Prepare a tracked authority handoff after reviewing the AI decision."}</p>
+      ${awaitingManualSubmission ? `
+        <form class="authority-manual-form">
+          <div class="authority-manual-heading">
+            <div><strong>Manual portal handoff</strong><p>Opening the portal does not submit this complaint automatically.</p></div>
+            ${portalUrl ? `<a class="secondary-button authority-portal-link" href="${escapeHtml(portalUrl)}" target="_blank" rel="noopener noreferrer">Open official portal</a>` : ""}
+          </div>
+          <label>Portal confirmation or complaint reference
+            <input class="authority-manual-reference" type="text" minlength="3" maxlength="180" required autocomplete="off" placeholder="Reference issued after submission">
+          </label>
+          <label>Submission note <span>(optional)</span>
+            <textarea class="authority-manual-note" maxlength="500" placeholder="Record any relevant acknowledgement or portal detail."></textarea>
+          </label>
+          <button type="submit" class="primary-button authority-manual-confirm">Record confirmed submission</button>
+        </form>` : ""}
+      ${ticket?.manualSubmission?.confirmedAt ? `<p class="authority-confirmation-note">Confirmed ${escapeHtml(formatDateTime(ticket.manualSubmission.confirmedAt))}${ticket.manualSubmission.note ? ` · ${escapeHtml(ticket.manualSubmission.note)}` : ""}</p>` : ""}
       <div class="authority-ticket-actions">
-        ${!ticket ? `<button type="button" class="primary-button authority-ticket-submit">Submit to authority</button>` : ""}
+        ${!ticket ? `<button type="button" class="primary-button authority-ticket-submit">Prepare authority handoff</button>` : ""}
         ${canRetry ? `<button type="button" class="secondary-button authority-ticket-retry">Retry delivery</button>` : ""}
         ${ticket && ["submitted", "acknowledged", "in_progress"].includes(ticket.status) ? `
           <select class="authority-ticket-status" aria-label="Authority ticket status">
@@ -3047,6 +3151,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
   const dna = intelligence.dna || { strands: [] };
   const timeMachine = intelligence.timeMachine || [];
   const scenario = intelligence.consequenceScenario || null;
+  const routingPortal = safeExternalHref(complaint.routing?.handoff?.portalUrl || complaint.routing?.portalUrl);
   complaintDetailBody.innerHTML = `
     <div class="detail-case-layout">
       <section class="detail-hero">
@@ -3109,6 +3214,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
           <p class="detail-section-label">Routing</p>
           <strong>${escapeHtml(complaint.routing?.unit || complaint.assignedAuthority || "Gram Panchayat")}</strong>
           <p>${renderRoutingSummary(complaint)}</p>
+          ${routingPortal ? `<a class="detail-inline-link" href="${escapeHtml(routingPortal)}" target="_blank" rel="noopener noreferrer">Open official complaint portal</a>` : ""}
         </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Created</p>
@@ -3274,13 +3380,26 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
         field.disabled = !correctionOpen;
       });
     };
+    const syncDepartmentOptions = () => {
+      const categoryId = category.value;
+      let firstValid = null;
+      [...department.options].forEach((option) => {
+        const valid = String(option.dataset.categories || "").split(",").includes(categoryId);
+        option.disabled = !valid;
+        option.hidden = !valid;
+        if (valid && !firstValid) firstValid = option;
+      });
+      if (!department.selectedOptions[0] || department.selectedOptions[0].disabled) department.value = firstValid?.value || "";
+    };
     outcome.addEventListener("change", syncReviewFields);
     category.addEventListener("change", () => {
+      syncDepartmentOptions();
       const defaultTeam = category.selectedOptions[0]?.dataset.team;
       if (outcome.value === "corrected" && defaultTeam) {
         department.value = defaultTeam;
       }
     });
+    syncDepartmentOptions();
     syncReviewFields();
     humanReviewForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -3294,6 +3413,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
             categoryId: humanReviewForm.querySelector(".human-review-category").value,
             priority: humanReviewForm.querySelector(".human-review-priority").value,
             department: humanReviewForm.querySelector(".human-review-department").value.trim(),
+            unitId: humanReviewForm.querySelector(".human-review-department").selectedOptions[0]?.dataset.unitId || "",
             reason: humanReviewForm.querySelector(".human-review-reason").value.trim(),
             expectedVersion: Number(humanReviewForm.dataset.expectedVersion)
           })
@@ -3350,6 +3470,26 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
       setDashboardMessage(data.message, data.authorityTicket?.status === "submitted" ? "success" : "info");
       await openComplaintDetail(authorityPanel.dataset.complaintId);
     } catch (error) { setDashboardMessage(error.message, "error"); event.currentTarget.disabled = false; }
+  });
+  authorityPanel?.querySelector(".authority-manual-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const submitButton = event.currentTarget.querySelector(".authority-manual-confirm");
+    try {
+      submitButton.disabled = true;
+      const data = await apiRequest(`/api/authority-tickets/${authorityPanel.dataset.authorityTicketId}/manual-confirmation`, {
+        method: "POST",
+        body: JSON.stringify({
+          externalReference: event.currentTarget.querySelector(".authority-manual-reference").value.trim(),
+          note: event.currentTarget.querySelector(".authority-manual-note").value.trim()
+        })
+      });
+      setDashboardMessage(data.message, "success");
+      await openComplaintDetail(authorityPanel.dataset.complaintId);
+      await loadDashboard();
+    } catch (error) {
+      setDashboardMessage(error.message, "error");
+      submitButton.disabled = false;
+    }
   });
   authorityPanel?.querySelector(".authority-ticket-reconcile")?.addEventListener("click", async (event) => {
     try {
@@ -3589,6 +3729,8 @@ async function generatePdfReport(report, options = {}) {
   drawRow("City", report.city?.name || "Bengaluru");
   drawRow("Routed Authority", report.assignedAuthority);
   drawRow("Assigned Unit", report.routing?.unit || report.routing?.department || "Not recorded");
+  drawRow("Handoff Mode", report.routing?.handoff?.mode === "manual_portal" ? "Official portal (manual submission)" : report.routing?.handoff?.mode || "Not configured");
+  drawRow("Official Portal", report.routing?.handoff?.portalUrl || report.routing?.portalUrl || "Not recorded");
   drawRow("Ward / Coverage", report.routing?.ward || "Not recorded");
   drawRow("Complaint Status", report.status);
 
@@ -4767,15 +4909,17 @@ function setupDashboardFilters() {
 }
 
 function setupDraftAutosave() {
-  [reportLocationInput, complaintInputMode, typedComplaintInput, voiceTranscriptInput].forEach((element) => {
+  [reportCitySelect, reportLocationInput, complaintInputMode, typedComplaintInput, voiceTranscriptInput].forEach((element) => {
     element?.addEventListener("input", scheduleDraftSave);
     element?.addEventListener("change", scheduleDraftSave);
   });
 
   clearDraftBtn?.addEventListener("click", () => {
-    resetComposer();
-    clearReportDraft();
+    resetComposer({ preserveCity: false });
   });
+
+  reportCitySelect?.addEventListener("change", renderSelectedCity);
+  refreshCitiesBtn?.addEventListener("click", () => initializeCitySelector().then(restoreReportDraft).catch(() => {}));
 }
 
 async function loadDashboard() {
@@ -4824,8 +4968,15 @@ async function loadDashboard() {
   }
 }
 
-function resetComposer() {
+function resetComposer({ clearDraft = true, preserveCity = true } = {}) {
+  const retainedCityId = preserveCity && selectedCity()?.reportingEnabled
+    ? reportCitySelect.value
+    : cityRegistryState.defaultCityId;
   form.reset();
+  if (reportCitySelect && cityRegistryState.ready) {
+    reportCitySelect.value = retainedCityId || cityRegistryState.defaultCityId;
+    renderSelectedCity();
+  }
   uploadPreview.hidden = true;
   imagePreview.removeAttribute("src");
   imageName.textContent = "No image selected";
@@ -4845,8 +4996,10 @@ function resetComposer() {
   clearVoiceAudioSelection();
   updateVoiceTranscriptValue("");
   setComplaintInputMode(complaintInputMode.value || "text");
-  clearReportDraft(false);
-  updateDraftStatus("Draft cleared after reset.", "cleared");
+  if (clearDraft) {
+    clearReportDraft(false);
+    updateDraftStatus("Draft cleared after reset.", "cleared");
+  }
 }
 
 function loadImageElement(file) {
@@ -5139,7 +5292,7 @@ emailBbmpBtn.addEventListener("click", async () => {
     const pdfBase64 = await blobToBase64(blob);
     setEmailProgress(68, "Encoding report for authority delivery...");
 
-    const response = await apiRequest("/api/email-bbmp", {
+    const response = await apiRequest("/api/email-authority", {
       method: "POST",
       body: JSON.stringify({
         subject: (lastSubmittedReport.textComplaint || lastSubmittedReport.issueType || "Complaint report").trim(),
@@ -5278,6 +5431,12 @@ form.addEventListener("submit", async (event) => {
 
     const formData = new FormData(event.target);
     const payload = Object.fromEntries(formData.entries());
+    const city = selectedCity();
+    if (!cityRegistryState.ready || !city?.reportingEnabled) {
+      throw new Error("Choose an available city before submitting the complaint.");
+    }
+    payload.cityId = city.id;
+    payload.cityRegistryVersion = cityRegistryState.registryVersion;
     const imageFile = imageFileInput.files[0];
     const complaintPayload = getComplaintTextPayload();
 
@@ -5307,7 +5466,7 @@ form.addEventListener("submit", async (event) => {
   } catch (error) {
     setDashboardMessage(error.message, "error");
   } finally {
-    complaintSubmitBtn.disabled = !(authState?.permissions || []).includes("submit_complaint");
+    updateComplaintSubmitAvailability();
   }
 });
 
@@ -5349,10 +5508,16 @@ setupAppNavigation();
 setupGooeyInteractions();
 applyPermissionState();
 setPdfButtonState(false);
-resetComposer();
-restoreReportDraft();
 setupDraftAutosave();
 setupDashboardFilters();
+initializeCitySelector()
+  .then(() => {
+    resetComposer({ clearDraft: false, preserveCity: false });
+    restoreReportDraft();
+  })
+  .catch(() => {
+    updateDraftStatus("Draft will restore after city availability is loaded.", "error");
+  });
 if (!authState?.token) {
   openAuthOverlay("login");
 }

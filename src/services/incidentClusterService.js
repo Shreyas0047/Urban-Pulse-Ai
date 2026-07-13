@@ -139,7 +139,7 @@ async function findCandidateComplaints(complaint) {
   const areaRegexes = areaTerms.map((term) => new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
 
   const filters = [
-    { _id: { $ne: complaint._id }, createdAt: { $gte: since }, status: { $in: [...OPEN_STATUSES] } }
+    { _id: { $ne: complaint._id }, cityId: complaint.cityId || "bengaluru", createdAt: { $gte: since }, status: { $in: [...OPEN_STATUSES] } }
   ];
   if (categoryId) {
     filters.push({ "ai.categoryId": categoryId });
@@ -192,6 +192,8 @@ async function attachComplaintToCluster(complaint) {
   if (!cluster) {
     cluster = await IncidentCluster.create({
       clusterCode: buildClusterCode(),
+      cityId: complaint.cityId || "bengaluru",
+      cityName: complaint.cityName || "Bengaluru",
       title: `${best.complaint.type} near ${best.complaint.areaIntelligence?.likelyArea || best.complaint.location}`,
       categoryId: best.complaint.ai?.categoryId || "general",
       issueType: best.complaint.type,

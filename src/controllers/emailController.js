@@ -1,6 +1,7 @@
 const { sendBbmpComplaintEmail, sendCloseContactsComplaintEmail } = require("../services/emailService");
 const Complaint = require("../models/Complaint");
 const mongoose = require("mongoose");
+const env = require("../config/env");
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_SUBJECT_LENGTH = 180;
@@ -77,10 +78,22 @@ function buildTrustedEmailReport(report, complaint) {
       complaint.routing?.authority || complaint.assignedAuthority || report.assignedAuthority,
       120
     ),
+    cityName: normalizeText(complaint.cityName || "Bengaluru", 80),
+    department: normalizeText(complaint.routing?.department || "Civic response desk", 160),
+    officialPortalUrl: normalizeText(complaint.routing?.handoff?.portalUrl || complaint.routing?.portalUrl, 500),
     googleMapsUrl:
       report.googleMapsUrl ||
       (location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}` : "")
   };
+}
+
+function authorityEmailDestination(complaint) {
+  const routedEmail = normalizeText(complaint.routing?.contactEmail, 180).toLowerCase();
+  if (complaint.routing?.handoff?.mode === "verified_email" && EMAIL_PATTERN.test(routedEmail)) return routedEmail;
+  if (String(complaint.cityId || "bengaluru") === "bengaluru" && EMAIL_PATTERN.test(env.bbmpEmailTo)) return env.bbmpEmailTo;
+  const error = createHttpError("Email delivery is not verified for this city. Use the official complaint portal shown in the routing details.", 409);
+  error.code = "CITY_AUTHORITY_EMAIL_UNAVAILABLE";
+  throw error;
 }
 
 async function assertReportComplaintAccess(req, report) {
@@ -131,16 +144,18 @@ function validateCloseContactEmails(emails) {
   return normalizedEmails;
 }
 
-async function emailBbmpComplaint(req, res, next) {
+async function emailAuthorityComplaint(req, res, next) {
   try {
     const report = validateReport(req.body.report);
     const complaint = await assertReportComplaintAccess(req, report);
     const trustedReport = buildTrustedEmailReport(report, complaint);
+    const destination = authorityEmailDestination(complaint);
     const pdfBase64 = validateAttachment(req.body.pdfBase64);
     const filename = sanitizeFilename(req.body.filename);
     const subject = normalizeText(req.body.subject || report.textComplaint || report.issueType || "Community complaint report", MAX_SUBJECT_LENGTH);
 
     const emailResult = await sendBbmpComplaintEmail({
+      to: destination,
       subject,
       report: trustedReport,
       pdfBase64,
@@ -180,6 +195,8 @@ async function informCloseContacts(req, res, next) {
 }
 
 module.exports = {
-  emailBbmpComplaint,
+  emailAuthorityComplaint,
+  emailBbmpComplaint: emailAuthorityComplaint,
+  authorityEmailDestination,
   informCloseContacts
 };

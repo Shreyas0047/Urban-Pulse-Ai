@@ -1,5 +1,6 @@
 const aiCategories = require("../../shared/aiCategories.json");
 const { buildFollowUpSchedule } = require("./followUpService");
+const { ROUTING_REGISTRY_VERSION, routingUnitsForCity } = require("./routingRegistryService");
 
 const REVIEW_OUTCOMES = new Set(["confirmed", "corrected", "insufficient_evidence"]);
 const PRIORITIES = new Set(["Low", "Medium", "High", "Critical"]);
@@ -18,7 +19,10 @@ function normalizeText(value, maxLength = Infinity) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
-function getReviewOptions() {
+function getReviewOptions(cityId = "bengaluru") {
+  const routingUnits = routingUnitsForCity(cityId);
+  const unitByCategory = new Map();
+  routingUnits.forEach((unit) => unit.handlesCategoryIds.forEach((categoryId) => unitByCategory.set(categoryId, unit)));
   return {
     outcomes: [
       { id: "confirmed", label: "Confirm AI decision" },
@@ -30,8 +34,17 @@ function getReviewOptions() {
       id: category.id,
       label: category.label,
       group: category.group,
-      team: category.team,
-      authority: category.authority
+      team: unitByCategory.get(category.id)?.department || category.team,
+      unitId: unitByCategory.get(category.id)?.unitId || "",
+      authority: unitByCategory.get(category.id)?.authority || category.authority
+    })),
+    routingRegistryVersion: ROUTING_REGISTRY_VERSION,
+    routingUnits: routingUnits.map((unit) => ({
+      unitId: unit.unitId,
+      department: unit.department,
+      unitName: unit.unitName,
+      authority: unit.authority,
+      handlesCategoryIds: unit.handlesCategoryIds
     }))
   };
 }
@@ -52,6 +65,7 @@ function normalizeReviewPayload(payload, complaint) {
   const categoryId = normalizeText(payload.categoryId);
   const priority = normalizeText(payload.priority);
   const department = normalizeText(payload.department, MAX_DEPARTMENT_LENGTH + 1);
+  const unitId = normalizeText(payload.unitId, 120);
   const expectedVersion = Number(payload.expectedVersion);
 
   if (!REVIEW_OUTCOMES.has(outcome)) {
@@ -87,16 +101,24 @@ function normalizeReviewPayload(payload, complaint) {
   if (!PRIORITIES.has(priority)) {
     throw createReviewError("Choose a valid severity.");
   }
-  if (department.length < 3 || department.length > MAX_DEPARTMENT_LENGTH) {
-    throw createReviewError(`Department must be between 3 and ${MAX_DEPARTMENT_LENGTH} characters.`);
-  }
+  const cityId = String(complaint.cityId || "bengaluru").trim().toLowerCase();
+  const allowedUnits = routingUnitsForCity(cityId).filter((unit) => unit.handlesCategoryIds.includes(categoryId));
+  const selectedUnit = allowedUnits.find((unit) => unit.unitId === unitId || unit.department === department);
+  if (!selectedUnit) throw createReviewError("Choose the registered department that owns this category in the complaint city.");
 
   const proposed = {
     categoryId,
     type: category.label,
     priority,
-    department,
-    authority: category.authority || current.authority,
+    department: selectedUnit.department,
+    authority: selectedUnit.authority,
+    unitId: selectedUnit.unitId,
+    unitName: selectedUnit.unitName,
+    portalUrl: selectedUnit.portalUrl,
+    handoffMode: selectedUnit.handoffMode,
+    handoffVerifiedAt: selectedUnit.handoffVerifiedAt,
+    routingRegistryVersion: selectedUnit.routingRegistryVersion,
+    cityId,
     category
   };
   const changedFields = ["categoryId", "type", "priority", "department", "authority"]
@@ -150,13 +172,23 @@ function applyHumanReview(complaint, normalizedReview, auth, reviewedAt = new Da
       ...(complaint.routing || {}),
       authority: normalizedReview.authority,
       department: normalizedReview.department,
-      unit: `Manual assignment: ${normalizedReview.department}`,
-      unitId: "human-review",
+      unit: normalizedReview.unitName,
+      unitId: normalizedReview.unitId,
+      cityId: normalizedReview.cityId,
+      cityName: complaint.cityName,
+      routingRegistryVersion: normalizedReview.routingRegistryVersion,
+      portalUrl: normalizedReview.portalUrl,
+      handoff: {
+        mode: normalizedReview.handoffMode,
+        supportsDirectApi: false,
+        portalUrl: normalizedReview.portalUrl,
+        verifiedAt: normalizedReview.handoffVerifiedAt
+      },
       escalationLevel: escalationLevel(normalizedReview.priority),
       workloadScore: 0,
       activeCaseLoad: 0,
       alternatives: [],
-      routingReason: `Human review correction recorded by an authorized ${auth.role || "Admin"} reviewer.`,
+      routingReason: `Human review correction assigned to the registered ${complaint.cityName || "city"} category owner by an authorized ${auth.role || "Admin"} reviewer.`,
       assignedAt: reviewedAt
     };
     if (complaint.status !== "Resolved" && (priorityChanged || complaint.status === "Needs Review")) {

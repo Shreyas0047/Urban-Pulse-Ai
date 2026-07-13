@@ -9,6 +9,42 @@ const ROLLOUT_STATUSES = new Set(["active", "pilot", "planned", "disabled"]);
 const DEFAULT_CITY = cityRegistry.cities.find((city) => city.slug === cityRegistry.defaultCityId);
 const CITY_IDS = Object.freeze(cityRegistry.cities.map((city) => city.slug));
 
+function cityError(message, statusCode, code) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  error.userMessage = message;
+  return error;
+}
+
+function matchCityInput(value, registry = cityRegistry) {
+  const normalized = String(value || "").replace(/[^a-z0-9\s-]/gi, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!normalized) return null;
+  return registry.cities.find((city) => {
+    const terms = [city.slug, city.name, ...(city.aliases || [])].map((term) => String(term).toLowerCase());
+    return terms.some((term) => normalized === term || normalized.includes(term));
+  }) || null;
+}
+
+async function resolveReportingCity({ cityId, registryVersion } = {}, { model = CityRegistry } = {}) {
+  const slug = String(cityId || "").trim().toLowerCase();
+  if (!slug) throw cityError("Select a city before submitting the complaint.", 400, "CITY_REQUIRED");
+  if (!CITY_IDS.includes(slug)) throw cityError("The selected city is not in the Urban Pulse registry.", 400, "CITY_UNKNOWN");
+  if (!registryVersion) throw cityError("City registry version is required. Refresh the city list before submitting.", 400, "CITY_REGISTRY_VERSION_REQUIRED");
+  if (String(registryVersion) !== cityRegistry.registryVersion) {
+    throw cityError("City availability changed. Refresh the city list before submitting.", 409, "CITY_REGISTRY_STALE");
+  }
+  const city = await model.findOne({ slug }).lean();
+  if (!city) throw cityError("City reporting is temporarily unavailable. Try again shortly.", 503, "CITY_REGISTRY_UNAVAILABLE");
+  if (String(city.registryVersion || "") !== cityRegistry.registryVersion) {
+    throw cityError("City availability is being updated. Try again shortly.", 503, "CITY_REGISTRY_UNAVAILABLE");
+  }
+  if (!city.reportingEnabled || city.rolloutStatus !== "active") {
+    throw cityError(`${city.name} reporting is not open yet. Choose an available city.`, 409, "CITY_REPORTING_UNAVAILABLE");
+  }
+  return city;
+}
+
 function validateRegistry(registry = cityRegistry) {
   const errors = [];
   const cities = Array.isArray(registry.cities) ? registry.cities : [];
@@ -43,7 +79,7 @@ function validateRegistry(registry = cityRegistry) {
   if (!slugs.has(registry.defaultCityId)) errors.push("Default city is not present in the registry.");
   const enabled = cities.filter((city) => city.reportingEnabled);
   if (enabled.length !== 1 || enabled[0]?.slug !== registry.defaultCityId) {
-    errors.push("Phase 1 requires only the default Bengaluru jurisdiction to accept reporting.");
+    errors.push("The current rollout requires only the default Bengaluru jurisdiction to accept reporting.");
   }
   return errors;
 }
@@ -104,8 +140,10 @@ module.exports = {
   DEFAULT_CITY_ID: cityRegistry.defaultCityId,
   DEFAULT_CITY_NAME: DEFAULT_CITY.name,
   REGISTRY_VERSION: cityRegistry.registryVersion,
+  matchCityInput,
   publicCity,
   registryDocuments,
+  resolveReportingCity,
   syncCityRegistry,
   validateRegistry
 };

@@ -5,6 +5,7 @@ const Complaint = require("../src/models/Complaint");
 const { reconcileTicket } = require("../src/controllers/authorityTicketController");
 const {
   buildAuthorityPayload,
+  confirmManualAuthorityHandoff,
   createOrGetAuthorityTicket,
   dispatchAuthorityTicket,
   payloadHash,
@@ -23,7 +24,13 @@ function complaint() {
     location: "Indiranagar, Bengaluru",
     description: "A fallen tree blocks the road.",
     assignedAuthority: "Municipality",
-    routing: { authority: "Municipality", department: "Horticulture", ward: "Ward 80" },
+    routing: {
+      authority: "Bruhat Bengaluru Mahanagara Palike",
+      department: "Horticulture",
+      unitId: "bengaluru-environment-public-realm",
+      ward: "Ward 80",
+      handoff: { mode: "manual_portal", portalUrl: "https://site.bbmp.gov.in/complaints" }
+    },
     ai: { categoryId: "tree_obstruction", reviewRequired: false },
     humanReview: { status: "confirmed" },
     decisionAudit: { headHash: "a".repeat(64) }
@@ -38,8 +45,10 @@ function ticket(adapter = "email") {
     status: "queued",
     ticketCode: "UP-99439011",
     idempotencyKey: "urban-pulse:507f1f77bcf86cd799439011",
+    destination: adapter === "email" ? "authority@example.gov" : "configured webhook",
     attemptCount: 0,
     attempts: [],
+    manualSubmission: {},
     reconciliationHistory: [],
     async save() { return this; }
   };
@@ -86,8 +95,47 @@ async function main() {
     AuthorityTicket.findOne = async () => null;
     AuthorityTicket.create = async (data) => ({ ...data, _id: "ticket-id" });
     const created = await createOrGetAuthorityTicket(complaint());
-    assert.equal(created.ticket.status, "not_configured");
+    assert.equal(created.ticket.status, "awaiting_manual_submission");
+    assert.equal(created.ticket.adapter, "manual_portal");
     assert.equal(created.ticket.idempotencyKey, "urban-pulse:507f1f77bcf86cd799439011");
+    assert.equal(created.ticket.cityId, "bengaluru");
+    assert.equal(created.ticket.department, "Horticulture");
+    assert.equal(created.ticket.handoffMode, "manual_portal");
+
+    const manualTicket = ticket("manual_portal");
+    manualTicket.status = "awaiting_manual_submission";
+    manualTicket.portalUrl = "https://site.bbmp.gov.in/complaints";
+    await confirmManualAuthorityHandoff(manualTicket, {
+      externalReference: "BBMP-2026-1042",
+      note: "Portal accepted the complaint.",
+      role: "Admin"
+    });
+    assert.equal(manualTicket.status, "submitted");
+    assert.equal(manualTicket.externalReference, "BBMP-2026-1042");
+    assert.equal(manualTicket.attemptCount, 1);
+    assert.equal(manualTicket.manualSubmission.confirmedByRole, "Admin");
+    assert.equal(manualTicket.attempts[0].outcome, "submitted");
+    await confirmManualAuthorityHandoff(manualTicket, { externalReference: "BBMP-2026-1042", role: "Admin" });
+    assert.equal(manualTicket.attemptCount, 1);
+    await assert.rejects(
+      () => confirmManualAuthorityHandoff(manualTicket, { externalReference: "BBMP-DIFFERENT", role: "Admin" }),
+      /already confirmed/
+    );
+
+    const legacyTicket = ticket("disabled");
+    legacyTicket.status = "not_configured";
+    AuthorityTicket.findOne = async () => legacyTicket;
+    const adopted = await createOrGetAuthorityTicket(complaint());
+    assert.equal(adopted.created, false);
+    assert.equal(adopted.ticket.adapter, "manual_portal");
+    assert.equal(adopted.ticket.status, "awaiting_manual_submission");
+
+    AuthorityTicket.findOne = async () => null;
+    const complaintWithoutPortal = complaint();
+    complaintWithoutPortal.routing.handoff.portalUrl = "";
+    const disabled = await createOrGetAuthorityTicket(complaintWithoutPortal);
+    assert.equal(disabled.ticket.adapter, "disabled");
+    assert.equal(disabled.ticket.status, "not_configured");
 
     const reconciled = ticket("webhook");
     reconciled.status = "submitted";
@@ -95,6 +143,9 @@ async function main() {
     assert.equal(reconciled.status, "in_progress");
     assert.equal(reconciled.reconciliationHistory.length, 1);
     await assert.rejects(() => reconcileAuthorityTicket(reconciled, { status: "deleted" }), /valid authority ticket status/);
+    const premature = ticket("manual_portal");
+    premature.status = "awaiting_manual_submission";
+    await assert.rejects(() => reconcileAuthorityTicket(premature, { status: "resolved" }), /before reconciling/);
 
     const controllerTicket = ticket("webhook");
     controllerTicket.status = "submitted";
@@ -143,6 +194,9 @@ async function main() {
       successfulDeliveryTracked: true,
       failureAndRetryTracked: true,
       reconciliationValidated: true,
+      manualPortalHandoffTracked: true,
+      legacyManualTicketAdopted: true,
+      prematureReconciliationBlocked: true,
       resolvedTicketOpensCitizenVerification: true,
       disabledAdapterExplicit: true
     }, null, 2));

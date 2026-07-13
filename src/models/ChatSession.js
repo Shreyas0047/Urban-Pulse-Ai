@@ -26,6 +26,9 @@ const chatSessionSchema = new mongoose.Schema(
       type: {
         stage: { type: String, default: "" },
         draftComplaint: {
+          cityId: { type: String, default: "" },
+          cityName: { type: String, default: "" },
+          cityRegistryVersion: { type: String, default: "" },
           description: { type: String, default: "" },
           location: { type: String, default: "" },
           voiceTranscript: { type: String, default: "" }
@@ -34,6 +37,9 @@ const chatSessionSchema = new mongoose.Schema(
       default: () => ({
         stage: "",
         draftComplaint: {
+          cityId: "",
+          cityName: "",
+          cityRegistryVersion: "",
           description: "",
           location: "",
           voiceTranscript: ""

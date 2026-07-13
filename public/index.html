@@ -161,7 +161,7 @@
               <span class="faq-icon">+</span>
             </summary>
             <div class="faq-content">
-              <p>Yes. The flow still supports complaint submission, AI analysis, PDF generation, BBMP email, map preview, and permissions.</p>
+              <p>Yes. The flow still supports complaint submission, AI analysis, PDF generation, verified authority handoff, map preview, and permissions.</p>
             </div>
           </details>
           <details class="faq-item">
@@ -445,10 +445,26 @@
                   <button type="button" id="clearDraftBtn" class="chip-button">Clear Draft</button>
                 </div>
                 <form id="complaintForm" class="report-form">
+                  <label class="city-field">
+                    <span class="field-label">City</span>
+                    <select id="reportCity" name="cityId" required disabled aria-describedby="citySelectionStatus">
+                      <option value="">Loading city availability...</option>
+                    </select>
+                  </label>
+                  <div id="citySelectionCard" class="city-selection-card" data-state="loading" aria-live="polite">
+                    <span class="city-state-dot" aria-hidden="true"></span>
+                    <div>
+                      <strong id="citySelectionTitle">Checking city availability</strong>
+                      <p id="citySelectionStatus">The reporting registry is loading.</p>
+                    </div>
+                    <a id="cityOfficialChannel" href="#" target="_blank" rel="noopener noreferrer" hidden>Official channel</a>
+                    <button type="button" id="refreshCitiesBtn" class="chip-button" hidden>Retry</button>
+                  </div>
+
                   <label class="location-field">
                     <span class="field-label">Location</span>
                     <div class="location-input-row">
-                      <input type="text" id="reportLocation" name="location" placeholder="Whitefield, Bangalore or village road" />
+                      <input type="text" id="reportLocation" name="location" placeholder="Whitefield, Bengaluru or a nearby street" />
                       <button type="button" id="useLiveLocationBtn" class="secondary-button">Live Location</button>
                       <button type="button" id="previewLocationBtn" class="chip-button inline-map-button">Show Map</button>
                     </div>

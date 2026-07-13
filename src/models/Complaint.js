@@ -23,6 +23,9 @@ const complaintSchema = new mongoose.Schema(
     cityAssignedAt: { type: Date, required: true, default: Date.now },
     assignedAuthority: { type: String, default: "Gram Panchayat" },
     routing: {
+      cityId: String,
+      cityName: String,
+      routingRegistryVersion: String,
       authority: String,
       department: String,
       unit: String,
@@ -34,6 +37,12 @@ const complaintSchema = new mongoose.Schema(
       maxActiveCases: Number,
       contactEmail: String,
       portalUrl: String,
+      handoff: {
+        mode: String,
+        supportsDirectApi: Boolean,
+        portalUrl: String,
+        verifiedAt: Date
+      },
       routingReason: String,
       alternatives: [
         {
@@ -41,6 +50,7 @@ const complaintSchema = new mongoose.Schema(
           department: String,
           unit: String,
           authority: String,
+          cityId: String,
           score: Number,
           activeCaseLoad: Number,
           workloadScore: Number

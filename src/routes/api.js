@@ -3,18 +3,19 @@ const { getRoles, issueToken, requestRegistrationOtp, requestPasswordResetOtp, r
 const { getDashboard, resetDashboard } = require("../controllers/dashboardController");
 const { analyzeAndCreateComplaint, getComplaint, transcribeComplaintAudio, updateComplaintStatus, acknowledgeAlert, verifyComplaintStatus, submitResolutionEvidence, submitCommunityProof, submitHumanReview } = require("../controllers/complaintController");
 const { getChatHistory, postChatMessage, clearChatHistory } = require("../controllers/chatbotController");
-const { emailBbmpComplaint, informCloseContacts } = require("../controllers/emailController");
+const { emailAuthorityComplaint, informCloseContacts } = require("../controllers/emailController");
 const { getLocalAlertPreferences, updateLocalAlertPreferences } = require("../controllers/localAlertController");
 const { deleteUser, updateUser } = require("../controllers/userController");
 const { exportComplaintDecisionAudit, getCorrectionFeedback } = require("../controllers/decisionAuditController");
-const { reconcileTicket, retryAuthorityTicket, submitAuthorityTicket } = require("../controllers/authorityTicketController");
-const { getCities, getCity } = require("../controllers/cityController");
+const { confirmManualSubmission, reconcileTicket, retryAuthorityTicket, submitAuthorityTicket } = require("../controllers/authorityTicketController");
+const { getCities, getCity, getCityRoutingUnits } = require("../controllers/cityController");
 const { authenticate, requirePermission } = require("../middleware/auth");
 
 const router = express.Router();
 
 router.get("/roles", getRoles);
 router.get("/cities", getCities);
+router.get("/cities/:slug/routing-units", getCityRoutingUnits);
 router.get("/cities/:slug", getCity);
 router.post("/auth/token", issueToken);
 router.post("/auth/register/request-otp", requestRegistrationOtp);
@@ -31,7 +32,8 @@ router.post("/transcribe-audio", requirePermission("submit_complaint"), transcri
 router.get("/chatbot/history", requirePermission("submit_complaint"), getChatHistory);
 router.delete("/chatbot/history", requirePermission("submit_complaint"), clearChatHistory);
 router.post("/chatbot/message", requirePermission("submit_complaint"), postChatMessage);
-router.post("/email-bbmp", requirePermission("submit_complaint"), emailBbmpComplaint);
+router.post("/email-authority", requirePermission("submit_complaint"), emailAuthorityComplaint);
+router.post("/email-bbmp", requirePermission("submit_complaint"), emailAuthorityComplaint);
 router.post("/inform-close-contacts", requirePermission("submit_complaint"), informCloseContacts);
 router.get("/local-alert-preferences", requirePermission("submit_complaint"), getLocalAlertPreferences);
 router.patch("/local-alert-preferences", requirePermission("submit_complaint"), updateLocalAlertPreferences);
@@ -44,6 +46,7 @@ router.get("/complaints/:id/decision-audit", requirePermission("update_complaint
 router.get("/decision-audit/feedback", requirePermission("update_complaint_status"), getCorrectionFeedback);
 router.post("/complaints/:id/authority-ticket", requirePermission("update_complaint_status"), submitAuthorityTicket);
 router.post("/complaints/:id/authority-ticket/retry", requirePermission("update_complaint_status"), retryAuthorityTicket);
+router.post("/authority-tickets/:ticketId/manual-confirmation", requirePermission("update_complaint_status"), confirmManualSubmission);
 router.patch("/authority-tickets/:ticketId/reconcile", requirePermission("update_complaint_status"), reconcileTicket);
 router.patch("/complaints/:id/status", requirePermission("update_complaint_status"), updateComplaintStatus);
 router.post("/complaints/:id/alerts/acknowledge", requirePermission("manage_alerts"), acknowledgeAlert);

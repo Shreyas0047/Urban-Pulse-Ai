@@ -2,7 +2,7 @@ const AuthorityTicket = require("../models/AuthorityTicket");
 const Complaint = require("../models/Complaint");
 const IncidentCommand = require("../models/IncidentCommand");
 const mongoose = require("mongoose");
-const { createOrGetAuthorityTicket, dispatchAuthorityTicket, reconcileAuthorityTicket } = require("../services/authorityTicketService");
+const { confirmManualAuthorityHandoff, createOrGetAuthorityTicket, dispatchAuthorityTicket, reconcileAuthorityTicket } = require("../services/authorityTicketService");
 
 function httpError(message, statusCode) {
   const error = new Error(message);
@@ -25,9 +25,30 @@ async function submitAuthorityTicket(req, res, next) {
     const { ticket, created } = await createOrGetAuthorityTicket(complaint);
     const delivered = await dispatchAuthorityTicket(ticket, complaint);
     res.status(created ? 201 : 200).json({
-      message: delivered.status === "submitted" ? "Authority ticket submitted." : delivered.status === "not_configured" ? "Authority adapter is not configured." : "Authority ticket delivery failed and is tracked for retry.",
+      message: delivered.status === "submitted"
+        ? "Authority ticket submitted."
+        : delivered.status === "awaiting_manual_submission"
+          ? "Authority handoff is ready. Submit through the official portal and record its reference."
+          : delivered.status === "not_configured"
+            ? "Authority adapter is not configured."
+            : "Authority ticket delivery failed and is tracked for retry.",
       authorityTicket: delivered
     });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function confirmManualSubmission(req, res, next) {
+  try {
+    const ticket = await AuthorityTicket.findById(req.params.ticketId);
+    if (!ticket) throw httpError("Authority ticket not found", 404);
+    const confirmed = await confirmManualAuthorityHandoff(ticket, {
+      externalReference: req.body.externalReference,
+      note: req.body.note,
+      role: req.auth.role
+    });
+    res.json({ message: "Manual authority handoff recorded.", authorityTicket: confirmed });
   } catch (error) {
     next(error);
   }
@@ -94,4 +115,4 @@ async function reconcileTicket(req, res, next) {
   }
 }
 
-module.exports = { reconcileTicket, retryAuthorityTicket, submitAuthorityTicket };
+module.exports = { confirmManualSubmission, reconcileTicket, retryAuthorityTicket, submitAuthorityTicket };

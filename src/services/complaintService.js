@@ -10,7 +10,7 @@ const { canonicalPriority, routeComplaint } = require("./routingService");
 const { fetchWeatherSnapshot } = require("./weatherService");
 const { recordAiBaseline } = require("./decisionAuditService");
 const { extractAreaIntelligence } = require("../utils/localAlerts");
-const { DEFAULT_CITY_ID, DEFAULT_CITY_NAME, REGISTRY_VERSION } = require("./cityRegistryService");
+const { resolveReportingCity } = require("./cityRegistryService");
 
 const LOW_CONFIDENCE_THRESHOLD = 0.52;
 const GEOCODE_TIMEOUT_MS = 3500;
@@ -33,9 +33,9 @@ function createHttpError(message, statusCode = 400) {
   return error;
 }
 
-function buildFallbackMapLocation(location) {
-  const baseLat = 12.9716;
-  const baseLng = 77.5946;
+function buildFallbackMapLocation(location, center = { lat: 12.9716, lng: 77.5946 }) {
+  const baseLat = Number(center.lat) || 12.9716;
+  const baseLng = Number(center.lng) || 77.5946;
   const seed = Array.from(String(location || "unknown")).reduce((sum, char) => sum + char.charCodeAt(0), 0);
 
   return {
@@ -84,10 +84,10 @@ function normalizeLimitedText(value, fieldName, maxLength) {
   return normalized;
 }
 
-async function geocodeLocation(location) {
+async function geocodeLocation(location, center) {
   const query = String(location || "").trim();
   if (!query) {
-    return buildFallbackMapLocation(query);
+    return buildFallbackMapLocation(query, center);
   }
 
   const controller = new AbortController();
@@ -125,10 +125,18 @@ async function geocodeLocation(location) {
       source: "nominatim"
     };
   } catch (_error) {
-    return buildFallbackMapLocation(query);
+    return buildFallbackMapLocation(query, center);
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function isWithinCityEnvelope(city, mapLocation, margin = 0.03) {
+  const envelope = city?.locationEnvelope || {};
+  const lat = Number(mapLocation?.lat);
+  const lng = Number(mapLocation?.lng);
+  if (![lat, lng, envelope.south, envelope.west, envelope.north, envelope.east].map(Number).every(Number.isFinite)) return true;
+  return lat >= Number(envelope.south) - margin && lat <= Number(envelope.north) + margin && lng >= Number(envelope.west) - margin && lng <= Number(envelope.east) + margin;
 }
 
 function getConfidenceLabel(confidence) {
@@ -274,7 +282,7 @@ function appendWeatherContext(explanation, weather) {
   return `${explanation} Weather context: ${weather.note}`;
 }
 
-function logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired, routing }) {
+function logAiDecision({ auth, city, location, analysis, confidenceScore, reviewRequired, routing }) {
   const record = {
     event: "ai_complaint_decision",
     provider: analysis.aiMeta?.provider || "unknown",
@@ -282,6 +290,8 @@ function logAiDecision({ auth, location, analysis, confidenceScore, reviewRequir
     fallbackUsed: Boolean(analysis.aiMeta?.fallbackUsed),
     categoryId: analysis.aiMeta?.categoryId || "general",
     issueType: analysis.nlp?.issueType || "Civic Complaint",
+    cityId: city?.slug || "",
+    cityName: city?.name || "",
     priority: analysis.priority?.level || "Low",
     confidence: Number(confidenceScore.toFixed(3)),
     reviewRequired,
@@ -298,6 +308,7 @@ function logAiDecision({ auth, location, analysis, confidenceScore, reviewRequir
 }
 
 async function createComplaintFromPayload(auth, payload) {
+  const city = await resolveReportingCity({ cityId: payload.cityId, registryVersion: payload.cityRegistryVersion });
   const location = normalizeLimitedText(payload.location, "Location", MAX_LOCATION_LENGTH);
   const textComplaint = normalizeLimitedText(payload.textComplaint, "Complaint description", MAX_COMPLAINT_TEXT_LENGTH);
   const imageHint = normalizeLimitedText(payload.imageHint, "Image summary", MAX_IMAGE_HINT_LENGTH);
@@ -312,9 +323,19 @@ async function createComplaintFromPayload(auth, payload) {
     throw createHttpError("Add a complaint description, voice transcript, or upload an image before submitting.", 400);
   }
 
-  const previousComplaintFilter = auth.userId
-    ? { reporterUserId: String(auth.userId || "") }
-    : { reporterUsername: auth.username };
+  const locationContext = `${location}, ${city.name}, ${city.state}, India`;
+  const geocoded = await geocodeLocation(locationContext, city.center);
+  const mapLocation = { lat: geocoded.lat, lng: geocoded.lng };
+  if (geocoded.source === "nominatim" && !isWithinCityEnvelope(city, mapLocation)) {
+    const error = createHttpError(`The location appears to be outside ${city.name}. Check the selected city or make the location more specific.`, 400);
+    error.code = "LOCATION_CITY_MISMATCH";
+    throw error;
+  }
+
+  const previousComplaintFilter = {
+    cityId: city.slug,
+    ...(auth.userId ? { reporterUserId: String(auth.userId || "") } : { reporterUsername: auth.username })
+  };
   const preliminaryAreaIntelligence = extractAreaIntelligence({ location });
   const recentAreaTerms = (preliminaryAreaIntelligence.matchingTerms || [])
     .filter((term) => String(term || "").trim().length >= 3)
@@ -329,9 +350,9 @@ async function createComplaintFromPayload(auth, payload) {
   const [previousComplaints, recentAreaComplaints, activeRoutingComplaints] = await Promise.all([
     Complaint.find(previousComplaintFilter).sort({ createdAt: -1 }).limit(5).lean(),
     recentAreaTerms.length
-      ? Complaint.find(recentAreaFilter).sort({ createdAt: -1 }).limit(8).lean()
+      ? Complaint.find({ cityId: city.slug, ...recentAreaFilter }).sort({ createdAt: -1 }).limit(8).lean()
       : Promise.resolve([]),
-    Complaint.find({ status: { $in: ["Queued", "Needs Review", "In Progress", "Escalated"] } })
+    Complaint.find({ cityId: city.slug, status: { $in: ["Queued", "Needs Review", "In Progress", "Escalated"] } })
       .sort({ createdAt: -1 })
       .limit(200)
       .lean()
@@ -344,7 +365,7 @@ async function createComplaintFromPayload(auth, payload) {
     imageFeatures: payload.imageFeatures || null,
     imageBase64: imagePayload.imageBase64,
     imageMimeType: imagePayload.imageMimeType,
-    location,
+    location: locationContext,
     iotTriggered: Boolean(payload.iotTriggered),
     previousComplaints: previousComplaints.map((complaint) => ({
       type: complaint.type,
@@ -369,13 +390,8 @@ async function createComplaintFromPayload(auth, payload) {
   });
   const threatAssessment = applyThreatPriority(analysis);
   analysis.threatAssessment = threatAssessment;
-  const geocoded = await geocodeLocation(location);
-  const mapLocation = {
-    lat: geocoded.lat,
-    lng: geocoded.lng
-  };
   const weather = await fetchWeatherSnapshot({
-    location,
+    location: locationContext,
     mapLocation,
     analysis
   });
@@ -401,6 +417,7 @@ async function createComplaintFromPayload(auth, payload) {
   const explanation = appendWeatherContext(buildAiExplanation(analysis, payload, reviewRequired, confidenceScore), weather);
   const routing = await routeComplaint({
     analysis,
+    city,
     location,
     mapLocation,
     activeComplaints: activeRoutingComplaints
@@ -424,9 +441,9 @@ async function createComplaintFromPayload(auth, payload) {
   const civicEvidence = await fetchCivicEvidence({
     analysis,
     routing,
-    location
+    location: locationContext
   });
-  logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired, routing });
+  logAiDecision({ auth, city, location, analysis, confidenceScore, reviewRequired, routing });
 
   const complaint = new Complaint({
     reporter: auth.role,
@@ -438,10 +455,10 @@ async function createComplaintFromPayload(auth, payload) {
     source: payload.inputSource || "Manual Submission",
     confidence: Math.round(confidenceScore * 100),
     location,
-    cityId: DEFAULT_CITY_ID,
-    cityName: DEFAULT_CITY_NAME,
-    citySource: "system_default",
-    cityRegistryVersion: REGISTRY_VERSION,
+    cityId: city.slug,
+    cityName: city.name,
+    citySource: "user_selected",
+    cityRegistryVersion: city.registryVersion,
     cityAssignedAt: new Date(),
     assignedAuthority: routing.authority,
     routing,
@@ -644,5 +661,6 @@ async function createComplaintFromPayload(auth, payload) {
 
 module.exports = {
   createComplaintFromPayload,
-  createHttpError
+  createHttpError,
+  isWithinCityEnvelope
 };

@@ -2,6 +2,7 @@ const Complaint = require("../models/Complaint");
 const ChatSession = require("../models/ChatSession");
 const { createComplaintFromPayload, createHttpError } = require("../services/complaintService");
 const { resolveChatIntent } = require("../services/aiClient");
+const { REGISTRY_VERSION, matchCityInput } = require("../services/cityRegistryService");
 
 const MAX_MESSAGE_LENGTH = 1000;
 const MAX_HISTORY_MESSAGES = 30;
@@ -98,8 +99,11 @@ async function handleRaiseComplaint(auth, session, message, voiceTranscript) {
 
   if (!stage) {
     session.pendingAction = {
-      stage: "awaiting_description",
+      stage: "awaiting_city",
       draftComplaint: {
+        cityId: "",
+        cityName: "",
+        cityRegistryVersion: REGISTRY_VERSION,
         description: "",
         location: "",
         voiceTranscript: String(voiceTranscript || "").trim()
@@ -107,8 +111,47 @@ async function handleRaiseComplaint(auth, session, message, voiceTranscript) {
     };
 
     return {
-      text: "Describe the complaint in one message. After that, I will ask for the location.",
-      meta: { intent: "raise_complaint", stage: "awaiting_description" }
+      text: "Choose the complaint city first. Bengaluru is open for reporting. Mumbai, Delhi, Chennai, and Hyderabad are planned but not open yet.",
+      meta: { intent: "raise_complaint", stage: "awaiting_city" }
+    };
+  }
+
+  if (stage === "awaiting_city") {
+    const city = matchCityInput(message);
+    if (!city) {
+      return {
+        text: "I could not match that city. Enter Bengaluru, Mumbai, Delhi, Chennai, or Hyderabad.",
+        meta: { intent: "raise_complaint", stage: "awaiting_city" }
+      };
+    }
+    if (!city.reportingEnabled) {
+      return {
+        text: `${city.name} reporting is planned but not open yet. Bengaluru is currently available.`,
+        meta: { intent: "raise_complaint", stage: "awaiting_city", cityId: city.slug, reportingEnabled: false }
+      };
+    }
+    session.pendingAction = {
+      stage: "awaiting_description",
+      draftComplaint: {
+        cityId: city.slug,
+        cityName: city.name,
+        cityRegistryVersion: REGISTRY_VERSION,
+        description: "",
+        location: "",
+        voiceTranscript: String(voiceTranscript || "").trim()
+      }
+    };
+    return {
+      text: `${city.name} selected. Describe the complaint in one message. After that, I will ask for the location.`,
+      meta: { intent: "raise_complaint", stage: "awaiting_description", cityId: city.slug }
+    };
+  }
+
+  if (!draftComplaint.cityId) {
+    session.pendingAction = { stage: "awaiting_city", draftComplaint: { cityRegistryVersion: REGISTRY_VERSION } };
+    return {
+      text: "The complaint draft needs a city. Enter Bengaluru to continue.",
+      meta: { intent: "raise_complaint", stage: "awaiting_city" }
     };
   }
 
@@ -116,6 +159,9 @@ async function handleRaiseComplaint(auth, session, message, voiceTranscript) {
     session.pendingAction = {
       stage: "awaiting_location",
       draftComplaint: {
+        cityId: draftComplaint.cityId,
+        cityName: draftComplaint.cityName,
+        cityRegistryVersion: draftComplaint.cityRegistryVersion,
         description: message,
         location: "",
         voiceTranscript: String(voiceTranscript || draftComplaint.voiceTranscript || "").trim()
@@ -130,6 +176,8 @@ async function handleRaiseComplaint(auth, session, message, voiceTranscript) {
 
   if (stage === "awaiting_location") {
     const { analysis, complaint } = await createComplaintFromPayload(auth, {
+      cityId: draftComplaint.cityId,
+      cityRegistryVersion: draftComplaint.cityRegistryVersion,
       location: message,
       textComplaint: draftComplaint.description,
       voiceTranscript: draftComplaint.voiceTranscript,
@@ -142,6 +190,9 @@ async function handleRaiseComplaint(auth, session, message, voiceTranscript) {
     session.pendingAction = {
       stage: "",
       draftComplaint: {
+        cityId: "",
+        cityName: "",
+        cityRegistryVersion: "",
         description: "",
         location: "",
         voiceTranscript: ""
@@ -150,11 +201,12 @@ async function handleRaiseComplaint(auth, session, message, voiceTranscript) {
     session.lastTranscript = "";
 
     return {
-      text: `Complaint created successfully. Type: ${analysis.nlp.issueType}. Status: ${analysis.status}. Priority: ${analysis.priority.level}. Authority: ${analysis.assignedAuthority}.`,
+      text: `Complaint created successfully in ${complaint.cityName}. Type: ${analysis.nlp.issueType}. Status: ${analysis.status}. Priority: ${analysis.priority.level}. Authority: ${analysis.assignedAuthority}.`,
       meta: {
         intent: "raise_complaint",
         complaintCreated: true,
         complaintId: String(complaint._id),
+        cityId: complaint.cityId,
         status: analysis.status,
         priority: analysis.priority.level
       }
@@ -197,6 +249,9 @@ async function clearChatHistory(req, res, next) {
     session.pendingAction = {
       stage: "",
       draftComplaint: {
+        cityId: "",
+        cityName: "",
+        cityRegistryVersion: "",
         description: "",
         location: "",
         voiceTranscript: ""
@@ -286,5 +341,6 @@ async function postChatMessage(req, res, next) {
 module.exports = {
   getChatHistory,
   postChatMessage,
-  clearChatHistory
+  clearChatHistory,
+  handleRaiseComplaint
 };

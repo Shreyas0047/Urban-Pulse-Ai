@@ -326,7 +326,7 @@ async function sendPasswordResetOtpEmail({ email, otp }) {
   };
 }
 
-async function sendBbmpComplaintEmail({ subject, report, pdfBase64, filename }) {
+async function sendBbmpComplaintEmail({ to = env.bbmpEmailTo, subject, report, pdfBase64, filename }) {
   const safeSubject = String(subject || report?.issueType || "Citizen Complaint Report").trim();
   const mailSubject = safeSubject || "Citizen Complaint Report";
 
@@ -338,10 +338,12 @@ async function sendBbmpComplaintEmail({ subject, report, pdfBase64, filename }) 
     "Please find attached the formal complaint report submitted by a citizen for your kind attention and necessary action.",
     "",
     `Complaint ID: ${report?.complaintId || "Pending"}`,
+    `City: ${report?.cityName || "Bengaluru"}`,
     `Issue Type: ${report?.issueType || "Civic Complaint"}`,
     `Location: ${report?.location || "Unknown"}`,
     `Severity: ${report?.priority || "Low"}`,
     `Assigned Authority: ${report?.assignedAuthority || "Gram Panchayat"}`,
+    `Assigned Department: ${report?.department || "Civic response desk"}`,
     "",
     "Complaint Description:",
     report?.textComplaint || "No complaint text provided.",
@@ -350,6 +352,7 @@ async function sendBbmpComplaintEmail({ subject, report, pdfBase64, filename }) 
     report?.aiDescription || "No AI description generated.",
     "",
     `Google Maps Link: ${report?.googleMapsUrl || "N/A"}`,
+    `Official Complaint Portal: ${report?.officialPortalUrl || "N/A"}`,
     "",
     "Kindly review the attached complaint report and take the necessary action.",
     "",
@@ -360,7 +363,7 @@ async function sendBbmpComplaintEmail({ subject, report, pdfBase64, filename }) 
 
   const info = await sendMail({
     purpose: "authority_complaint",
-    to: env.bbmpEmailTo,
+    to,
     subject: mailSubject,
     text: bodyLines.join("\n"),
     attachments: [
@@ -395,6 +398,8 @@ async function sendAuthorityTicketEmail({ to, ticket, payload }) {
       `Location: ${payload.location}`,
       `Department: ${payload.department}`,
       `Authority: ${payload.authority}`,
+      `Handoff: ${payload.handoffMode}`,
+      `Official portal: ${payload.officialPortalUrl || "N/A"}`,
       "",
       payload.description,
       "",

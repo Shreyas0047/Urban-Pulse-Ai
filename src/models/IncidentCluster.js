@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const incidentClusterSchema = new mongoose.Schema(
   {
     clusterCode: { type: String, required: true, unique: true, trim: true },
+    cityId: { type: String, required: true, default: "bengaluru", lowercase: true, trim: true, index: true },
+    cityName: { type: String, required: true, default: "Bengaluru", trim: true },
     title: { type: String, required: true, trim: true },
     categoryId: { type: String, required: true, trim: true, index: true },
     issueType: { type: String, required: true, trim: true },
@@ -29,7 +31,7 @@ const incidentClusterSchema = new mongoose.Schema(
   }
 );
 
-incidentClusterSchema.index({ categoryId: 1, normalizedArea: 1, status: 1 });
+incidentClusterSchema.index({ cityId: 1, categoryId: 1, normalizedArea: 1, status: 1 });
 incidentClusterSchema.index({ lastReportedAt: -1 });
 
 module.exports = mongoose.model("IncidentCluster", incidentClusterSchema);

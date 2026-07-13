@@ -6,6 +6,7 @@ const IncidentCommand = require("../src/models/IncidentCommand");
 const DecisionAuditEvent = require("../src/models/DecisionAuditEvent");
 const AuthorityTicket = require("../src/models/AuthorityTicket");
 const CityRegistry = require("../src/models/CityRegistry");
+const DepartmentUnit = require("../src/models/DepartmentUnit");
 const User = require("../src/models/User");
 const { seedAll } = require("../src/services/seedService");
 const { hashPassword } = require("../src/utils/auth");
@@ -22,6 +23,7 @@ async function run() {
       DecisionAuditEvent.collection.deleteMany({}),
       AuthorityTicket.deleteMany({}),
       CityRegistry.deleteMany({}),
+      DepartmentUnit.deleteMany({}),
       User.deleteMany({})
     ]);
   }

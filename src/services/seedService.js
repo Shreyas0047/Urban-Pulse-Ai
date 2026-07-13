@@ -1,5 +1,6 @@
 const Complaint = require("../models/Complaint");
 const { syncCityRegistry } = require("./cityRegistryService");
+const { syncRoutingRegistry } = require("./routingRegistryService");
 
 const initialComplaints = [
   {
@@ -127,6 +128,7 @@ async function seedComplaintsIfEmpty() {
 
 async function seedAll() {
   await syncCityRegistry();
+  await syncRoutingRegistry();
   await seedComplaintsIfEmpty();
 }
 

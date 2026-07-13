@@ -14,16 +14,16 @@ function complaintFixture() {
     type: "Road Damage",
     priority: "Medium",
     status: "In Progress",
-    assignedAuthority: "Municipality",
+    assignedAuthority: "Bruhat Bengaluru Mahanagara Palike",
     ai: {
       categoryId: "road_damage",
       nlpCategory: "Infrastructure",
-      recommendedTeam: "Road Maintenance Department",
+      recommendedTeam: "Roads, Structures and Obstructions",
       reviewRequired: true
     },
     routing: {
-      authority: "Municipality",
-      department: "Road Maintenance Department",
+      authority: "Bruhat Bengaluru Mahanagara Palike",
+      department: "Roads, Structures and Obstructions",
       unit: "Roads and Obstruction Response",
       alternatives: [{ department: "Help Desk" }]
     },
@@ -61,7 +61,7 @@ async function main() {
       outcome: "confirmed",
       categoryId: "road_damage",
       priority: "Medium",
-      department: "Road Maintenance Department",
+      department: "Roads, Structures and Obstructions",
       reason: "The visible road damage agrees with the AI decision.",
       expectedVersion: 3
     },
@@ -79,7 +79,7 @@ async function main() {
       outcome: "corrected",
       categoryId: "tree_obstruction",
       priority: "Critical",
-      department: "Horticulture Emergency Response",
+      department: "Roads, Structures and Obstructions",
       reason: "The image shows a fallen tree blocking the complete roadway.",
       expectedVersion: 3
     },
@@ -90,7 +90,7 @@ async function main() {
   assert.equal(correctedComplaint.ai.categoryId, "tree_obstruction");
   assert.equal(correctedComplaint.priority, "Critical");
   assert.equal(correctedComplaint.status, "Escalated");
-  assert.equal(correctedComplaint.routing.unitId, "human-review");
+  assert.equal(correctedComplaint.routing.unitId, "bengaluru-roads-structures-obstructions");
   assert.equal(correctedComplaint.routing.alternatives.length, 0);
   assert.equal(correctedComplaint.humanReview.original.categoryId, "road_damage");
   assert.ok(correctedComplaint.humanReview.changedFields.includes("categoryId"));
@@ -101,7 +101,7 @@ async function main() {
       outcome: "corrected",
       categoryId: "tree_obstruction",
       priority: "High",
-      department: "Horticulture Emergency Response",
+      department: "Roads, Structures and Obstructions",
       reason: "Field review confirms obstruction but no immediate life threat.",
       expectedVersion: 3
     },
@@ -125,29 +125,17 @@ async function main() {
   assert.equal(insufficientComplaint.ai.categoryId, "road_damage");
   assert.equal(insufficientComplaint.followUp.status, "due");
 
-  const routingOnlyComplaint = complaintFixture();
-  routingOnlyComplaint.status = "Escalated";
-  const routingOnly = normalizeReviewPayload(
-    {
-      outcome: "corrected",
-      categoryId: "road_damage",
-      priority: "Medium",
-      department: "Ward Road Inspection Team",
-      reason: "The category is correct but this ward team owns the response.",
-      expectedVersion: 3
-    },
-    routingOnlyComplaint
+  assert.throws(
+    () => normalizeReviewPayload({ outcome: "corrected", categoryId: "road_damage", priority: "High", department: "Unregistered Ward Team", reason: "This team is not registered for the selected city and category.", expectedVersion: 3 }, complaintFixture()),
+    /registered department/
   );
-  applyHumanReview(routingOnlyComplaint, routingOnly, auth);
-  assert.equal(routingOnlyComplaint.status, "Escalated");
-  assert.equal(routingOnlyComplaint.followUp.count, 1);
 
   assert.throws(
-    () => normalizeReviewPayload({ outcome: "corrected", categoryId: "road_damage", priority: "Medium", department: "Road Maintenance Department", reason: "No actual fields have changed here.", expectedVersion: 3 }, complaintFixture()),
+    () => normalizeReviewPayload({ outcome: "corrected", categoryId: "road_damage", priority: "Medium", department: "Roads, Structures and Obstructions", reason: "No actual fields have changed here.", expectedVersion: 3 }, complaintFixture()),
     /Change at least one/
   );
   assert.throws(
-    () => normalizeReviewPayload({ outcome: "confirmed", categoryId: "tree_obstruction", priority: "Medium", department: "Road Maintenance Department", reason: "This attempts to alter a confirmed decision.", expectedVersion: 3 }, complaintFixture()),
+    () => normalizeReviewPayload({ outcome: "confirmed", categoryId: "tree_obstruction", priority: "Medium", department: "Roads, Structures and Obstructions", reason: "This attempts to alter a confirmed decision.", expectedVersion: 3 }, complaintFixture()),
     /must keep the current/
   );
   assert.throws(
@@ -178,7 +166,7 @@ async function main() {
         outcome: "confirmed",
         categoryId: "road_damage",
         priority: "Medium",
-        department: "Road Maintenance Department",
+        department: "Roads, Structures and Obstructions",
         reason: "The submitted evidence supports the current AI classification.",
         expectedVersion: 3
       },

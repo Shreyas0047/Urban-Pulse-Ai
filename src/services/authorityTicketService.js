@@ -26,6 +26,9 @@ function buildAuthorityPayload(complaint) {
     description: clean(complaint.description, 1500),
     authority: clean(complaint.routing?.authority || complaint.assignedAuthority, 120),
     department: clean(complaint.routing?.department || complaint.ai?.recommendedTeam, 120),
+    unitId: clean(complaint.routing?.unitId, 120),
+    handoffMode: clean(complaint.routing?.handoff?.mode || "manual_portal", 40),
+    officialPortalUrl: clean(complaint.routing?.handoff?.portalUrl || complaint.routing?.portalUrl, 500),
     ward: clean(complaint.routing?.ward, 100),
     confidence: Number(complaint.confidence || 0),
     reviewStatus: clean(complaint.humanReview?.status || "unreviewed", 40),
@@ -42,20 +45,60 @@ function ticketCode(complaintId) {
   return `UP-${String(complaintId).slice(-8).toUpperCase()}`;
 }
 
+function authorityDeliveryConfig(complaint, payload = buildAuthorityPayload(complaint)) {
+  const requestedAdapter = ["email", "webhook"].includes(env.authorityAdapter) ? env.authorityAdapter : "disabled";
+  const routingEmail = clean(complaint.routing?.contactEmail, 180);
+  if (payload.handoffMode === "verified_email" && /@/.test(routingEmail)) {
+    return { adapter: "email", destination: routingEmail, status: "queued" };
+  }
+  if (requestedAdapter === "email" && payload.cityId === "bengaluru" && /@/.test(clean(env.authorityTicketEmail, 180))) {
+    return { adapter: "email", destination: clean(env.authorityTicketEmail, 180), status: "queued" };
+  }
+  if (requestedAdapter === "webhook" && env.authorityWebhookUrl) {
+    return { adapter: "webhook", destination: "configured webhook", status: "queued" };
+  }
+  if (/^https:\/\//i.test(payload.officialPortalUrl)) {
+    return { adapter: "manual_portal", destination: payload.officialPortalUrl, status: "awaiting_manual_submission" };
+  }
+  return { adapter: "disabled", destination: "not configured", status: "not_configured" };
+}
+
+async function adoptDeliveryConfig(ticket, complaint, payload) {
+  if (ticket.adapter !== "disabled" || ticket.status !== "not_configured") return ticket;
+  const delivery = authorityDeliveryConfig(complaint, payload);
+  if (delivery.adapter === "disabled") return ticket;
+  ticket.adapter = delivery.adapter;
+  ticket.status = delivery.status;
+  ticket.destination = delivery.destination;
+  ticket.portalUrl = payload.officialPortalUrl;
+  ticket.handoffMode = payload.handoffMode;
+  ticket.lastError = "";
+  ticket.nextRetryAt = null;
+  await ticket.save();
+  return ticket;
+}
+
 async function createOrGetAuthorityTicket(complaint) {
   const existing = await AuthorityTicket.findOne({ complaintId: complaint._id });
-  if (existing) return { ticket: existing, created: false };
   const payload = buildAuthorityPayload(complaint);
-  const adapter = ["email", "webhook"].includes(env.authorityAdapter) ? env.authorityAdapter : "disabled";
+  if (existing) return { ticket: await adoptDeliveryConfig(existing, complaint, payload), created: false };
+  const delivery = authorityDeliveryConfig(complaint, payload);
   const code = ticketCode(complaint._id);
   try {
     const ticket = await AuthorityTicket.create({
       complaintId: complaint._id,
+      cityId: payload.cityId,
+      cityName: payload.cityName,
+      authority: payload.authority,
+      department: payload.department,
+      unitId: payload.unitId || "unassigned",
+      handoffMode: payload.handoffMode,
+      portalUrl: payload.officialPortalUrl,
       ticketCode: code,
       idempotencyKey: `urban-pulse:${complaint._id}`,
-      adapter,
-      status: adapter === "disabled" ? "not_configured" : "queued",
-      destination: adapter === "email" ? clean(env.authorityTicketEmail, 180) : adapter === "webhook" ? "configured webhook" : "not configured",
+      adapter: delivery.adapter,
+      status: delivery.status,
+      destination: delivery.destination,
       payloadHash: payloadHash(payload)
     });
     return { ticket, created: true };
@@ -95,6 +138,7 @@ async function webhookSubmit(ticket, payload, fetchImpl = fetch) {
 
 async function dispatchAuthorityTicket(ticket, complaint, dependencies = {}) {
   if (["submitted", "acknowledged", "in_progress", "resolved"].includes(ticket.status)) return ticket;
+  if (ticket.adapter === "manual_portal") return ticket;
   if (ticket.attemptCount >= env.authorityMaxAttempts) {
     const error = new Error("Authority ticket reached the maximum delivery attempts.");
     error.statusCode = 409;
@@ -108,8 +152,8 @@ async function dispatchAuthorityTicket(ticket, complaint, dependencies = {}) {
   try {
     let result;
     if (ticket.adapter === "email") {
-      if (!env.authorityTicketEmail) throw Object.assign(new Error("Authority ticket email is not configured."), { code: "EMAIL_NOT_CONFIGURED", retryable: false });
-      result = await (dependencies.sendEmail || sendAuthorityTicketEmail)({ to: env.authorityTicketEmail, ticket, payload });
+      if (!ticket.destination || !/@/.test(ticket.destination)) throw Object.assign(new Error("Authority ticket email is not configured."), { code: "EMAIL_NOT_CONFIGURED", retryable: false });
+      result = await (dependencies.sendEmail || sendAuthorityTicketEmail)({ to: ticket.destination, ticket, payload });
       result = { externalReference: clean(result.messageId || ticket.ticketCode, 180), statusCode: 202 };
     } else if (ticket.adapter === "webhook") {
       result = await webhookSubmit(ticket, payload, dependencies.fetch);
@@ -133,11 +177,59 @@ async function dispatchAuthorityTicket(ticket, complaint, dependencies = {}) {
   return ticket;
 }
 
+async function confirmManualAuthorityHandoff(ticket, { externalReference, note, role }) {
+  if (ticket.adapter !== "manual_portal") {
+    const error = new Error("This authority ticket does not use a manual portal handoff.");
+    error.statusCode = 409;
+    throw error;
+  }
+  const reference = clean(externalReference, 180);
+  if (reference.length < 3) {
+    const error = new Error("Enter the confirmation or complaint reference issued by the official portal.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (ticket.status === "submitted") {
+    if (ticket.externalReference === reference) return ticket;
+    const error = new Error("This manual handoff is already confirmed with a different reference.");
+    error.statusCode = 409;
+    throw error;
+  }
+  if (ticket.status !== "awaiting_manual_submission") {
+    const error = new Error("This authority ticket is not awaiting manual submission.");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const confirmedAt = new Date();
+  ticket.status = "submitted";
+  ticket.externalReference = reference;
+  ticket.submittedAt = confirmedAt;
+  ticket.lastError = "";
+  ticket.nextRetryAt = null;
+  ticket.attemptCount += 1;
+  ticket.manualSubmission = {
+    externalReference: reference,
+    note: clean(note, 500),
+    confirmedByRole: clean(role || "Admin", 40),
+    confirmedAt,
+    portalUrl: clean(ticket.portalUrl || ticket.destination, 500)
+  };
+  ticket.attempts.push({ attemptedAt: confirmedAt, outcome: "submitted", statusCode: null, message: "Manual portal handoff confirmed." });
+  await ticket.save();
+  return ticket;
+}
+
 async function reconcileAuthorityTicket(ticket, { status, note, role, session = null }) {
   const normalizedStatus = clean(status, 40);
   if (!RECONCILE_STATUSES.has(normalizedStatus)) {
     const error = new Error("Choose a valid authority ticket status.");
     error.statusCode = 400;
+    throw error;
+  }
+  if (!["submitted", "acknowledged", "in_progress", "resolved", "rejected"].includes(ticket.status)) {
+    const error = new Error("Submit the authority ticket before reconciling its status.");
+    error.statusCode = 409;
     throw error;
   }
   ticket.status = normalizedStatus;
@@ -147,4 +239,13 @@ async function reconcileAuthorityTicket(ticket, { status, note, role, session = 
   return ticket;
 }
 
-module.exports = { buildAuthorityPayload, createOrGetAuthorityTicket, dispatchAuthorityTicket, payloadHash, reconcileAuthorityTicket, retryDate };
+module.exports = {
+  authorityDeliveryConfig,
+  buildAuthorityPayload,
+  confirmManualAuthorityHandoff,
+  createOrGetAuthorityTicket,
+  dispatchAuthorityTicket,
+  payloadHash,
+  reconcileAuthorityTicket,
+  retryDate
+};

@@ -66,6 +66,6 @@ npm run migrate:cities -- --apply
 npm run verify:city-registry
 ```
 
-## Phase 2 Boundary
+## Phase 2 Handoff
 
-Phase 1 deliberately does not add the city selector. Phase 2 will place city selection before complaint evidence entry, load availability from `/api/cities`, preserve a safe draft preference, and continue to reject disabled cities on the server.
+Phase 1 deliberately did not add the city selector. Phase 2 now places city selection before complaint evidence, loads availability from `/api/cities`, preserves only valid reporting-enabled draft selections, and rejects missing, stale, unknown, or disabled cities on the server. See [Multi-City Expansion Phase 2](MULTI_CITY_PHASE_2.md).
