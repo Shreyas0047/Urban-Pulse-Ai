@@ -13,6 +13,8 @@ function buildAuthorityPayload(complaint) {
   return {
     schemaVersion: "1.0.0",
     complaintId: String(complaint._id),
+    cityId: clean(complaint.cityId || "bengaluru", 50),
+    cityName: clean(complaint.cityName || "Bengaluru", 80),
     issueType: clean(complaint.type, 120),
     categoryId: clean(complaint.ai?.categoryId || "general", 80),
     severity: clean(complaint.priority, 30),

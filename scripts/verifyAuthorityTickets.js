@@ -58,6 +58,8 @@ async function main() {
   try {
     const payload = buildAuthorityPayload(complaint());
     assert.equal(payload.categoryId, "tree_obstruction");
+    assert.equal(payload.cityId, "bengaluru");
+    assert.equal(payload.cityName, "Bengaluru");
     assert.ok(!JSON.stringify(payload).includes("private@example.com"));
     assert.equal(payloadHash(payload).length, 64);
 

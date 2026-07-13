@@ -10,6 +10,7 @@ const { canonicalPriority, routeComplaint } = require("./routingService");
 const { fetchWeatherSnapshot } = require("./weatherService");
 const { recordAiBaseline } = require("./decisionAuditService");
 const { extractAreaIntelligence } = require("../utils/localAlerts");
+const { DEFAULT_CITY_ID, DEFAULT_CITY_NAME, REGISTRY_VERSION } = require("./cityRegistryService");
 
 const LOW_CONFIDENCE_THRESHOLD = 0.52;
 const GEOCODE_TIMEOUT_MS = 3500;
@@ -437,6 +438,11 @@ async function createComplaintFromPayload(auth, payload) {
     source: payload.inputSource || "Manual Submission",
     confidence: Math.round(confidenceScore * 100),
     location,
+    cityId: DEFAULT_CITY_ID,
+    cityName: DEFAULT_CITY_NAME,
+    citySource: "system_default",
+    cityRegistryVersion: REGISTRY_VERSION,
+    cityAssignedAt: new Date(),
     assignedAuthority: routing.authority,
     routing,
     mapLocation,

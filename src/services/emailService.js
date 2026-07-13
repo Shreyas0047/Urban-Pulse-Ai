@@ -391,6 +391,7 @@ async function sendAuthorityTicketEmail({ to, ticket, payload }) {
       `Issue: ${payload.issueType}`,
       `Category: ${payload.categoryId}`,
       `Severity: ${payload.severity}`,
+      `City: ${payload.cityName} (${payload.cityId})`,
       `Location: ${payload.location}`,
       `Department: ${payload.department}`,
       `Authority: ${payload.authority}`,

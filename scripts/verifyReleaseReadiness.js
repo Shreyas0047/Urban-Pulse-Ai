@@ -2,6 +2,7 @@ const { spawnSync } = require("child_process");
 
 const checks = [
   ["project-syntax", "node", ["scripts/verifyProjectSyntax.js"]],
+  ["city-registry", "node", ["scripts/verifyCityRegistry.js"]],
   ["human-review", "node", ["scripts/verifyHumanReview.js"]],
   ["decision-audit", "node", ["scripts/verifyDecisionAudit.js"]],
   ["observability", "node", ["scripts/verifyAiObservability.js"]],

@@ -11,6 +11,16 @@ const complaintSchema = new mongoose.Schema(
     source: { type: String, required: true },
     confidence: { type: Number, required: true },
     location: { type: String, required: true },
+    cityId: { type: String, required: true, default: "bengaluru", lowercase: true, trim: true, index: true },
+    cityName: { type: String, required: true, default: "Bengaluru", trim: true },
+    citySource: {
+      type: String,
+      required: true,
+      enum: ["system_default", "user_selected", "legacy_migration", "admin_corrected"],
+      default: "system_default"
+    },
+    cityRegistryVersion: { type: String, required: true, default: "1.0.0", trim: true },
+    cityAssignedAt: { type: Date, required: true, default: Date.now },
     assignedAuthority: { type: String, default: "Gram Panchayat" },
     routing: {
       authority: String,
@@ -285,5 +295,7 @@ const complaintSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+complaintSchema.index({ cityId: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Complaint", complaintSchema);

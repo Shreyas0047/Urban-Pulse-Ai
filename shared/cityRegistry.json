@@ -1,0 +1,111 @@
+{
+  "registryVersion": "1.0.0",
+  "defaultCityId": "bengaluru",
+  "cities": [
+    {
+      "slug": "bengaluru",
+      "name": "Bengaluru",
+      "state": "Karnataka",
+      "countryCode": "IN",
+      "timezone": "Asia/Kolkata",
+      "aliases": ["bangalore", "bengaluru urban"],
+      "rolloutStatus": "active",
+      "reportingEnabled": true,
+      "defaultAuthority": "Bruhat Bengaluru Mahanagara Palike",
+      "locationEnvelope": { "south": 12.734, "west": 77.379, "north": 13.173, "east": 77.834, "quality": "approximate" },
+      "center": { "lat": 12.9716, "lng": 77.5946 },
+      "officialChannels": {
+        "portalUrl": "https://site.bbmp.gov.in/departmentwebsites/bbmpit/mobileapps.html",
+        "helpline": "080-22660000",
+        "mobileApp": "Sahaaya 2.0",
+        "supportsDirectApi": false,
+        "sourceUrl": "https://site.bbmp.gov.in/departmentwebsites/bbmpit/mobileapps.html",
+        "verifiedAt": "2026-07-13T00:00:00.000Z"
+      }
+    },
+    {
+      "slug": "mumbai",
+      "name": "Mumbai",
+      "state": "Maharashtra",
+      "countryCode": "IN",
+      "timezone": "Asia/Kolkata",
+      "aliases": ["bombay", "greater mumbai"],
+      "rolloutStatus": "planned",
+      "reportingEnabled": false,
+      "defaultAuthority": "Brihanmumbai Municipal Corporation",
+      "locationEnvelope": { "south": 18.89, "west": 72.75, "north": 19.3, "east": 72.99, "quality": "approximate" },
+      "center": { "lat": 19.076, "lng": 72.8777 },
+      "officialChannels": {
+        "portalUrl": "https://portal.mcgm.gov.in/irj/portal/anonymous/qlCLCComp?guest_user=english",
+        "helpline": "1916",
+        "mobileApp": "",
+        "supportsDirectApi": false,
+        "sourceUrl": "https://portal.mcgm.gov.in/irj/portal/anonymous/qlCLCComp?guest_user=english",
+        "verifiedAt": "2026-07-13T00:00:00.000Z"
+      }
+    },
+    {
+      "slug": "delhi",
+      "name": "Delhi",
+      "state": "Delhi",
+      "countryCode": "IN",
+      "timezone": "Asia/Kolkata",
+      "aliases": ["new delhi", "national capital territory of delhi"],
+      "rolloutStatus": "planned",
+      "reportingEnabled": false,
+      "defaultAuthority": "Municipal Corporation of Delhi",
+      "locationEnvelope": { "south": 28.4, "west": 76.84, "north": 28.89, "east": 77.35, "quality": "approximate" },
+      "center": { "lat": 28.6139, "lng": 77.209 },
+      "officialChannels": {
+        "portalUrl": "https://mcdonline.nic.in/portal/feedback",
+        "helpline": "155305",
+        "mobileApp": "MCD311",
+        "supportsDirectApi": false,
+        "sourceUrl": "https://mcdonline.nic.in/portal/feedback",
+        "verifiedAt": "2026-07-13T00:00:00.000Z"
+      }
+    },
+    {
+      "slug": "chennai",
+      "name": "Chennai",
+      "state": "Tamil Nadu",
+      "countryCode": "IN",
+      "timezone": "Asia/Kolkata",
+      "aliases": ["madras", "greater chennai"],
+      "rolloutStatus": "planned",
+      "reportingEnabled": false,
+      "defaultAuthority": "Greater Chennai Corporation",
+      "locationEnvelope": { "south": 12.83, "west": 80.12, "north": 13.24, "east": 80.33, "quality": "approximate" },
+      "center": { "lat": 13.0827, "lng": 80.2707 },
+      "officialChannels": {
+        "portalUrl": "https://erp.chennaicorporation.gov.in/pgr/",
+        "helpline": "1913",
+        "mobileApp": "",
+        "supportsDirectApi": false,
+        "sourceUrl": "https://erp.chennaicorporation.gov.in/pgr/",
+        "verifiedAt": "2026-07-13T00:00:00.000Z"
+      }
+    },
+    {
+      "slug": "hyderabad",
+      "name": "Hyderabad",
+      "state": "Telangana",
+      "countryCode": "IN",
+      "timezone": "Asia/Kolkata",
+      "aliases": ["greater hyderabad", "secunderabad"],
+      "rolloutStatus": "planned",
+      "reportingEnabled": false,
+      "defaultAuthority": "Greater Hyderabad Municipal Corporation",
+      "locationEnvelope": { "south": 17.2, "west": 78.2, "north": 17.62, "east": 78.7, "quality": "approximate" },
+      "center": { "lat": 17.385, "lng": 78.4867 },
+      "officialChannels": {
+        "portalUrl": "https://www.ghmc.gov.in/howdoi.aspx",
+        "helpline": "",
+        "mobileApp": "",
+        "supportsDirectApi": false,
+        "sourceUrl": "https://www.ghmc.gov.in/howdoi.aspx",
+        "verifiedAt": "2026-07-13T00:00:00.000Z"
+      }
+    }
+  ]
+}

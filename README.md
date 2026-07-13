@@ -62,6 +62,7 @@ The project is built around a simple idea: civic complaint systems should not st
 - Express fallback AI path when the Flask AI service is unavailable.
 - Deterministic AI evaluation scripts for regression checking.
 - Versioned real-world benchmark foundation with provenance, privacy review, independent annotation, and leakage-safe splits.
+- Versioned five-city registry foundation with Bengaluru active and Mumbai, Delhi, Chennai, and Hyderabad staged for controlled rollout.
 
 ## Why This Project Exists
 
@@ -82,6 +83,7 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | --- | --- | --- |
 | Authentication | Email/password login, role selection, email OTP registration, forgot-password OTP reset | Integrated |
 | Citizen reporting | Text complaint, voice transcript, image upload, location, map preview | Integrated |
+| Multi-city foundation | Validated city registry, explicit complaint jurisdiction, public discovery API, and safe Bengaluru migration | Phase 1 integrated |
 | Image analysis | Browser-side image features, resized image upload, Flask vision analysis, local fallback | Integrated |
 | Threat intelligence | Threat level, risk score, hazards, relationships, confidence, safety gate, duplicate signal | Integrated |
 | Smart routing | Department/unit selection by category, severity, ward, and active workload | Integrated |
@@ -311,7 +313,8 @@ Urban-Pulse-Ai/
 |   `-- vendor/                 # Local visual/vendor assets
 |-- scripts/                    # Evaluation, benchmark, seed, SMTP verification
 |-- shared/
-|   `-- aiCategories.json       # Shared AI category catalog
+|   |-- aiCategories.json       # Shared AI category catalog
+|   `-- cityRegistry.json       # Versioned five-city rollout registry
 |-- src/
 |   |-- app.js                  # Express app bootstrap
 |   |-- server.js               # Server entrypoint
@@ -502,6 +505,9 @@ The first CLIP model run may take longer because the model may need to download 
 | `npm run start:stt` | Start optional local STT service |
 | `npm run seed` | Seed local/demo database data |
 | `npm run seed:fresh` | Clear and reseed local/demo data |
+| `npm run cities:sync` | Validate and idempotently synchronize the city registry |
+| `npm run migrate:cities` | Dry-run the legacy complaint-to-Bengaluru migration |
+| `npm run migrate:cities -- --apply` | Apply the guarded legacy city migration after reviewing dry-run output |
 | `npm run verify:smtp` | Verify SMTP connection without sending an email |
 | `npm run verify:smtp -- --send-test=email@example.com` | Send one test OTP email through registration email path |
 | `npm run evaluate:ai` | Run deterministic Node AI evaluation |
@@ -521,6 +527,7 @@ The first CLIP model run may take longer because the model may need to download 
 | `npm run benchmark:compare -- --baseline ... --candidate ...` | Apply champion/challenger safety and non-regression gates |
 | `npm run verify:benchmark-comparison` | Verify model promotion and rejection decisions |
 | `npm run verify:authority-tickets` | Verify adapter privacy, idempotency, delivery, retries, and reconciliation |
+| `npm run verify:city-registry` | Verify registry safety, public discovery, complaint defaults, and migration behavior |
 | `npm run verify:accessibility` | Run deterministic static accessibility contracts |
 | `npm run verify:resilience` | Verify rate limits, correlation IDs, and security headers |
 | `npm run verify:load` | Run concurrent local HTTP and payload-boundary checks |
@@ -536,6 +543,8 @@ All protected endpoints require a bearer token from login or registration.
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/roles` | List available roles and permissions |
+| `GET` | `/api/cities` | List active and planned city jurisdictions without private registry metadata |
+| `GET` | `/api/cities/:slug` | Read one public city rollout record and official complaint channels |
 | `POST` | `/api/auth/register/request-otp` | Send registration OTP to email |
 | `POST` | `/api/auth/register` | Register account with OTP |
 | `POST` | `/api/auth/login` | Login with email, password, and role |
@@ -593,6 +602,7 @@ Health probes are available at `GET /health/live` for process liveness and `GET 
 | `RegistrationOtp` | Mongo-backed registration OTP records with TTL |
 | `PasswordResetOtp` | Mongo-backed password reset OTP records with TTL |
 | `Complaint` | Main complaint record with AI, human review, routing, weather, civic evidence, threat, map, alerts, follow-ups, verification votes, and history |
+| `CityRegistry` | Versioned jurisdiction identity, rollout availability, authority defaults, approximate validation envelope, and official-channel provenance |
 | `DecisionAuditEvent` | Append-only AI baseline and human-review events linked by sequence and SHA-256 hashes |
 | `AuthorityTicket` | Idempotent authority delivery, retry, external-reference, and reconciliation state |
 | `DepartmentUnit` | Configurable department routing unit registry |
@@ -679,6 +689,12 @@ Phase 7 provides disabled, email, and generic webhook adapters with one idempote
 ### Phase 8: Validation And Resilience
 
 Phase 8 adds skip navigation, named and keyboard-contained dialogs, focus restoration, live status feedback, reduced-motion behavior, separate liveness/readiness probes, correlation IDs, graceful shutdown, payload boundaries, concurrent local load checks, and a consolidated release gate. Automated checks do not replace manual screen-reader, user-study, staging provider, failover, and production-like load validation. See [the Phase 8 validation specification](docs/PHASE_8_VALIDATION_AND_RESILIENCE.md).
+
+## Multi-City Expansion
+
+Multi-City Phase 1 introduces a validated registry for Bengaluru, Mumbai, Delhi, Chennai, and Hyderabad. Bengaluru remains the only reporting-enabled jurisdiction; the other four cities are published as planned and cannot yet be submitted through the complaint API. New and seeded complaints carry explicit Bengaluru identity, authority payloads and PDFs preserve that jurisdiction, and a guarded dry-run-first migration is available for legacy records.
+
+The registry records official complaint-channel provenance without claiming unsupported municipal APIs. Coarse location envelopes are validation aids rather than official ward boundaries. See [the Multi-City Phase 1 specification](docs/MULTI_CITY_PHASE_1.md) for rollout boundaries and migration procedure.
 
 ## Evaluation And Testing
 
@@ -796,6 +812,8 @@ Before pushing live:
 - Submit a high-risk test complaint and verify routing, broadcast, incident command, and PDF.
 - Confirm Weatherstack and Zenserp quota behavior with limited/free keys.
 - Keep `AUTHORITY_ADAPTER=disabled` until a destination is approved, then verify email or webhook delivery in staging.
+- Run `npm run migrate:cities`, review unknown city values, and use `--apply` only from a trusted one-off production shell.
+- Confirm `/api/cities` exposes only Bengaluru as reporting-enabled before enabling the Phase 2 selector.
 - Run `npm run verify:release` and record any manual Phase 8 accessibility/load findings.
 - Replace fallback department unit metadata with real authority contacts when available.
 - Remove or rotate any seed/demo credentials before final deployment.

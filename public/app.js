@@ -2539,6 +2539,7 @@ function buildSubmittedReport(payload, result) {
     submittedAt: new Date().toISOString(),
     reporter: authState?.username || "Citizen",
     role: authState?.role || "Citizen",
+    city: result.city || { id: "bengaluru", name: "Bengaluru" },
     location: payload.location || "Unknown",
     textComplaint: payload.textComplaint || "No complaint text provided.",
     aiDescription: finalAiDescription,
@@ -3585,6 +3586,7 @@ async function generatePdfReport(report, options = {}) {
   drawRow("Date and Time", formatDateTime(report.submittedAt));
   drawRow("Reported By", report.reporter);
   drawRow("User Role", report.role);
+  drawRow("City", report.city?.name || "Bengaluru");
   drawRow("Routed Authority", report.assignedAuthority);
   drawRow("Assigned Unit", report.routing?.unit || report.routing?.department || "Not recorded");
   drawRow("Ward / Coverage", report.routing?.ward || "Not recorded");

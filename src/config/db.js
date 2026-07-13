@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const env = require("./env");
+const { syncCityRegistry } = require("../services/cityRegistryService");
 
 async function cleanupLegacyUserIndexes() {
   try {
@@ -25,6 +26,7 @@ async function connectDatabase() {
     serverSelectionTimeoutMS: 10000
   });
   await cleanupLegacyUserIndexes();
+  await syncCityRegistry();
 }
 
 module.exports = {

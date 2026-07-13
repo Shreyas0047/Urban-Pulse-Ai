@@ -128,6 +128,12 @@ async function analyzeAndCreateComplaint(req, res, next) {
       confidence: analysis.confidence,
       status: analysis.status,
       assignedAuthority: analysis.assignedAuthority,
+      city: {
+        id: complaint.cityId,
+        name: complaint.cityName,
+        source: complaint.citySource,
+        registryVersion: complaint.cityRegistryVersion
+      },
       routing: analysis.routing,
       broadcast: analysis.broadcast,
       incidentCommand: analysis.incidentCommand,

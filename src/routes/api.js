@@ -8,11 +8,14 @@ const { getLocalAlertPreferences, updateLocalAlertPreferences } = require("../co
 const { deleteUser, updateUser } = require("../controllers/userController");
 const { exportComplaintDecisionAudit, getCorrectionFeedback } = require("../controllers/decisionAuditController");
 const { reconcileTicket, retryAuthorityTicket, submitAuthorityTicket } = require("../controllers/authorityTicketController");
+const { getCities, getCity } = require("../controllers/cityController");
 const { authenticate, requirePermission } = require("../middleware/auth");
 
 const router = express.Router();
 
 router.get("/roles", getRoles);
+router.get("/cities", getCities);
+router.get("/cities/:slug", getCity);
 router.post("/auth/token", issueToken);
 router.post("/auth/register/request-otp", requestRegistrationOtp);
 router.post("/auth/register", register);
