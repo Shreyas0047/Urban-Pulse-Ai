@@ -67,6 +67,18 @@ services:
         sync: false
       - key: BBMP_EMAIL_TO
         value: comm@bbmp.gov.in
+      - key: AUTHORITY_ADAPTER
+        value: disabled
+      - key: AUTHORITY_TICKET_EMAIL
+        sync: false
+      - key: AUTHORITY_WEBHOOK_URL
+        sync: false
+      - key: AUTHORITY_WEBHOOK_TOKEN
+        sync: false
+      - key: AUTHORITY_TIMEOUT_MS
+        value: "8000"
+      - key: AUTHORITY_MAX_ATTEMPTS
+        value: "3"
       - key: CORS_ORIGIN
         sync: false
       - key: ALLOW_ROLE_TOKEN_ISSUE

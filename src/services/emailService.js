@@ -378,6 +378,32 @@ async function sendBbmpComplaintEmail({ subject, report, pdfBase64, filename }) 
   };
 }
 
+async function sendAuthorityTicketEmail({ to, ticket, payload }) {
+  const info = await sendMail({
+    purpose: "authority_ticket",
+    to,
+    subject: `[${payload.severity}] Civic ticket ${ticket.ticketCode}: ${payload.issueType}`,
+    text: [
+      "A tracked civic ticket was submitted by Urban Pulse AI.",
+      "",
+      `Ticket: ${ticket.ticketCode}`,
+      `Complaint: ${payload.complaintId}`,
+      `Issue: ${payload.issueType}`,
+      `Category: ${payload.categoryId}`,
+      `Severity: ${payload.severity}`,
+      `Location: ${payload.location}`,
+      `Department: ${payload.department}`,
+      `Authority: ${payload.authority}`,
+      "",
+      payload.description,
+      "",
+      `Idempotency key: ${ticket.idempotencyKey}`,
+      "Reply with the external ticket reference so an administrator can reconcile this record."
+    ].join("\n")
+  });
+  return { messageId: info.messageId };
+}
+
 function getSeverityWarning(severity) {
   const level = String(severity || "Low").trim().toLowerCase();
 
@@ -479,6 +505,7 @@ async function sendEmergencyBroadcastEmail({ emails, complaint, routing, message
 module.exports = {
   isEmailConfigured,
   sendBbmpComplaintEmail,
+  sendAuthorityTicketEmail,
   sendCloseContactsComplaintEmail,
   sendEmergencyBroadcastEmail,
   sendPasswordResetOtpEmail,

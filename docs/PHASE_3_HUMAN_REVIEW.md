@@ -46,9 +46,9 @@ The original AI confidence, candidates, explanation, threat evidence, and model 
 - Department remains editable because local operational structures may differ from the catalog default.
 - Citizen verification buttons are no longer shown to admins.
 
-## Phase 4 Boundary
+## Phase 4 Integration
 
-Phase 3 stores the original decision and latest human-reviewed state on the complaint. It does not claim to provide an immutable history of every correction. Phase 4 will add a dedicated append-only prediction-correction audit model, event identifiers, correction export, aggregate feedback analysis, and tamper-evident longitudinal records.
+Phase 3 stores the original decision and latest human-reviewed state on the complaint. Phase 4 adds the separate append-only prediction-correction audit model, event identifiers, correction exports, aggregate feedback analysis, and tamper-evident longitudinal records. See [Phase 4](PHASE_4_DECISION_AUDIT.md).
 
 ## Verification
 

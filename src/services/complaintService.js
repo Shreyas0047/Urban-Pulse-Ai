@@ -1,4 +1,5 @@
 const Complaint = require("../models/Complaint");
+const mongoose = require("mongoose");
 const { analyzeComplaint } = require("./aiClient");
 const { createEmergencyBroadcast } = require("./broadcastService");
 const { fetchCivicEvidence } = require("./civicEvidenceService");
@@ -7,6 +8,7 @@ const { attachComplaintToCluster } = require("./incidentClusterService");
 const { initializeFollowUp } = require("./followUpService");
 const { canonicalPriority, routeComplaint } = require("./routingService");
 const { fetchWeatherSnapshot } = require("./weatherService");
+const { recordAiBaseline } = require("./decisionAuditService");
 const { extractAreaIntelligence } = require("../utils/localAlerts");
 
 const LOW_CONFIDENCE_THRESHOLD = 0.52;
@@ -425,7 +427,7 @@ async function createComplaintFromPayload(auth, payload) {
   });
   logAiDecision({ auth, location, analysis, confidenceScore, reviewRequired, routing });
 
-  const complaint = await Complaint.create({
+  const complaint = new Complaint({
     reporter: auth.role,
     reporterUserId: String(auth.userId || ""),
     reporterUsername: auth.username,
@@ -488,6 +490,12 @@ async function createComplaintFromPayload(auth, payload) {
       riskScore: Number(threatAssessment?.riskScore || 0),
       imageFingerprint: threatAssessment?.integrity?.sha256 || analysis.aiMeta?.imageFingerprint || ""
     }
+  });
+
+  await mongoose.connection.transaction(async (session) => {
+    await complaint.save({ session });
+    await recordAiBaseline(complaint, { session });
+    await complaint.save({ session });
   });
 
   let incidentCluster = null;

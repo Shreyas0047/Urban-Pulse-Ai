@@ -48,6 +48,15 @@ app.get("/health", (_req, res) => {
   });
 });
 
+app.get("/health/live", (_req, res) => {
+  res.json({ status: "ok", service: "urban-pulse-web", check: "liveness" });
+});
+
+app.get("/health/ready", (_req, res) => {
+  const databaseReady = mongoose.connection.readyState === 1;
+  res.status(databaseReady ? 200 : 503).json({ status: databaseReady ? "ready" : "not_ready", service: "urban-pulse-web", database: databaseReady ? "connected" : "disconnected" });
+});
+
 app.get("*", (_req, res) => {
   res.sendFile(path.join(env.publicDir, "index.html"));
 });

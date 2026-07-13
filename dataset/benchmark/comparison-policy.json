@@ -1,0 +1,15 @@
+{
+  "policyVersion": "1.0.0",
+  "gates": {
+    "macroIncidentF1MaximumRegression": 0.02,
+    "criticalRecallMaximumRegression": 0.0,
+    "negativeRecallMaximumRegression": 0.02,
+    "selectiveAccuracyMaximumRegression": 0.02,
+    "dangerousUndertriageMaximumIncrease": 0.01,
+    "falseCriticalMaximumIncrease": 0.01,
+    "expectedCalibrationErrorMaximumIncrease": 0.02,
+    "p95LatencyMaximumRatio": 2.0,
+    "fallbackRateMaximumIncrease": 0.1
+  },
+  "notes": "The candidate must pass its absolute evaluation policy and every safety non-regression gate. Change this policy only through a new version reviewed before test results are opened."
+}

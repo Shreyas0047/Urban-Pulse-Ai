@@ -2,6 +2,9 @@ const Complaint = require("../models/Complaint");
 const IncidentCommand = require("../models/IncidentCommand");
 const IncidentCluster = require("../models/IncidentCluster");
 const EmergencyBroadcast = require("../models/EmergencyBroadcast");
+const DecisionAuditEvent = require("../models/DecisionAuditEvent");
+const AuthorityTicket = require("../models/AuthorityTicket");
+const { buildAiObservability } = require("../services/aiObservabilityService");
 const User = require("../models/User");
 const { buildCivicDigitalTwin } = require("../services/civicDigitalTwinService");
 const { refreshFollowUpsForComplaints } = require("../services/followUpService");
@@ -137,7 +140,8 @@ async function getDashboard(req, res, next) {
       userState: String(req.query.userState || "").trim()
     };
 
-    const [complaintDocs, users, incidentCommands, incidentClusters] = await Promise.all([
+    const observabilityStart = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+    const [complaintDocs, users, incidentCommands, incidentClusters, decisionEvents] = await Promise.all([
       Complaint.find(complaintFilter).sort({ createdAt: -1 }),
       canDeleteUsers
         ? User.find({}, { username: 1, email: 1, role: 1, disabledAt: 1, disabledBy: 1, lastLoginAt: 1, createdAt: 1 }).sort({ role: 1, username: 1 }).lean()
@@ -147,6 +151,9 @@ async function getDashboard(req, res, next) {
         : Promise.resolve([]),
       canViewDashboard
         ? IncidentCluster.find({ status: { $in: ["active", "monitoring"] } }).sort({ mergedCount: -1, lastReportedAt: -1 }).limit(12).lean()
+        : Promise.resolve([]),
+      canViewDashboard
+        ? DecisionAuditEvent.find({ occurredAt: { $gte: observabilityStart } }).sort({ occurredAt: -1 }).limit(5000).lean()
         : Promise.resolve([])
     ]);
     let communityCases = [];
@@ -186,6 +193,7 @@ async function getDashboard(req, res, next) {
     const riskPredictions = canViewDashboard ? buildCivicRiskPredictions(allComplaints) : buildCivicRiskPredictions(complaints);
     const civicIntelligence = buildCivicIntelligence(canViewDashboard ? allComplaints : complaints);
     const activeIncidentCount = complaints.filter(hasActiveIncident).length;
+    const aiObservability = canViewDashboard ? buildAiObservability(allComplaints, decisionEvents) : null;
 
     res.json({
       metrics: {
@@ -223,6 +231,7 @@ async function getDashboard(req, res, next) {
       digitalTwin,
       riskPredictions,
       civicIntelligence,
+      aiObservability,
       communityCases,
       incidentCommands,
       incidentClusters,
@@ -241,11 +250,18 @@ async function getDashboard(req, res, next) {
 
 async function resetDashboard(req, res, next) {
   try {
+    if (process.env.NODE_ENV === "production") {
+      const error = new Error("Dashboard reset is disabled in production to preserve complaint and decision audit records.");
+      error.statusCode = 403;
+      throw error;
+    }
     await Promise.all([
       Complaint.deleteMany({}),
       IncidentCommand.deleteMany({}),
       IncidentCluster.deleteMany({}),
-      EmergencyBroadcast.deleteMany({})
+      EmergencyBroadcast.deleteMany({}),
+      DecisionAuditEvent.collection.deleteMany({}),
+      AuthorityTicket.deleteMany({})
     ]);
     await getDashboard(req, res, next);
   } catch (error) {

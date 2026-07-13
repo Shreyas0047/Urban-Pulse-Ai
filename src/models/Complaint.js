@@ -232,6 +232,13 @@ const complaintSchema = new mongoose.Schema(
       reviewerRole: { type: String, default: "" },
       reviewedAt: { type: Date, default: null }
     },
+    decisionAudit: {
+      headEventId: { type: String, default: "" },
+      headHash: { type: String, default: "" },
+      eventCount: { type: Number, default: 0 },
+      integrityStatus: { type: String, enum: ["not_recorded", "verified", "failed"], default: "not_recorded" },
+      lastRecordedAt: { type: Date, default: null }
+    },
     statusHistory: [
       {
         status: { type: String, required: true },

@@ -37,6 +37,12 @@ module.exports = {
   smtpPass: process.env.SMTP_PASS || "",
   smtpFrom: process.env.SMTP_FROM || process.env.SMTP_USER || "",
   bbmpEmailTo: process.env.BBMP_EMAIL_TO || "comm@bbmp.gov.in",
+  authorityAdapter: String(process.env.AUTHORITY_ADAPTER || "disabled").trim().toLowerCase(),
+  authorityWebhookUrl: String(process.env.AUTHORITY_WEBHOOK_URL || "").trim(),
+  authorityWebhookToken: String(process.env.AUTHORITY_WEBHOOK_TOKEN || "").trim(),
+  authorityTicketEmail: String(process.env.AUTHORITY_TICKET_EMAIL || process.env.BBMP_EMAIL_TO || "").trim(),
+  authorityTimeoutMs: Math.max(1000, Number(process.env.AUTHORITY_TIMEOUT_MS || 8000)),
+  authorityMaxAttempts: Math.max(1, Math.min(10, Number(process.env.AUTHORITY_MAX_ATTEMPTS || 3))),
   corsOrigins: String(process.env.CORS_ORIGIN || "")
     .split(",")
     .map((origin) => origin.trim())

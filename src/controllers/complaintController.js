@@ -1,12 +1,15 @@
 const Complaint = require("../models/Complaint");
+const mongoose = require("mongoose");
 const IncidentCommand = require("../models/IncidentCommand");
 const User = require("../models/User");
+const AuthorityTicket = require("../models/AuthorityTicket");
 const { transcribeAudio, compareResolutionEvidence } = require("../services/aiClient");
 const { createComplaintFromPayload, createHttpError } = require("../services/complaintService");
 const { buildFollowUpSchedule, refreshComplaintFollowUp } = require("../services/followUpService");
 const { buildComplaintIntelligence } = require("../services/civicIntelligenceService");
 const { areaMatchesLocation } = require("../utils/localAlerts");
 const { applyHumanReview, getReviewOptions, normalizeReviewPayload } = require("../services/humanReviewService");
+const { appendDecisionEvent, decisionSnapshot, recordAiBaseline, verifyDecisionAudit } = require("../services/decisionAuditService");
 
 const ALLOWED_STATUSES = ["Queued", "Needs Review", "In Progress", "Resolved", "Escalated"];
 const ALLOWED_VERIFICATION_VOTES = new Set(["still_there", "resolved", "got_worse"]);
@@ -131,6 +134,7 @@ async function analyzeAndCreateComplaint(req, res, next) {
       incidentCluster: analysis.incidentCluster || complaint.incidentCluster,
       followUp: complaint.followUp,
       verification: complaint.verification,
+      decisionAudit: complaint.decisionAudit,
       mapLocation: analysis.mapLocation,
       areaIntelligence: analysis.areaIntelligence,
       weather: analysis.weather,
@@ -162,10 +166,18 @@ async function getComplaint(req, res, next) {
       throw createHttpError("Permission denied", 403);
     }
 
+    const canReview = req.auth.permissions.includes("update_complaint_status");
+    const decisionAudit = canReview
+      ? await verifyDecisionAudit(complaint._id, { complaint })
+      : null;
+    const authorityTicket = canReview ? await AuthorityTicket.findOne({ complaintId: complaint._id }).lean() : null;
+
     res.json({
       complaint,
       intelligence: buildComplaintIntelligence(complaint),
-      reviewOptions: req.auth.permissions.includes("update_complaint_status") ? getReviewOptions() : null
+      reviewOptions: canReview ? getReviewOptions() : null,
+      decisionAudit,
+      authorityTicket
     });
   } catch (error) {
     next(error);
@@ -530,40 +542,67 @@ async function submitCommunityProof(req, res, next) {
 
 async function submitHumanReview(req, res, next) {
   try {
-    const complaint = await Complaint.findById(req.params.id);
-    if (!complaint) {
-      throw createHttpError("Complaint not found", 404);
-    }
+    const execute = async (session = null) => {
+      let query = Complaint.findById(req.params.id);
+      if (session && typeof query.session === "function") query = query.session(session);
+      const complaint = await query;
+      if (!complaint) throw createHttpError("Complaint not found", 404);
 
-    const review = normalizeReviewPayload(req.body, complaint);
-    if (Number(complaint.__v || 0) !== review.expectedVersion) {
-      throw createHttpError("This complaint changed after you opened it. Refresh the case before submitting your review.", 409);
-    }
+      const review = normalizeReviewPayload(req.body, complaint);
+      if (Number(complaint.__v || 0) !== review.expectedVersion) {
+        throw createHttpError("This complaint changed after you opened it. Refresh the case before submitting your review.", 409);
+      }
 
-    const humanReview = applyHumanReview(complaint, review, req.auth);
-    if (complaint.incidentCommand?.triggered && complaint.incidentCommand?.incidentId) {
-      const commandStatus = commandStatusForComplaintStatus(complaint.status);
-      await IncidentCommand.findByIdAndUpdate(complaint.incidentCommand.incidentId, {
-        severity: complaint.priority,
-        title: `${complaint.priority} ${complaint.type}`,
-        assignedAuthority: complaint.routing?.authority || complaint.assignedAuthority,
-        assignedDepartment: complaint.routing?.department || "",
-        assignedUnit: complaint.routing?.unit || "",
-        commandStatus,
-        $push: {
-          timeline: {
-            event: `Human review ${review.outcome.replace(/_/g, " ")} applied`,
-            at: humanReview.reviewedAt,
-            by: "authorized-human-review"
+      const before = decisionSnapshot(complaint);
+      if (session && !Number(complaint.decisionAudit?.eventCount || 0)) {
+        await recordAiBaseline(complaint, { session });
+      }
+      const humanReview = applyHumanReview(complaint, review, req.auth);
+      if (complaint.incidentCommand?.triggered && complaint.incidentCommand?.incidentId) {
+        const commandStatus = commandStatusForComplaintStatus(complaint.status);
+        await IncidentCommand.findByIdAndUpdate(complaint.incidentCommand.incidentId, {
+          severity: complaint.priority,
+          title: `${complaint.priority} ${complaint.type}`,
+          assignedAuthority: complaint.routing?.authority || complaint.assignedAuthority,
+          assignedDepartment: complaint.routing?.department || "",
+          assignedUnit: complaint.routing?.unit || "",
+          commandStatus,
+          $push: {
+            timeline: {
+              event: `Human review ${review.outcome.replace(/_/g, " ")} applied`,
+              at: humanReview.reviewedAt,
+              by: "authorized-human-review"
+            }
           }
-        }
-      });
-      complaint.incidentCommand.severity = complaint.priority;
-      complaint.incidentCommand.assignedUnit = complaint.routing?.unit || complaint.incidentCommand.assignedUnit;
-      complaint.incidentCommand.status = commandStatus;
-    }
+        }, session ? { session } : undefined);
+        complaint.incidentCommand.severity = complaint.priority;
+        complaint.incidentCommand.assignedUnit = complaint.routing?.unit || complaint.incidentCommand.assignedUnit;
+        complaint.incidentCommand.status = commandStatus;
+      }
 
-    await complaint.save();
+      if (session) {
+        await appendDecisionEvent({
+          complaint,
+          eventType: "human_review",
+          outcome: review.outcome,
+          actorType: "human",
+          actorRole: req.auth.role || "Admin",
+          before,
+          after: decisionSnapshot(complaint),
+          changedFields: review.changedFields || [],
+          reason: review.reason,
+          occurredAt: humanReview.reviewedAt,
+          session
+        });
+      }
+      await complaint.save(session ? { session } : undefined);
+      return { complaint, review, humanReview };
+    };
+
+    const result = mongoose.connection.readyState === 1
+      ? await mongoose.connection.transaction((session) => execute(session))
+      : await execute();
+    const { complaint, review, humanReview } = result;
     res.json({
       message:
         review.outcome === "confirmed"

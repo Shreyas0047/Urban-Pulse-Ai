@@ -3,6 +3,8 @@ const Complaint = require("../src/models/Complaint");
 const EmergencyBroadcast = require("../src/models/EmergencyBroadcast");
 const IncidentCluster = require("../src/models/IncidentCluster");
 const IncidentCommand = require("../src/models/IncidentCommand");
+const DecisionAuditEvent = require("../src/models/DecisionAuditEvent");
+const AuthorityTicket = require("../src/models/AuthorityTicket");
 const User = require("../src/models/User");
 const { seedAll } = require("../src/services/seedService");
 const { hashPassword } = require("../src/utils/auth");
@@ -16,6 +18,8 @@ async function run() {
       EmergencyBroadcast.deleteMany({}),
       IncidentCluster.deleteMany({}),
       IncidentCommand.deleteMany({}),
+      DecisionAuditEvent.collection.deleteMany({}),
+      AuthorityTicket.deleteMany({}),
       User.deleteMany({})
     ]);
   }

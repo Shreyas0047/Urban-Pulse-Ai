@@ -1,0 +1,97 @@
+const AuthorityTicket = require("../models/AuthorityTicket");
+const Complaint = require("../models/Complaint");
+const IncidentCommand = require("../models/IncidentCommand");
+const mongoose = require("mongoose");
+const { createOrGetAuthorityTicket, dispatchAuthorityTicket, reconcileAuthorityTicket } = require("../services/authorityTicketService");
+
+function httpError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+async function requireComplaint(id) {
+  const complaint = await Complaint.findById(id);
+  if (!complaint) throw httpError("Complaint not found", 404);
+  return complaint;
+}
+
+async function submitAuthorityTicket(req, res, next) {
+  try {
+    const complaint = await requireComplaint(req.params.id);
+    if (complaint.ai?.reviewRequired && !["confirmed", "corrected"].includes(complaint.humanReview?.status)) {
+      throw httpError("Complete the required human review before submitting this complaint to an authority.", 409);
+    }
+    const { ticket, created } = await createOrGetAuthorityTicket(complaint);
+    const delivered = await dispatchAuthorityTicket(ticket, complaint);
+    res.status(created ? 201 : 200).json({
+      message: delivered.status === "submitted" ? "Authority ticket submitted." : delivered.status === "not_configured" ? "Authority adapter is not configured." : "Authority ticket delivery failed and is tracked for retry.",
+      authorityTicket: delivered
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function retryAuthorityTicket(req, res, next) {
+  try {
+    const complaint = await requireComplaint(req.params.id);
+    const ticket = await AuthorityTicket.findOne({ complaintId: complaint._id });
+    if (!ticket) throw httpError("Create the authority ticket before retrying delivery.", 404);
+    if (ticket.nextRetryAt && new Date(ticket.nextRetryAt) > new Date()) {
+      throw httpError(`Retry is available after ${new Date(ticket.nextRetryAt).toISOString()}.`, 429);
+    }
+    const delivered = await dispatchAuthorityTicket(ticket, complaint);
+    res.json({ message: delivered.status === "submitted" ? "Authority ticket submitted." : "Authority retry was recorded but delivery did not complete.", authorityTicket: delivered });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function reconcileTicket(req, res, next) {
+  try {
+    const execute = async (session = null) => {
+      let ticketQuery = AuthorityTicket.findById(req.params.ticketId);
+      if (session && typeof ticketQuery.session === "function") ticketQuery = ticketQuery.session(session);
+      const ticket = await ticketQuery;
+      if (!ticket) throw httpError("Authority ticket not found", 404);
+      await reconcileAuthorityTicket(ticket, { status: req.body.status, note: req.body.note, role: req.auth.role, session });
+      if (ticket.status === "resolved") {
+        let complaintQuery = Complaint.findById(ticket.complaintId);
+        if (session && typeof complaintQuery.session === "function") complaintQuery = complaintQuery.session(session);
+        const complaint = await complaintQuery;
+        if (complaint && complaint.status !== "Resolved") {
+          const now = new Date();
+          const note = String(req.body.note || "Authority ticket reconciled as resolved.").replace(/\s+/g, " ").trim().slice(0, 300);
+          complaint.status = "Resolved";
+          complaint.resolution = {
+            ...(complaint.resolution?.toObject ? complaint.resolution.toObject() : complaint.resolution || {}),
+            phase: "awaiting_citizen_verification",
+            authorityUpdate: { markedBy: "authority-ticket-reconciliation", markedAt: now, note }
+          };
+          complaint.followUp = { ...(complaint.followUp || {}), status: "closed", nextDueAt: null, escalationNote: "Follow-up paused while citizens verify the authority resolution." };
+          complaint.statusHistory = [...(complaint.statusHistory || []), { status: "Resolved", changedBy: "authority-ticket-reconciliation", changedAt: now, note }];
+          const verificationRequest = "Authority marked this complaint resolved. Please confirm the outcome or report that the issue remains.";
+          if (!(complaint.alerts || []).includes(verificationRequest)) complaint.alerts = [...(complaint.alerts || []), verificationRequest];
+          if (complaint.incidentCommand?.triggered && complaint.incidentCommand?.incidentId) {
+            await IncidentCommand.findByIdAndUpdate(complaint.incidentCommand.incidentId, {
+              commandStatus: "Resolved",
+              $push: { timeline: { event: "Authority ticket reconciled as resolved", at: now, by: "authority-ticket-reconciliation" } }
+            }, session ? { session } : undefined);
+            complaint.incidentCommand.status = "Resolved";
+          }
+          await complaint.save(session ? { session } : undefined);
+        }
+      }
+      return ticket;
+    };
+    const ticket = mongoose.connection.readyState === 1
+      ? await mongoose.connection.transaction((session) => execute(session))
+      : await execute();
+    res.json({ message: "Authority ticket status reconciled.", authorityTicket: ticket });
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { reconcileTicket, retryAuthorityTicket, submitAuthorityTicket };

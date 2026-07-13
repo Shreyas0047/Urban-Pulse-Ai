@@ -6,6 +6,8 @@ const { getChatHistory, postChatMessage, clearChatHistory } = require("../contro
 const { emailBbmpComplaint, informCloseContacts } = require("../controllers/emailController");
 const { getLocalAlertPreferences, updateLocalAlertPreferences } = require("../controllers/localAlertController");
 const { deleteUser, updateUser } = require("../controllers/userController");
+const { exportComplaintDecisionAudit, getCorrectionFeedback } = require("../controllers/decisionAuditController");
+const { reconcileTicket, retryAuthorityTicket, submitAuthorityTicket } = require("../controllers/authorityTicketController");
 const { authenticate, requirePermission } = require("../middleware/auth");
 
 const router = express.Router();
@@ -35,6 +37,11 @@ router.post("/complaints/:id/verification", requirePermission("submit_complaint"
 router.post("/complaints/:id/resolution-evidence", requirePermission("submit_complaint"), submitResolutionEvidence);
 router.post("/complaints/:id/community-proof", requirePermission("submit_complaint"), submitCommunityProof);
 router.post("/complaints/:id/human-review", requirePermission("update_complaint_status"), submitHumanReview);
+router.get("/complaints/:id/decision-audit", requirePermission("update_complaint_status"), exportComplaintDecisionAudit);
+router.get("/decision-audit/feedback", requirePermission("update_complaint_status"), getCorrectionFeedback);
+router.post("/complaints/:id/authority-ticket", requirePermission("update_complaint_status"), submitAuthorityTicket);
+router.post("/complaints/:id/authority-ticket/retry", requirePermission("update_complaint_status"), retryAuthorityTicket);
+router.patch("/authority-tickets/:ticketId/reconcile", requirePermission("update_complaint_status"), reconcileTicket);
 router.patch("/complaints/:id/status", requirePermission("update_complaint_status"), updateComplaintStatus);
 router.post("/complaints/:id/alerts/acknowledge", requirePermission("manage_alerts"), acknowledgeAlert);
 router.post("/reset-dashboard", requirePermission("reset_dashboard"), resetDashboard);

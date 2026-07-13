@@ -101,6 +101,7 @@ const complaintStatusFilter = document.getElementById("complaintStatusFilter");
 const complaintSortSelect = document.getElementById("complaintSortSelect");
 const clearComplaintFiltersBtn = document.getElementById("clearComplaintFiltersBtn");
 const adminInsights = document.getElementById("adminInsights");
+const aiObservabilityPanel = document.getElementById("aiObservabilityPanel");
 const incidentClusterPanel = document.getElementById("incidentClusterPanel");
 const locationMapFrame = document.getElementById("locationMapFrame");
 const liveLocationStatus = document.getElementById("liveLocationStatus");
@@ -128,6 +129,41 @@ let currentImageFeatures = null;
 let currentImageInsight = null;
 let currentImageDataUrl = null;
 let currentImageAiPayload = null;
+const dialogReturnFocus = new WeakMap();
+
+function focusDialog(dialog) {
+  if (!dialog) return;
+  if (document.activeElement instanceof HTMLElement) dialogReturnFocus.set(dialog, document.activeElement);
+  window.requestAnimationFrame(() => {
+    dialog.querySelector('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]')?.focus();
+  });
+}
+
+function restoreDialogFocus(dialog) {
+  const target = dialogReturnFocus.get(dialog);
+  if (target?.isConnected) target.focus();
+  dialogReturnFocus.delete(dialog);
+}
+
+document.addEventListener("keydown", (event) => {
+  const dialog = [...document.querySelectorAll('[role="dialog"]')].find((item) => !item.hidden);
+  if (!dialog) return;
+  if (event.key === "Escape" && dialog !== authOverlay) {
+    event.preventDefault();
+    if (dialog === faqOverlay) closeFaqOverlay();
+    if (dialog === postSubmitOverlay) closePostSubmitOverlay();
+    if (dialog === complaintDetailOverlay) closeComplaintDetailOverlay();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = [...dialog.querySelectorAll('button:not([disabled]):not([hidden]), input:not([disabled]):not([hidden]), select:not([disabled]):not([hidden]), textarea:not([disabled]):not([hidden]), a[href]')]
+    .filter((item) => item.getClientRects().length);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+});
 let lastSubmittedReport = null;
 let localAlertPreferences = null;
 let audioEnabled = false;
@@ -839,6 +875,7 @@ function openAuthOverlay(mode = "login") {
         : "Choose Admin or Citizen, enter your email and password, then request an OTP to complete registration.";
 
   window.requestAnimationFrame(() => window.UrbanPulseLiquidGlass?.refresh());
+  focusDialog(authOverlay);
 }
 
 function closeAuthOverlay() {
@@ -847,6 +884,7 @@ function closeAuthOverlay() {
     return;
   }
   authOverlay.hidden = true;
+  restoreDialogFocus(authOverlay);
   document.body.classList.remove("auth-screen-active");
   if (faqOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
@@ -860,10 +898,12 @@ function openFaqOverlay() {
     siteNav.classList.remove("is-open");
     mobileMenuToggle?.setAttribute("aria-expanded", "false");
   }
+  focusDialog(faqOverlay);
 }
 
 function closeFaqOverlay() {
   faqOverlay.hidden = true;
+  restoreDialogFocus(faqOverlay);
   if (authOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
@@ -902,6 +942,7 @@ function openPostSubmitOverlay(report) {
   closeContactsMessage.textContent = "";
   postSubmitOverlay.hidden = false;
   document.body.classList.add("auth-open");
+  focusDialog(postSubmitOverlay);
 }
 
 function closePostSubmitOverlay() {
@@ -910,6 +951,7 @@ function closePostSubmitOverlay() {
   }
 
   postSubmitOverlay.hidden = true;
+  restoreDialogFocus(postSubmitOverlay);
   closeContactsForm.hidden = true;
   closeContactsForm.reset();
   closeContactsMessage.textContent = "";
@@ -2149,6 +2191,32 @@ function renderAdminInsights(complaints = [], analytics = null) {
   `;
 }
 
+function renderAiObservability(observability = null) {
+  if (!aiObservabilityPanel) return;
+  if (!observability) {
+    aiObservabilityPanel.innerHTML = "";
+    return;
+  }
+  const current = observability.windows?.current || {};
+  const shifts = observability.shifts || {};
+  const statusLabel = String(observability.status || "insufficient_data").replace(/_/g, " ");
+  const metric = (label, value, detail) => `<article class="observability-metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><p>${escapeHtml(detail)}</p></article>`;
+  aiObservabilityPanel.innerHTML = `
+    <div class="observability-head">
+      <div><span class="observability-status status-${formatTokenLabel(observability.status)}">${escapeHtml(statusLabel)}</span><p>${escapeHtml(observability.note || "")}</p></div>
+      <small>${escapeHtml(String(observability.windowDays || 30))}-day window · ${escapeHtml(String(current.samples || 0))} samples</small>
+    </div>
+    <div class="observability-grid">
+      ${metric("Confidence", `${Math.round(current.averageConfidence || 0)}%`, `${shifts.confidencePoints >= 0 ? "+" : ""}${shifts.confidencePoints || 0} points vs prior window`)}
+      ${metric("Needs review", `${Math.round((current.reviewRequiredRate || 0) * 100)}%`, `${Math.round((shifts.reviewRequiredRate || 0) * 100)} point rate shift`)}
+      ${metric("Corrections", `${Math.round((current.correctionRate || 0) * 100)}%`, `${current.reviewedEvents || 0} reviewed events`)}
+      ${metric("Fallback", `${Math.round((current.fallbackRate || 0) * 100)}%`, `${Math.round((shifts.fallbackRate || 0) * 100)} point rate shift`)}
+      ${metric("Category drift", Number(shifts.categoryDivergence || 0).toFixed(3), "Jensen-Shannon divergence")}
+      ${metric("Severity drift", Number(shifts.severityDivergence || 0).toFixed(3), "Jensen-Shannon divergence")}
+    </div>
+    <div class="observability-alerts">${(observability.alerts || []).map((alert) => `<p class="observability-alert ${escapeHtml(alert.level)}"><strong>${escapeHtml(alert.code.replace(/_/g, " "))}</strong>${escapeHtml(alert.message)}</p>`).join("") || "<p>No drift alert is active.</p>"}</div>`;
+}
+
 function renderDigitalTwin(digitalTwin = null) {
   const panel = document.getElementById("digitalTwinPanel");
   if (!panel) return;
@@ -2487,6 +2555,7 @@ function buildSubmittedReport(payload, result) {
     incidentCluster: result.incidentCluster || null,
     followUp: result.followUp || null,
     verification: result.verification || null,
+    decisionAudit: result.decisionAudit || null,
     weather: result.weather || result.explainability?.weather || null,
     civicEvidence: result.civicEvidence || result.explainability?.civicEvidence || null,
     areaIntelligence: result.areaIntelligence || result.explainability?.areaIntelligence || null,
@@ -2506,6 +2575,7 @@ function buildSubmittedReport(payload, result) {
 function closeComplaintDetailOverlay() {
   if (!complaintDetailOverlay) return;
   complaintDetailOverlay.hidden = true;
+  restoreDialogFocus(complaintDetailOverlay);
   if (authOverlay?.hidden !== false && faqOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
@@ -2910,7 +2980,59 @@ function renderHumanReviewPanel(complaint, reviewOptions = null) {
     </section>`;
 }
 
-function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = null) {
+function renderDecisionAuditPanel(complaint, decisionAudit = null) {
+  if (!decisionAudit || !authState?.permissions?.includes("update_complaint_status")) return "";
+  const events = Array.isArray(decisionAudit.events) ? [...decisionAudit.events].reverse() : [];
+  const status = String(decisionAudit.status || "not_recorded").replace(/_/g, " ");
+  return `
+    <section class="detail-support-card decision-audit-card">
+      <div class="human-review-heading">
+        <div>
+          <p class="detail-section-label">Decision audit</p>
+          <strong>${escapeHtml(status)}</strong>
+        </div>
+        <span>${pluralize(decisionAudit.checkedEvents || 0, "event")}</span>
+      </div>
+      <p class="helper-text">Append-only AI and reviewer decisions with a verified hash chain.</p>
+      <div class="decision-audit-events">
+        ${events.map((event) => `
+          <article class="decision-audit-event">
+            <div><strong>${escapeHtml(String(event.eventType || "event").replace(/_/g, " "))}</strong><span>${escapeHtml(formatDateTime(event.occurredAt))}</span></div>
+            <p>${escapeHtml(String(event.outcome || "recorded").replace(/_/g, " "))}${event.changedFields?.length ? ` · changed ${escapeHtml(event.changedFields.join(", "))}` : ""}</p>
+            ${event.reason ? `<small>${escapeHtml(event.reason)}</small>` : ""}
+            <code>${escapeHtml(String(event.eventHash || "").slice(0, 16))}${event.eventHash ? "..." : ""}</code>
+          </article>`).join("") || `<p>No audit events are recorded for this legacy complaint yet.</p>`}
+      </div>
+      ${decisionAudit.issues?.length ? `<p class="decision-audit-warning">${escapeHtml(decisionAudit.issues.join(" "))}</p>` : ""}
+      <button type="button" class="secondary-button decision-audit-export" data-complaint-id="${escapeHtml(complaint._id)}">Export correction record</button>
+    </section>`;
+}
+
+function renderAuthorityTicketPanel(complaint, ticket = null, canReview = false) {
+  if (!canReview) return "";
+  const status = String(ticket?.status || "not created").replace(/_/g, " ");
+  const canRetry = ticket && ["failed", "not_configured"].includes(ticket.status) && (!ticket.nextRetryAt || new Date(ticket.nextRetryAt) <= new Date());
+  return `
+    <section class="detail-support-card authority-ticket-card" data-authority-ticket-id="${escapeHtml(ticket?._id || "")}" data-complaint-id="${escapeHtml(complaint._id)}">
+      <div class="human-review-heading">
+        <div><p class="detail-section-label">Authority ticket</p><strong>${escapeHtml(status)}</strong></div>
+        <span>${escapeHtml(ticket?.ticketCode || "Not submitted")}</span>
+      </div>
+      <p>${ticket ? `${escapeHtml(ticket.adapter)} adapter · ${ticket.attemptCount || 0} attempt(s)${ticket.externalReference ? `<br>External reference: ${escapeHtml(ticket.externalReference)}` : ""}${ticket.lastError ? `<br>${escapeHtml(ticket.lastError)}` : ""}` : "Create a tracked authority submission after reviewing the AI decision."}</p>
+      <div class="authority-ticket-actions">
+        ${!ticket ? `<button type="button" class="primary-button authority-ticket-submit">Submit to authority</button>` : ""}
+        ${canRetry ? `<button type="button" class="secondary-button authority-ticket-retry">Retry delivery</button>` : ""}
+        ${ticket && ["submitted", "acknowledged", "in_progress"].includes(ticket.status) ? `
+          <select class="authority-ticket-status" aria-label="Authority ticket status">
+            <option value="acknowledged">Acknowledged</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="rejected">Rejected</option>
+          </select>
+          <button type="button" class="secondary-button authority-ticket-reconcile">Reconcile status</button>` : ""}
+      </div>
+      ${ticket?.nextRetryAt ? `<small>Next retry: ${escapeHtml(formatDateTime(ticket.nextRetryAt))}</small>` : ""}
+    </section>`;
+}
+
+function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = null, decisionAudit = null, authorityTicket = null) {
   complaintDetailTitle.textContent = complaint.type || "Complaint";
   const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
   const ageInDays = countDaysOpen(complaint.createdAt);
@@ -2980,6 +3102,8 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
 
       <div class="detail-support-grid">
         ${renderHumanReviewPanel(complaint, reviewOptions)}
+        ${renderDecisionAuditPanel(complaint, decisionAudit)}
+        ${renderAuthorityTicketPanel(complaint, authorityTicket, Boolean(reviewOptions))}
         <section class="detail-support-card">
           <p class="detail-section-label">Routing</p>
           <strong>${escapeHtml(complaint.routing?.unit || complaint.assignedAuthority || "Gram Panchayat")}</strong>
@@ -3132,6 +3256,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
   `;
   complaintDetailOverlay.hidden = false;
   document.body.classList.add("auth-open");
+  focusDialog(complaintDetailOverlay);
   const humanReviewForm = complaintDetailBody.querySelector(".human-review-form");
   if (humanReviewForm) {
     const outcome = humanReviewForm.querySelector(".human-review-outcome");
@@ -3181,6 +3306,61 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
       }
     });
   }
+  const auditExportButton = complaintDetailBody.querySelector(".decision-audit-export");
+  auditExportButton?.addEventListener("click", async () => {
+    try {
+      auditExportButton.disabled = true;
+      const response = await fetch(`/api/complaints/${auditExportButton.dataset.complaintId}/decision-audit?format=csv`, {
+        headers: { Authorization: `Bearer ${authState.token}` }
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || "Decision audit export failed.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `decision-audit-${auditExportButton.dataset.complaintId}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setDashboardMessage("Decision audit exported.", "success");
+    } catch (error) {
+      setDashboardMessage(error.message, "error");
+    } finally {
+      auditExportButton.disabled = false;
+    }
+  });
+  const authorityPanel = complaintDetailBody.querySelector(".authority-ticket-card");
+  authorityPanel?.querySelector(".authority-ticket-submit")?.addEventListener("click", async (event) => {
+    try {
+      event.currentTarget.disabled = true;
+      const data = await apiRequest(`/api/complaints/${authorityPanel.dataset.complaintId}/authority-ticket`, { method: "POST", body: "{}" });
+      setDashboardMessage(data.message, data.authorityTicket?.status === "submitted" ? "success" : "info");
+      await openComplaintDetail(authorityPanel.dataset.complaintId);
+    } catch (error) { setDashboardMessage(error.message, "error"); event.currentTarget.disabled = false; }
+  });
+  authorityPanel?.querySelector(".authority-ticket-retry")?.addEventListener("click", async (event) => {
+    try {
+      event.currentTarget.disabled = true;
+      const data = await apiRequest(`/api/complaints/${authorityPanel.dataset.complaintId}/authority-ticket/retry`, { method: "POST", body: "{}" });
+      setDashboardMessage(data.message, data.authorityTicket?.status === "submitted" ? "success" : "info");
+      await openComplaintDetail(authorityPanel.dataset.complaintId);
+    } catch (error) { setDashboardMessage(error.message, "error"); event.currentTarget.disabled = false; }
+  });
+  authorityPanel?.querySelector(".authority-ticket-reconcile")?.addEventListener("click", async (event) => {
+    try {
+      event.currentTarget.disabled = true;
+      const status = authorityPanel.querySelector(".authority-ticket-status")?.value;
+      const note = window.prompt("Optional authority status note:") || "";
+      const data = await apiRequest(`/api/authority-tickets/${authorityPanel.dataset.authorityTicketId}/reconcile`, { method: "PATCH", body: JSON.stringify({ status, note }) });
+      setDashboardMessage(data.message, "success");
+      await openComplaintDetail(authorityPanel.dataset.complaintId);
+      await loadDashboard();
+    } catch (error) { setDashboardMessage(error.message, "error"); event.currentTarget.disabled = false; }
+  });
   complaintDetailBody.querySelectorAll(".verification-vote-btn").forEach((button) => {
     button.addEventListener("click", async () => {
       const complaintId = button.closest(".verification-actions")?.dataset.complaintId;
@@ -3255,7 +3435,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
 async function openComplaintDetail(complaintId) {
   try {
     const data = await apiRequest(`/api/complaints/${complaintId}`, { method: "GET" });
-    renderComplaintDetail(data.complaint, data.intelligence || {}, data.reviewOptions || null);
+    renderComplaintDetail(data.complaint, data.intelligence || {}, data.reviewOptions || null, data.decisionAudit || null, data.authorityTicket || null);
   } catch (error) {
     setDashboardMessage(error.message, "error");
   }
@@ -3428,6 +3608,12 @@ async function generatePdfReport(report, options = {}) {
   drawRow("AI Engine", report.aiMeta?.engine || "Not recorded");
   drawRow("AI Provider", report.aiMeta?.provider || "Not recorded");
   drawRow("Vision Engine", report.aiMeta?.visionEngine || "Not recorded");
+  drawRow(
+    "Decision Audit",
+    report.decisionAudit?.headHash
+      ? `${report.decisionAudit.integrityStatus || "verified"} · ${report.decisionAudit.eventCount || 1} event(s) · ${report.decisionAudit.headHash.slice(0, 16)}...`
+      : "Not recorded"
+  );
   drawRow(
     "Threat Level",
     threat.threatLevel
@@ -4472,6 +4658,7 @@ function setupComplaintInputMode() {
 function renderLoggedOutState() {
   renderMetrics({ totalComplaints: 0, openComplaints: 0 });
   renderAdminInsights([]);
+  renderAiObservability(null);
   renderDigitalTwin(null);
   renderRiskPredictions(null);
   renderCivicIntelligence(null);
@@ -4615,6 +4802,7 @@ async function loadDashboard() {
   renderRecentComplaints(data.complaints);
   renderComplaints(data.complaints);
   renderAdminInsights(data.complaints, data.analytics || null);
+  renderAiObservability(data.aiObservability || null);
   renderDigitalTwin(data.digitalTwin || null);
   renderRiskPredictions(data.riskPredictions || null);
   renderCivicIntelligence(data.civicIntelligence || null);

@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0.0",
+  "champion": null,
+  "challengers": [],
+  "note": "Populate only after adjudicated benchmark evaluation. A model is not champion because it passes controlled regression fixtures."
+}

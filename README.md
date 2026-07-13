@@ -93,6 +93,11 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | Community proof | Citizens discover sanitized matching incidents in saved areas and submit corroborated, cleared, or worsening signals | Integrated |
 | Resolution loop | Reporter follow-up notes/photos and conservative AI comparison after authority resolution | Integrated |
 | Human AI review | Admin confirmation, correction, and insufficient-evidence workflow with mandatory reasoning and stale-write protection | Integrated |
+| Decision audit | Append-only, hash-chained AI baselines and human corrections with integrity verification and exports | Integrated |
+| AI observability | Rolling confidence, review, fallback, correction, category, severity, and provider drift signals | Integrated |
+| Model release gates | Immutable champion/challenger comparison with safety, calibration, latency, and fallback non-regression checks | Integrated |
+| Authority tickets | Idempotent email/webhook adapters with delivery attempts, retries, references, and reconciliation | Integrated |
+| Accessibility and resilience | Keyboard dialogs, reduced motion, liveness/readiness, request IDs, load and release verification | Integrated |
 | AI area understanding | Extracts likely area, landmarks, ward hints, and matching terms from messy complaint locations | Integrated |
 | AI complaint clustering | Groups likely duplicate reports into durable incident clusters without deleting individual complaints | Integrated |
 | Auto follow-up scheduler | Creates due/overdue follow-up notes for unresolved complaints based on priority | Integrated |
@@ -331,7 +336,7 @@ Urban-Pulse-Ai/
 - Node.js 18 or newer.
 - npm.
 - Python 3.11 recommended for the full AI model stack.
-- MongoDB Atlas database or local MongoDB connection string.
+- MongoDB Atlas database or a replica-set/sharded MongoDB deployment with transaction support.
 - SMTP credentials for OTP and email flows.
 - Optional API keys for Deepgram, Weatherstack, and Zenserp.
 
@@ -394,6 +399,17 @@ Create a `.env` file in the project root.
 | `SMTP_PASS` | Yes | `app_password` | SMTP app password |
 | `SMTP_FROM` | Yes | `your_email@gmail.com` | Sender address |
 | `BBMP_EMAIL_TO` | No | `comm@bbmp.gov.in` | Authority email target |
+
+### Authority Ticket Adapter
+
+| Variable | Required | Example | Purpose |
+| --- | --- | --- | --- |
+| `AUTHORITY_ADAPTER` | No | `disabled` | `disabled`, `email`, or `webhook`; never claims an integration by default |
+| `AUTHORITY_TICKET_EMAIL` | Email adapter | `ward-office@example.gov` | Tracked ticket recipient |
+| `AUTHORITY_WEBHOOK_URL` | Webhook adapter | `https://authority.example/api/tickets` | Approved municipal integration endpoint |
+| `AUTHORITY_WEBHOOK_TOKEN` | Webhook adapter | `secret` | Server-only bearer credential |
+| `AUTHORITY_TIMEOUT_MS` | No | `8000` | Webhook request deadline |
+| `AUTHORITY_MAX_ATTEMPTS` | No | `3` | Maximum bounded delivery attempts |
 
 ### External Context Providers
 
@@ -500,6 +516,16 @@ The first CLIP model run may take longer because the model may need to download 
 | `npm run evaluate:benchmark` | Run release-gated image-only evaluation on the immutable test split |
 | `npm run verify:metrics` | Verify formulas, policy gates, readiness behavior, and image-only execution |
 | `npm run verify:human-review` | Verify review outcomes, validation, synchronization, and stale-write rejection |
+| `npm run verify:decision-audit` | Verify hash chaining, tamper detection, feedback aggregation, redaction, and CSV export |
+| `npm run verify:observability` | Verify stable, insufficient-data, fallback, correction, category, and severity drift behavior |
+| `npm run benchmark:compare -- --baseline ... --candidate ...` | Apply champion/challenger safety and non-regression gates |
+| `npm run verify:benchmark-comparison` | Verify model promotion and rejection decisions |
+| `npm run verify:authority-tickets` | Verify adapter privacy, idempotency, delivery, retries, and reconciliation |
+| `npm run verify:accessibility` | Run deterministic static accessibility contracts |
+| `npm run verify:resilience` | Verify rate limits, correlation IDs, and security headers |
+| `npm run verify:load` | Run concurrent local HTTP and payload-boundary checks |
+| `npm run verify:syntax` | Syntax-check project JavaScript and load the Express app |
+| `npm run verify:release` | Run the consolidated Phase 3-8 and cross-service release gate |
 
 ## API Reference
 
@@ -517,6 +543,8 @@ All protected endpoints require a bearer token from login or registration.
 | `POST` | `/api/auth/password-reset` | Reset password with OTP |
 | `POST` | `/api/auth/token` | Direct token issue, disabled unless explicitly enabled |
 
+Health probes are available at `GET /health/live` for process liveness and `GET /health/ready` for MongoDB-backed readiness. `GET /health` retains the combined compatibility response.
+
 ### Complaint And Dashboard Endpoints
 
 | Method | Endpoint | Permission | Purpose |
@@ -526,8 +554,13 @@ All protected endpoints require a bearer token from login or registration.
 | `GET` | `/api/complaints/:id` | `submit_complaint` | Load complaint detail |
 | `PATCH` | `/api/complaints/:id/status` | `update_complaint_status` | Update complaint status or priority |
 | `POST` | `/api/complaints/:id/human-review` | `update_complaint_status` | Confirm, correct, or request better evidence for an AI decision |
+| `GET` | `/api/complaints/:id/decision-audit` | `update_complaint_status` | Verify and export one complaint's decision history |
+| `GET` | `/api/decision-audit/feedback` | `update_complaint_status` | Aggregate or export human correction feedback |
+| `POST` | `/api/complaints/:id/authority-ticket` | `update_complaint_status` | Create and submit one idempotent authority ticket |
+| `POST` | `/api/complaints/:id/authority-ticket/retry` | `update_complaint_status` | Retry a due failed delivery |
+| `PATCH` | `/api/authority-tickets/:ticketId/reconcile` | `update_complaint_status` | Record an authority acknowledgement or outcome |
 | `POST` | `/api/complaints/:id/alerts/acknowledge` | `manage_alerts` | Acknowledge complaint alert |
-| `POST` | `/api/reset-dashboard` | `reset_dashboard` | Clear dashboard operational records |
+| `POST` | `/api/reset-dashboard` | `reset_dashboard` | Clear development records; refused in production to preserve audits |
 
 ### Voice, Chat, And Email Endpoints
 
@@ -560,6 +593,8 @@ All protected endpoints require a bearer token from login or registration.
 | `RegistrationOtp` | Mongo-backed registration OTP records with TTL |
 | `PasswordResetOtp` | Mongo-backed password reset OTP records with TTL |
 | `Complaint` | Main complaint record with AI, human review, routing, weather, civic evidence, threat, map, alerts, follow-ups, verification votes, and history |
+| `DecisionAuditEvent` | Append-only AI baseline and human-review events linked by sequence and SHA-256 hashes |
+| `AuthorityTicket` | Idempotent authority delivery, retry, external-reference, and reconciliation state |
 | `DepartmentUnit` | Configurable department routing unit registry |
 | `EmergencyBroadcast` | High-risk broadcast audit and delivery status |
 | `IncidentCommand` | Command-room record with SLA, checklist, timeline, assigned unit |
@@ -587,11 +622,11 @@ Further development is organized into eight depth-focused phases. These phases v
 | 1 | Real-World Benchmark Dataset Foundation | Infrastructure complete; ethical data collection and adjudication in progress |
 | 2 | Independent AI Metrics And Error Analysis | Infrastructure complete; awaiting adjudicated Phase 1 test records |
 | 3 | Human Review And Correction Interface | Complete |
-| 4 | Prediction-Correction Audit Store | Planned |
-| 5 | AI Observability And Drift Dashboard | Planned |
-| 6 | Baseline And Model Benchmarking | Planned |
-| 7 | Authority Ticket Integration Adapter | Planned |
-| 8 | Usability, Accessibility, Load, And Resilience Validation | Planned |
+| 4 | Prediction-Correction Audit Store | Complete |
+| 5 | AI Observability And Drift Dashboard | Complete |
+| 6 | Baseline And Model Benchmarking | Complete; champion selection awaits adjudicated data |
+| 7 | Authority Ticket Integration Adapter | Complete; real endpoint requires authority agreement |
+| 8 | Usability, Accessibility, Load, And Resilience Validation | Automated foundation complete; external user study remains manual |
 
 ### Phase 1: Benchmark Dataset Foundation
 
@@ -621,7 +656,29 @@ The evaluator currently returns `not_ready` because Phase 1 contains no adjudica
 
 Phase 3 adds an Admin-only review form inside each complaint case file. Reviewers can confirm the AI decision, apply a justified category/severity/department correction, or request better evidence. Corrections synchronize operational complaint and routing fields while retaining the original machine decision, explanation, candidates, confidence, and threat evidence. Mandatory reasoning and document-version checks prevent unaccountable or stale edits.
 
-Phase 3 intentionally stores only the original and latest reviewed state. The append-only event history and correction dataset belong to Phase 4. See [the Phase 3 human-review specification](docs/PHASE_3_HUMAN_REVIEW.md).
+Phase 3 stores the original and latest reviewed state on the complaint. Phase 4 now supplies the separate longitudinal record. See [the Phase 3 human-review specification](docs/PHASE_3_HUMAN_REVIEW.md).
+
+### Phase 4: Prediction-Correction Audit Store
+
+Phase 4 records every new AI baseline and authorized human review in a dedicated append-only collection. Complaint-local sequence numbers and SHA-256 links make missing, reordered, or modified events detectable. Complaint creation and review corrections commit with their audit events through MongoDB transactions, while role-level actor metadata prevents reviewer email leakage.
+
+Admins receive a verified timeline in complaint detail, per-complaint JSON/CSV exports, and aggregate correction feedback for future model analysis. Citizens continue to receive only the latest review summary. Existing pre-Phase-4 complaints are clearly marked as not recorded until their first review adopts the current AI state as a baseline. See [the Phase 4 decision-audit specification](docs/PHASE_4_DECISION_AUDIT.md).
+
+### Phase 5: AI Observability And Drift Dashboard
+
+Phase 5 compares rolling 30-day production windows for confidence, review demand, abstention, fallback use, correction outcomes, providers, categories, and severity. Jensen-Shannon divergence and versioned operational thresholds create Admin-only alerts, while small windows return `insufficient_data` rather than unstable conclusions. These are behavior signals, not ground-truth accuracy claims. See [the Phase 5 observability specification](docs/PHASE_5_AI_OBSERVABILITY.md).
+
+### Phase 6: Baseline And Model Benchmarking
+
+Phase 6 adds champion/challenger comparisons that require identical immutable dataset and split hashes. Candidates must pass absolute Phase 2 gates and safety non-regression checks for Critical recall, under-triage, false escalation, negative recall, calibration, fallback use, and latency. The model registry remains empty until real adjudicated data exists. See [the Phase 6 benchmarking specification](docs/PHASE_6_MODEL_BENCHMARKING.md).
+
+### Phase 7: Authority Ticket Integration Adapter
+
+Phase 7 provides disabled, email, and generic webhook adapters with one idempotent ticket per complaint, sanitized payloads, bounded retries, external references, and Admin reconciliation. Complaints marked for review cannot be submitted first. The default remains disabled, and a generic adapter is not presented as an existing BBMP API agreement. See [the Phase 7 integration specification](docs/PHASE_7_AUTHORITY_INTEGRATION.md).
+
+### Phase 8: Validation And Resilience
+
+Phase 8 adds skip navigation, named and keyboard-contained dialogs, focus restoration, live status feedback, reduced-motion behavior, separate liveness/readiness probes, correlation IDs, graceful shutdown, payload boundaries, concurrent local load checks, and a consolidated release gate. Automated checks do not replace manual screen-reader, user-study, staging provider, failover, and production-like load validation. See [the Phase 8 validation specification](docs/PHASE_8_VALIDATION_AND_RESILIENCE.md).
 
 ## Evaluation And Testing
 
@@ -636,10 +693,19 @@ npm run verify:dataset
 npm run dataset:validate
 npm run verify:metrics
 npm run verify:human-review
+npm run verify:decision-audit
+npm run verify:observability
+npm run verify:benchmark-comparison
+npm run verify:authority-tickets
+npm run verify:accessibility
+npm run verify:resilience
+npm run verify:load
 npm run evaluate:benchmark:readiness
 python3 scripts/evaluateAiService.py
 python3 -m compileall ai_service stt_service scripts
 ```
+
+Run the consolidated gate with `npm run verify:release`.
 
 Optional JavaScript syntax sweep:
 
@@ -720,14 +786,17 @@ Before pushing live:
 - Use a strong `JWT_SECRET`.
 - Confirm `ALLOW_ROLE_TOKEN_ISSUE=false`.
 - Verify MongoDB Atlas IP/network access.
+- Verify MongoDB transactions are supported; Phase 4 rejects partial complaint/audit writes.
 - Run `npm run verify:smtp`.
 - Send one SMTP test email with `npm run verify:smtp -- --send-test=email@example.com`.
 - Confirm `SMTP_FAMILY=4` if Gmail IPv6 fails with `ENETUNREACH`.
 - Confirm `CORS_ORIGIN` matches the production frontend URL exactly.
 - Confirm `AI_SERVICE_URL` points to the deployed Flask service.
-- Run `npm run evaluate:ai`, `npm run verify:dataset`, and `python3 scripts/evaluateAiService.py`.
+- Run `npm run evaluate:ai`, `npm run verify:dataset`, `npm run verify:decision-audit`, and `python3 scripts/evaluateAiService.py`.
 - Submit a high-risk test complaint and verify routing, broadcast, incident command, and PDF.
 - Confirm Weatherstack and Zenserp quota behavior with limited/free keys.
+- Keep `AUTHORITY_ADAPTER=disabled` until a destination is approved, then verify email or webhook delivery in staging.
+- Run `npm run verify:release` and record any manual Phase 8 accessibility/load findings.
 - Replace fallback department unit metadata with real authority contacts when available.
 - Remove or rotate any seed/demo credentials before final deployment.
 

@@ -1,6 +1,21 @@
 const rateLimitBuckets = new Map();
+const crypto = require("crypto");
+const MAX_RATE_LIMIT_BUCKETS = 10000;
+
+function pruneRateLimitBuckets(now) {
+  for (const [key, bucket] of rateLimitBuckets) {
+    if (now > bucket.resetAt) rateLimitBuckets.delete(key);
+  }
+  while (rateLimitBuckets.size >= MAX_RATE_LIMIT_BUCKETS) {
+    rateLimitBuckets.delete(rateLimitBuckets.keys().next().value);
+  }
+}
 
 function setSecurityHeaders(_req, res, next) {
+  const incomingRequestId = String(_req.headers?.["x-request-id"] || "").trim();
+  const requestId = /^[A-Za-z0-9._-]{8,80}$/.test(incomingRequestId) ? incomingRequestId : crypto.randomUUID();
+  _req.requestId = requestId;
+  res.setHeader("X-Request-ID", requestId);
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -54,6 +69,7 @@ function createRateLimiter({ windowMs, max, keyPrefix, message }) {
     const bucket = rateLimitBuckets.get(key);
 
     if (!bucket || now > bucket.resetAt) {
+      if (!bucket && rateLimitBuckets.size >= MAX_RATE_LIMIT_BUCKETS) pruneRateLimitBuckets(now);
       rateLimitBuckets.set(key, { count: 1, resetAt: now + windowMs });
       return next();
     }
@@ -72,5 +88,6 @@ function createRateLimiter({ windowMs, max, keyPrefix, message }) {
 module.exports = {
   setSecurityHeaders,
   setNoStoreHeaders,
-  createRateLimiter
+  createRateLimiter,
+  rateLimitBuckets
 };

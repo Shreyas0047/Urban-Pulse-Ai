@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <a class="skip-link" href="#mainContent">Skip to main content</a>
     <div class="scene-grid" aria-hidden="true"></div>
     <div class="scene-noise" aria-hidden="true"></div>
     <div class="scene-aurora scene-aurora-a" aria-hidden="true"></div>
@@ -143,12 +144,12 @@
       </div>
     </div>
 
-    <div id="faqOverlay" class="overlay-shell faq-overlay" hidden>
+    <div id="faqOverlay" class="overlay-shell faq-overlay" role="dialog" aria-modal="true" aria-labelledby="faqTitle" hidden>
       <div class="overlay-panel faq-panel">
         <div class="overlay-head">
           <div>
             <p class="eyebrow">FAQ</p>
-            <h2>Common Questions</h2>
+            <h2 id="faqTitle">Common Questions</h2>
           </div>
           <button type="button" id="closeFaqBtn" class="chip-button">Close</button>
         </div>
@@ -169,7 +170,7 @@
               <span class="faq-icon">+</span>
             </summary>
             <div class="faq-content">
-              <p>Yes. Alerts, complaint status updates, resets, and account management remain preserved through the same backend permissions.</p>
+              <p>Yes. Alerts, complaint status updates, and account management remain protected by backend permissions. Destructive dashboard reset is disabled in production to preserve audit records.</p>
             </div>
           </details>
           <details class="faq-item">
@@ -194,7 +195,7 @@
             </span>
           </a>
 
-          <button type="button" id="mobileMenuToggle" class="mobile-menu-toggle" aria-expanded="false" aria-controls="siteNav">
+          <button type="button" id="mobileMenuToggle" class="mobile-menu-toggle" aria-label="Open navigation" aria-expanded="false" aria-controls="siteNav">
             <span></span>
             <span></span>
             <span></span>
@@ -216,7 +217,7 @@
           </nav>
         </header>
 
-        <main class="content-shell">
+        <main id="mainContent" class="content-shell" tabindex="-1">
           <section id="heroStage" class="hero-stage hero-story app-view-section" data-view-section="home" data-reveal>
             <div class="hero-sticky-shell">
               <div class="hero-grid hero-story-grid">
@@ -546,7 +547,7 @@
             </div>
           </section>
 
-          <p id="dashboardMessage" class="dashboard-banner" data-reveal>New complaints appear in the list after analysis.</p>
+          <p id="dashboardMessage" class="dashboard-banner" role="status" aria-live="polite" data-reveal>New complaints appear in the list after analysis.</p>
 
           <section id="adminView" class="section-shell workspace-shell app-view-section" data-view-section="admin-group" data-reveal hidden>
             <div class="section-head">
@@ -566,6 +567,13 @@
               </div>
               <div id="adminActionCenter" class="admin-action-center"></div>
               <div id="adminInsights" class="insight-grid"></div>
+              <div class="section-head compact ops-subhead">
+                <div>
+                  <p class="eyebrow">AI operations</p>
+                  <h2>Observability and drift</h2>
+                </div>
+              </div>
+              <div id="aiObservabilityPanel" class="observability-panel"></div>
               <div class="metric-ribbon">
                 <div class="metric-card">
                   <span>Total</span>
@@ -808,12 +816,12 @@
       <span class="chatbot-launcher-pulse" aria-hidden="true"></span>
     </button>
 
-    <section id="postSubmitOverlay" class="overlay-shell post-submit-overlay" hidden aria-label="Complaint actions">
+    <section id="postSubmitOverlay" class="overlay-shell post-submit-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="postSubmitTitle">
       <div class="overlay-panel post-submit-modal">
         <div class="overlay-head">
           <div>
             <p class="eyebrow">Complaint Submitted</p>
-            <h2>Complaint received</h2>
+            <h2 id="postSubmitTitle">Complaint received</h2>
           </div>
           <button type="button" id="closePostSubmitBtn" class="chip-button post-submit-close" aria-label="Close complaint actions">×</button>
         </div>
@@ -826,11 +834,11 @@
         <form id="closeContactsForm" class="close-contacts-form" hidden>
           <p class="helper-text">Enter up to 5 email IDs to notify people about this issue.</p>
           <div class="close-contact-grid">
-            <input type="email" name="contactEmail" placeholder="Email ID 1" autocomplete="email" />
-            <input type="email" name="contactEmail" placeholder="Email ID 2" autocomplete="email" />
-            <input type="email" name="contactEmail" placeholder="Email ID 3" autocomplete="email" />
-            <input type="email" name="contactEmail" placeholder="Email ID 4" autocomplete="email" />
-            <input type="email" name="contactEmail" placeholder="Email ID 5" autocomplete="email" />
+            <input type="email" name="contactEmail" aria-label="Contact email 1" placeholder="Email ID 1" autocomplete="email" />
+            <input type="email" name="contactEmail" aria-label="Contact email 2" placeholder="Email ID 2" autocomplete="email" />
+            <input type="email" name="contactEmail" aria-label="Contact email 3" placeholder="Email ID 3" autocomplete="email" />
+            <input type="email" name="contactEmail" aria-label="Contact email 4" placeholder="Email ID 4" autocomplete="email" />
+            <input type="email" name="contactEmail" aria-label="Contact email 5" placeholder="Email ID 5" autocomplete="email" />
           </div>
           <div class="post-submit-actions">
             <button type="submit" id="sendCloseContactsBtn" class="light-beam-button gradient-button gradient-button-variant">Send warning</button>
@@ -841,7 +849,7 @@
       </div>
     </section>
 
-    <section id="complaintDetailOverlay" class="overlay-shell post-submit-overlay" hidden aria-label="Complaint details">
+    <section id="complaintDetailOverlay" class="overlay-shell post-submit-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="complaintDetailTitle">
       <div class="overlay-panel post-submit-modal complaint-detail-modal">
         <div class="overlay-head">
           <div>
