@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0.0",
+  "datasetVersion": "0.1.0-collection",
+  "title": "Urban Pulse Civic Incident Benchmark",
+  "description": "Independently annotated civic incident records reserved for real-world model evaluation.",
+  "createdAt": "2026-07-13T00:00:00Z",
+  "records": []
+}

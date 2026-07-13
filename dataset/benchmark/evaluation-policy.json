@@ -1,0 +1,17 @@
+{
+  "policyVersion": "1.0.0",
+  "evaluationSplit": "test",
+  "minimumTestRecords": 54,
+  "minimumIncidentClassesRepresented": 12,
+  "gates": {
+    "macroIncidentF1Minimum": 0.7,
+    "criticalRecallMinimum": 0.9,
+    "negativeRecallMinimum": 0.7,
+    "selectiveAccuracyMinimum": 0.78,
+    "coverageMinimum": 0.65,
+    "falseCriticalRateMaximum": 0.03,
+    "dangerousUndertriageRateMaximum": 0.05,
+    "expectedCalibrationErrorMaximum": 0.12
+  },
+  "notes": "Policy thresholds are initial academic targets. They must not be lowered after viewing test results without creating a new policy version and documenting the reason."
+}

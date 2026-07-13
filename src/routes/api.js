@@ -1,7 +1,7 @@
 const express = require("express");
 const { getRoles, issueToken, requestRegistrationOtp, requestPasswordResetOtp, resetPassword, register, login } = require("../controllers/authController");
 const { getDashboard, resetDashboard } = require("../controllers/dashboardController");
-const { analyzeAndCreateComplaint, getComplaint, transcribeComplaintAudio, updateComplaintStatus, acknowledgeAlert, verifyComplaintStatus, submitResolutionEvidence, submitCommunityProof } = require("../controllers/complaintController");
+const { analyzeAndCreateComplaint, getComplaint, transcribeComplaintAudio, updateComplaintStatus, acknowledgeAlert, verifyComplaintStatus, submitResolutionEvidence, submitCommunityProof, submitHumanReview } = require("../controllers/complaintController");
 const { getChatHistory, postChatMessage, clearChatHistory } = require("../controllers/chatbotController");
 const { emailBbmpComplaint, informCloseContacts } = require("../controllers/emailController");
 const { getLocalAlertPreferences, updateLocalAlertPreferences } = require("../controllers/localAlertController");
@@ -34,6 +34,7 @@ router.get("/complaints/:id", requirePermission("submit_complaint"), getComplain
 router.post("/complaints/:id/verification", requirePermission("submit_complaint"), verifyComplaintStatus);
 router.post("/complaints/:id/resolution-evidence", requirePermission("submit_complaint"), submitResolutionEvidence);
 router.post("/complaints/:id/community-proof", requirePermission("submit_complaint"), submitCommunityProof);
+router.post("/complaints/:id/human-review", requirePermission("update_complaint_status"), submitHumanReview);
 router.patch("/complaints/:id/status", requirePermission("update_complaint_status"), updateComplaintStatus);
 router.post("/complaints/:id/alerts/acknowledge", requirePermission("manage_alerts"), acknowledgeAlert);
 router.post("/reset-dashboard", requirePermission("reset_dashboard"), resetDashboard);

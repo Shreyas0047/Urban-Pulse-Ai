@@ -61,6 +61,7 @@ The project is built around a simple idea: civic complaint systems should not st
 - Admin dashboard with analytics, operations map, civic digital twin, and 72-hour civic risk forecast.
 - Express fallback AI path when the Flask AI service is unavailable.
 - Deterministic AI evaluation scripts for regression checking.
+- Versioned real-world benchmark foundation with provenance, privacy review, independent annotation, and leakage-safe splits.
 
 ## Why This Project Exists
 
@@ -91,6 +92,7 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | Local area alerts | Users can opt in to area-based email alerts for serious nearby complaints | Integrated |
 | Community proof | Citizens discover sanitized matching incidents in saved areas and submit corroborated, cleared, or worsening signals | Integrated |
 | Resolution loop | Reporter follow-up notes/photos and conservative AI comparison after authority resolution | Integrated |
+| Human AI review | Admin confirmation, correction, and insufficient-evidence workflow with mandatory reasoning and stale-write protection | Integrated |
 | AI area understanding | Extracts likely area, landmarks, ward hints, and matching terms from messy complaint locations | Integrated |
 | AI complaint clustering | Groups likely duplicate reports into durable incident clusters without deleting individual complaints | Integrated |
 | Auto follow-up scheduler | Creates due/overdue follow-up notes for unresolved complaints based on priority | Integrated |
@@ -302,7 +304,7 @@ Urban-Pulse-Ai/
 |   |-- audio-transcriber.js    # Optional browser speech fallback helper, not loaded by default
 |   |-- videos/                 # About-page video assets
 |   `-- vendor/                 # Local visual/vendor assets
-|-- scripts/                    # Evaluation, seed, SMTP verification
+|-- scripts/                    # Evaluation, benchmark, seed, SMTP verification
 |-- shared/
 |   `-- aiCategories.json       # Shared AI category catalog
 |-- src/
@@ -315,7 +317,8 @@ Urban-Pulse-Ai/
 |   |-- routes/                 # API routes
 |   `-- services/               # AI, threat, routing, email, weather, search, risk, command
 |-- stt_service/                # Optional local Whisper/faster-whisper service
-|-- dataset/                    # Local evaluation images/data
+|-- dataset/                    # Legacy regression fixtures and real benchmark workspace
+|   `-- benchmark/              # Phase 1 schema, collection protocol, manifest, and targets
 |-- render.yaml                 # Render deployment blueprint
 |-- package.json
 `-- README.md
@@ -489,6 +492,14 @@ The first CLIP model run may take longer because the model may need to download 
 | `AI_EVAL_WITH_VISION=true npm run evaluate:ai` | Include optional vision image evaluation |
 | `python scripts/evaluateAiService.py` | Run Flask AI decision-engine evaluation |
 | `python scripts/evaluateVision.py` | Run optional image evaluation |
+| `npm run dataset:validate` | Validate benchmark files, hashes, labels, privacy, and provenance |
+| `npm run dataset:stats` | Show accepted records and category/source coverage |
+| `npm run dataset:split` | Generate deterministic scene-group-safe train/validation/test splits |
+| `npm run verify:dataset` | Test duplicate, privacy, draft quarantine, and leakage gates |
+| `npm run evaluate:benchmark:readiness` | Report whether the real benchmark is ready without failing on an empty collection |
+| `npm run evaluate:benchmark` | Run release-gated image-only evaluation on the immutable test split |
+| `npm run verify:metrics` | Verify formulas, policy gates, readiness behavior, and image-only execution |
+| `npm run verify:human-review` | Verify review outcomes, validation, synchronization, and stale-write rejection |
 
 ## API Reference
 
@@ -514,6 +525,7 @@ All protected endpoints require a bearer token from login or registration.
 | `POST` | `/api/analyze-complaint` | `submit_complaint` | Create complaint and run AI workflow |
 | `GET` | `/api/complaints/:id` | `submit_complaint` | Load complaint detail |
 | `PATCH` | `/api/complaints/:id/status` | `update_complaint_status` | Update complaint status or priority |
+| `POST` | `/api/complaints/:id/human-review` | `update_complaint_status` | Confirm, correct, or request better evidence for an AI decision |
 | `POST` | `/api/complaints/:id/alerts/acknowledge` | `manage_alerts` | Acknowledge complaint alert |
 | `POST` | `/api/reset-dashboard` | `reset_dashboard` | Clear dashboard operational records |
 
@@ -547,7 +559,7 @@ All protected endpoints require a bearer token from login or registration.
 | `User` | Citizen/Admin accounts, role, disabled state, login metadata |
 | `RegistrationOtp` | Mongo-backed registration OTP records with TTL |
 | `PasswordResetOtp` | Mongo-backed password reset OTP records with TTL |
-| `Complaint` | Main complaint record with AI, routing, weather, civic evidence, threat, map, alerts, follow-ups, verification votes, and history |
+| `Complaint` | Main complaint record with AI, human review, routing, weather, civic evidence, threat, map, alerts, follow-ups, verification votes, and history |
 | `DepartmentUnit` | Configurable department routing unit registry |
 | `EmergencyBroadcast` | High-risk broadcast audit and delivery status |
 | `IncidentCommand` | Command-room record with SLA, checklist, timeline, assigned unit |
@@ -566,6 +578,51 @@ Weatherstack and Zenserp are free/limited APIs in this project, so usage is guar
 
 The API keys are never sent to the frontend. Provider failure, disabled keys, missing keys, or quota exhaustion should never block complaint submission.
 
+## Professional Validation Program
+
+Further development is organized into eight depth-focused phases. These phases validate and operationalize existing capabilities instead of adding unrelated surface features.
+
+| Phase | Professional implementation | Status |
+| --- | --- | --- |
+| 1 | Real-World Benchmark Dataset Foundation | Infrastructure complete; ethical data collection and adjudication in progress |
+| 2 | Independent AI Metrics And Error Analysis | Infrastructure complete; awaiting adjudicated Phase 1 test records |
+| 3 | Human Review And Correction Interface | Complete |
+| 4 | Prediction-Correction Audit Store | Planned |
+| 5 | AI Observability And Drift Dashboard | Planned |
+| 6 | Baseline And Model Benchmarking | Planned |
+| 7 | Authority Ticket Integration Adapter | Planned |
+| 8 | Usability, Accessibility, Load, And Resilience Validation | Planned |
+
+### Phase 1: Benchmark Dataset Foundation
+
+Phase 1 introduces `dataset/benchmark` as the only location intended for defensible real-world evaluation. The existing `dataset/dataset.json` remains a legacy regression fixture and must not be described as an independent accuracy benchmark because it contains transformed variants of a small number of source images.
+
+The Phase 1 implementation provides:
+
+- A versioned manifest and machine-readable JSON Schema.
+- Canonical category validation against `shared/aiCategories.json`.
+- A `general` negative class for images with no supported visible incident.
+- SHA-256 integrity and exact-duplicate rejection.
+- Scene-group isolation to keep crops or edits of one source out of different splits.
+- Provenance, licence, permission, broad-location, and independent privacy-review gates.
+- Two-annotator adjudication requirements and an evidence-based severity rubric.
+- Deterministic category-stratified train, validation, and test generation.
+- Machine-readable collection targets and automated positive/negative workflow tests.
+
+See [the annotation and collection guide](dataset/benchmark/ANNOTATION_GUIDE.md) before adding records. Software infrastructure being complete does not mean that a real dataset has already been collected; benchmark claims become valid only after licensed, independently adjudicated records meet the release targets.
+
+### Phase 2: Independent Metrics And Error Analysis
+
+Phase 2 adds a leak-free image-only evaluator tied to immutable manifest and split hashes. It reports per-class precision, recall, F1, confusion matrix, top-k accuracy, coverage, selective accuracy, abstention behavior, negative recall, Critical recall, false-Critical escalation, dangerous under-triage, severity error, confidence calibration, Wilson intervals, runtime fallback usage, and latency. A versioned evaluation policy turns academic quality targets into explicit pass/fail gates.
+
+The evaluator currently returns `not_ready` because Phase 1 contains no adjudicated real-world records. Controlled fixtures verify the formulas and execution path but are not reported as model accuracy. See [the Phase 2 evaluation guide](dataset/benchmark/EVALUATION_GUIDE.md).
+
+### Phase 3: Human Review And Correction
+
+Phase 3 adds an Admin-only review form inside each complaint case file. Reviewers can confirm the AI decision, apply a justified category/severity/department correction, or request better evidence. Corrections synchronize operational complaint and routing fields while retaining the original machine decision, explanation, candidates, confidence, and threat evidence. Mandatory reasoning and document-version checks prevent unaccountable or stale edits.
+
+Phase 3 intentionally stores only the original and latest reviewed state. The append-only event history and correction dataset belong to Phase 4. See [the Phase 3 human-review specification](docs/PHASE_3_HUMAN_REVIEW.md).
+
 ## Evaluation And Testing
 
 Run the full local checks before production deployment:
@@ -575,8 +632,13 @@ node -e "require('./src/app'); console.log('app-load ok')"
 npm run evaluate:ai
 npm run verify:resolution
 npm run verify:civic-intelligence
-python scripts/evaluateAiService.py
-python -m compileall ai_service stt_service scripts
+npm run verify:dataset
+npm run dataset:validate
+npm run verify:metrics
+npm run verify:human-review
+npm run evaluate:benchmark:readiness
+python3 scripts/evaluateAiService.py
+python3 -m compileall ai_service stt_service scripts
 ```
 
 Optional JavaScript syntax sweep:
@@ -663,7 +725,7 @@ Before pushing live:
 - Confirm `SMTP_FAMILY=4` if Gmail IPv6 fails with `ENETUNREACH`.
 - Confirm `CORS_ORIGIN` matches the production frontend URL exactly.
 - Confirm `AI_SERVICE_URL` points to the deployed Flask service.
-- Run `npm run evaluate:ai` and `python scripts/evaluateAiService.py`.
+- Run `npm run evaluate:ai`, `npm run verify:dataset`, and `python3 scripts/evaluateAiService.py`.
 - Submit a high-risk test complaint and verify routing, broadcast, incident command, and PDF.
 - Confirm Weatherstack and Zenserp quota behavior with limited/free keys.
 - Replace fallback department unit metadata with real authority contacts when available.

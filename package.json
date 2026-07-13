@@ -13,6 +13,14 @@
     "verify:smtp": "node scripts/verifySmtp.js",
     "verify:resolution": "node scripts/verifyResolutionLoop.js",
     "verify:civic-intelligence": "node scripts/verifyCivicIntelligence.js",
+    "dataset:validate": "python3 scripts/manageBenchmarkDataset.py validate",
+    "dataset:stats": "python3 scripts/manageBenchmarkDataset.py stats",
+    "dataset:split": "python3 scripts/manageBenchmarkDataset.py split",
+    "verify:dataset": "python3 scripts/verifyBenchmarkDataset.py",
+    "evaluate:benchmark": "python3 scripts/evaluateBenchmark.py",
+    "evaluate:benchmark:readiness": "python3 scripts/evaluateBenchmark.py --allow-empty",
+    "verify:metrics": "python3 scripts/verifyBenchmarkMetrics.py",
+    "verify:human-review": "node scripts/verifyHumanReview.js",
     "evaluate:ai": "node scripts/evaluateAi.js"
   },
   "dependencies": {

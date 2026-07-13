@@ -6,9 +6,9 @@ const { createComplaintFromPayload, createHttpError } = require("../services/com
 const { buildFollowUpSchedule, refreshComplaintFollowUp } = require("../services/followUpService");
 const { buildComplaintIntelligence } = require("../services/civicIntelligenceService");
 const { areaMatchesLocation } = require("../utils/localAlerts");
+const { applyHumanReview, getReviewOptions, normalizeReviewPayload } = require("../services/humanReviewService");
 
 const ALLOWED_STATUSES = ["Queued", "Needs Review", "In Progress", "Resolved", "Escalated"];
-const ALLOWED_PRIORITIES = ["Low", "Medium", "High", "Critical"];
 const ALLOWED_VERIFICATION_VOTES = new Set(["still_there", "resolved", "got_worse"]);
 const ALLOWED_COMMUNITY_SIGNALS = new Set(["corroborates", "cleared", "worsening"]);
 const MAX_VERIFICATION_NOTE_LENGTH = 280;
@@ -162,7 +162,11 @@ async function getComplaint(req, res, next) {
       throw createHttpError("Permission denied", 403);
     }
 
-    res.json({ complaint, intelligence: buildComplaintIntelligence(complaint) });
+    res.json({
+      complaint,
+      intelligence: buildComplaintIntelligence(complaint),
+      reviewOptions: req.auth.permissions.includes("update_complaint_status") ? getReviewOptions() : null
+    });
   } catch (error) {
     next(error);
   }
@@ -266,12 +270,8 @@ async function updateComplaintStatus(req, res, next) {
       }
     }
 
-    if (req.body.priority) {
-      if (!ALLOWED_PRIORITIES.includes(req.body.priority)) {
-        throw createHttpError("Invalid complaint priority.", 400);
-      }
-      complaint.priority = req.body.priority;
-      statusOrPriorityChanged = true;
+    if (req.body.priority !== undefined) {
+      throw createHttpError("Severity corrections require the human-review workflow and reviewer reasoning.", 400);
     }
     if (statusOrPriorityChanged) {
       complaint.followUp = {
@@ -528,6 +528,57 @@ async function submitCommunityProof(req, res, next) {
   }
 }
 
+async function submitHumanReview(req, res, next) {
+  try {
+    const complaint = await Complaint.findById(req.params.id);
+    if (!complaint) {
+      throw createHttpError("Complaint not found", 404);
+    }
+
+    const review = normalizeReviewPayload(req.body, complaint);
+    if (Number(complaint.__v || 0) !== review.expectedVersion) {
+      throw createHttpError("This complaint changed after you opened it. Refresh the case before submitting your review.", 409);
+    }
+
+    const humanReview = applyHumanReview(complaint, review, req.auth);
+    if (complaint.incidentCommand?.triggered && complaint.incidentCommand?.incidentId) {
+      const commandStatus = commandStatusForComplaintStatus(complaint.status);
+      await IncidentCommand.findByIdAndUpdate(complaint.incidentCommand.incidentId, {
+        severity: complaint.priority,
+        title: `${complaint.priority} ${complaint.type}`,
+        assignedAuthority: complaint.routing?.authority || complaint.assignedAuthority,
+        assignedDepartment: complaint.routing?.department || "",
+        assignedUnit: complaint.routing?.unit || "",
+        commandStatus,
+        $push: {
+          timeline: {
+            event: `Human review ${review.outcome.replace(/_/g, " ")} applied`,
+            at: humanReview.reviewedAt,
+            by: "authorized-human-review"
+          }
+        }
+      });
+      complaint.incidentCommand.severity = complaint.priority;
+      complaint.incidentCommand.assignedUnit = complaint.routing?.unit || complaint.incidentCommand.assignedUnit;
+      complaint.incidentCommand.status = commandStatus;
+    }
+
+    await complaint.save();
+    res.json({
+      message:
+        review.outcome === "confirmed"
+          ? "AI decision confirmed by human review."
+          : review.outcome === "corrected"
+            ? "Human correction applied to the complaint."
+            : "Complaint marked as needing better evidence.",
+      complaint,
+      humanReview
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   analyzeAndCreateComplaint,
   getComplaint,
@@ -536,5 +587,6 @@ module.exports = {
   acknowledgeAlert,
   verifyComplaintStatus,
   submitResolutionEvidence,
-  submitCommunityProof
+  submitCommunityProof,
+  submitHumanReview
 };

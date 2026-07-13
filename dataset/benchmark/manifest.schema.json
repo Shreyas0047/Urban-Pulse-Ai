@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://urban-pulse.local/schemas/civic-benchmark-manifest-v1.json",
+  "title": "Urban Pulse Civic Incident Benchmark Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "datasetVersion", "title", "createdAt", "records"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "datasetVersion": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "description": { "type": "string", "maxLength": 500 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "records": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/record" }
+    }
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "required": ["id", "media", "provenance", "location", "privacy", "labels", "annotation"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^UPB-[A-Z0-9-]{6,48}$" },
+        "media": {
+          "type": "object",
+          "required": ["path", "sha256", "mimeType", "groupId"],
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string", "pattern": "^images/[^/].*" },
+            "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "mimeType": { "enum": ["image/jpeg", "image/png", "image/webp"] },
+            "groupId": { "type": "string", "minLength": 3, "maxLength": 80 },
+            "capturedAt": { "type": ["string", "null"], "format": "date-time" }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "required": ["sourceType", "sourceReference", "license", "permissionConfirmed"],
+          "additionalProperties": false,
+          "properties": {
+            "sourceType": { "enum": ["field_capture", "open_data", "licensed_contribution", "authority_archive"] },
+            "sourceReference": { "type": "string", "minLength": 3, "maxLength": 500 },
+            "license": { "type": "string", "minLength": 2, "maxLength": 120 },
+            "permissionConfirmed": { "type": "boolean" }
+          }
+        },
+        "location": {
+          "type": "object",
+          "required": ["city", "area", "precision"],
+          "additionalProperties": false,
+          "properties": {
+            "city": { "type": "string", "minLength": 2, "maxLength": 80 },
+            "area": { "type": "string", "minLength": 2, "maxLength": 100 },
+            "precision": { "enum": ["area_only", "ward_only", "city_only"] }
+          }
+        },
+        "privacy": {
+          "type": "object",
+          "required": ["piiReviewed", "faces", "vehiclePlates", "privatePropertyIdentifiers", "reviewer"],
+          "additionalProperties": false,
+          "properties": {
+            "piiReviewed": { "type": "boolean" },
+            "faces": { "enum": ["none", "redacted"] },
+            "vehiclePlates": { "enum": ["none", "redacted"] },
+            "privatePropertyIdentifiers": { "enum": ["none", "redacted"] },
+            "reviewer": { "type": "string", "minLength": 2, "maxLength": 80 }
+          }
+        },
+        "labels": {
+          "type": "object",
+          "required": ["categoryId", "severity", "incidentPresent", "hazards", "sensitiveContext"],
+          "additionalProperties": false,
+          "properties": {
+            "categoryId": { "type": "string" },
+            "secondaryCategoryIds": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+            "severity": { "enum": ["Low", "Medium", "High", "Critical", "Needs Review"] },
+            "incidentPresent": { "type": "boolean" },
+            "hazards": { "type": "array", "uniqueItems": true, "items": { "type": "string", "maxLength": 120 } },
+            "sensitiveContext": { "type": "array", "uniqueItems": true, "items": { "type": "string", "maxLength": 120 } },
+            "visibleEvidence": { "type": "string", "maxLength": 500 }
+          }
+        },
+        "annotation": {
+          "type": "object",
+          "required": ["status", "annotators", "agreement", "adjudicator", "annotatedAt"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "enum": ["draft", "double_annotated", "adjudicated", "rejected"] },
+            "annotators": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 2, "maxLength": 80 } },
+            "agreement": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "adjudicator": { "type": ["string", "null"], "maxLength": 80 },
+            "annotatedAt": { "type": "string", "format": "date-time" },
+            "notes": { "type": "string", "maxLength": 500 }
+          }
+        }
+      }
+    }
+  }
+}

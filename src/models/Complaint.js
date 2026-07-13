@@ -207,6 +207,31 @@ const complaintSchema = new mongoose.Schema(
         }
       ]
     },
+    humanReview: {
+      status: {
+        type: String,
+        enum: ["unreviewed", "confirmed", "corrected", "insufficient_evidence"],
+        default: "unreviewed"
+      },
+      original: {
+        categoryId: { type: String, default: "" },
+        type: { type: String, default: "" },
+        priority: { type: String, default: "" },
+        department: { type: String, default: "" },
+        authority: { type: String, default: "" }
+      },
+      decision: {
+        categoryId: { type: String, default: "" },
+        type: { type: String, default: "" },
+        priority: { type: String, default: "" },
+        department: { type: String, default: "" },
+        authority: { type: String, default: "" }
+      },
+      changedFields: [{ type: String }],
+      reason: { type: String, default: "" },
+      reviewerRole: { type: String, default: "" },
+      reviewedAt: { type: Date, default: null }
+    },
     statusHistory: [
       {
         status: { type: String, required: true },

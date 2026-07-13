@@ -1,0 +1,45 @@
+{
+  "id": "UPB-2026-000001",
+  "media": {
+    "path": "images/UPB-2026-000001.jpg",
+    "sha256": "replace-with-sha256-generated-by-the-import-command",
+    "mimeType": "image/jpeg",
+    "groupId": "original-scene-000001",
+    "capturedAt": null
+  },
+  "provenance": {
+    "sourceType": "field_capture",
+    "sourceReference": "collection-batch-or-consent-record",
+    "license": "consented-research-use",
+    "permissionConfirmed": true
+  },
+  "location": {
+    "city": "Bengaluru",
+    "area": "area-name-without-exact-address",
+    "precision": "area_only"
+  },
+  "privacy": {
+    "piiReviewed": true,
+    "faces": "none",
+    "vehiclePlates": "none",
+    "privatePropertyIdentifiers": "none",
+    "reviewer": "privacy-reviewer-id"
+  },
+  "labels": {
+    "categoryId": "tree_obstruction",
+    "secondaryCategoryIds": [],
+    "severity": "High",
+    "incidentPresent": true,
+    "hazards": ["road obstruction"],
+    "sensitiveContext": [],
+    "visibleEvidence": "A fallen tree visibly blocks part of the public road."
+  },
+  "annotation": {
+    "status": "adjudicated",
+    "annotators": ["annotator-a", "annotator-b"],
+    "agreement": 1.0,
+    "adjudicator": "annotator-c",
+    "annotatedAt": "2026-07-13T00:00:00Z",
+    "notes": ""
+  }
+}

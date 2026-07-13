@@ -1,0 +1,28 @@
+{
+  "targetVersion": "1.0.0",
+  "scope": "Bengaluru civic incidents",
+  "minimumReleaseRecords": 360,
+  "preferredReleaseRecords": 600,
+  "minimumIndependentSceneGroupsPerIncidentCategory": 25,
+  "preferredIndependentSceneGroupsPerIncidentCategory": 45,
+  "minimumNoIncidentRecords": 45,
+  "preferredNoIncidentRecords": 60,
+  "minimumDifficultEvidenceFraction": 0.2,
+  "minimumSourceTypes": 2,
+  "requiredIncidentCategoryIds": [
+    "safety_fire",
+    "road_damage",
+    "tree_obstruction",
+    "garbage",
+    "sewage_overflow",
+    "water_drainage",
+    "wall_damage",
+    "security",
+    "utility_fault",
+    "water_leakage",
+    "animal_intrusion",
+    "vehicle_obstruction"
+  ],
+  "negativeCategoryId": "general",
+  "notes": "No-incident records must set incidentPresent=false. Difficult evidence includes blur, darkness, occlusion, distance, clutter, or genuinely ambiguous civic context."
+}

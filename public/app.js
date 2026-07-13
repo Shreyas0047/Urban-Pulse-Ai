@@ -2844,7 +2844,73 @@ function renderThreatDuplicates(threat) {
     .join("<br>");
 }
 
-function renderComplaintDetail(complaint, intelligence = {}) {
+function renderHumanReviewPanel(complaint, reviewOptions = null) {
+  const review = complaint.humanReview || {};
+  const status = String(review.status || "unreviewed").replace(/_/g, " ");
+  const canReview = Boolean(reviewOptions && authState?.permissions?.includes("update_complaint_status"));
+  const reviewedSummary = review.reviewedAt
+    ? `${escapeHtml(review.reviewerRole || "Admin")} review · ${escapeHtml(formatDateTime(review.reviewedAt))}`
+    : "No human decision has been recorded.";
+
+  if (!canReview) {
+    return `
+      <section class="detail-support-card human-review-card">
+        <p class="detail-section-label">Human review</p>
+        <strong>${escapeHtml(status)}</strong>
+        <p>${reviewedSummary}${review.reason ? `<br>${escapeHtml(review.reason)}` : ""}</p>
+      </section>`;
+  }
+
+  const currentCategoryId = complaint.ai?.categoryId || "general";
+  const categoryOptions = [...(reviewOptions.categories || [])];
+  if (!categoryOptions.some((category) => category.id === currentCategoryId)) {
+    categoryOptions.unshift({ id: currentCategoryId, label: complaint.type || "Needs Manual Review", group: "Review" });
+  }
+  const outcomeValue = ["confirmed", "corrected", "insufficient_evidence"].includes(review.status)
+    ? review.status
+    : "confirmed";
+
+  return `
+    <section class="detail-support-card human-review-card">
+      <div class="human-review-heading">
+        <div>
+          <p class="detail-section-label">Human review</p>
+          <strong>${escapeHtml(status)}</strong>
+        </div>
+        <span>${reviewedSummary}</span>
+      </div>
+      ${review.reason ? `<p class="human-review-previous"><strong>Previous reasoning:</strong> ${escapeHtml(review.reason)}</p>` : ""}
+      <form class="human-review-form" data-complaint-id="${escapeHtml(complaint._id)}" data-expected-version="${Number(complaint.__v || 0)}">
+        <label>Review outcome
+          <select class="human-review-outcome">
+            ${(reviewOptions.outcomes || []).map((outcome) => `<option value="${escapeHtml(outcome.id)}" ${outcome.id === outcomeValue ? "selected" : ""}>${escapeHtml(outcome.label)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Incident category
+          <select class="human-review-category">
+            ${categoryOptions.map((category) => `<option value="${escapeHtml(category.id)}" data-team="${escapeHtml(category.team || complaint.routing?.department || "Help Desk")}" ${category.id === currentCategoryId ? "selected" : ""}>${escapeHtml(category.label)} · ${escapeHtml(category.group)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Severity
+          <select class="human-review-priority">
+            ${(reviewOptions.priorities || []).map((priority) => `<option value="${escapeHtml(priority)}" ${priority === complaint.priority ? "selected" : ""}>${escapeHtml(priority)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Department
+          <input class="human-review-department" type="text" maxlength="120" value="${escapeHtml(complaint.routing?.department || complaint.ai?.recommendedTeam || "Help Desk")}" />
+        </label>
+        <label class="human-review-reason-field">Reviewer reasoning
+          <textarea class="human-review-reason" minlength="15" maxlength="500" required placeholder="State the visible evidence and explain why this decision is justified."></textarea>
+        </label>
+        <div class="human-review-submit-row">
+          <p class="helper-text">Corrections update operational fields. Concurrent changes are rejected until this case is refreshed.</p>
+          <button type="submit" class="primary-button human-review-submit">Submit human review</button>
+        </div>
+      </form>
+    </section>`;
+}
+
+function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = null) {
   complaintDetailTitle.textContent = complaint.type || "Complaint";
   const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
   const ageInDays = countDaysOpen(complaint.createdAt);
@@ -2854,6 +2920,7 @@ function renderComplaintDetail(complaint, intelligence = {}) {
   const resolutionOpen = ["awaiting_citizen_verification", "needs_admin_review"].includes(complaint.resolution?.phase);
   const canSubmitResolutionEvidence = !authState?.permissions?.includes("view_dashboard");
   const canSubmitCommunityProof = !authState?.permissions?.includes("view_dashboard");
+  const canSubmitCitizenVerification = !authState?.permissions?.includes("view_dashboard");
   const dna = intelligence.dna || { strands: [] };
   const timeMachine = intelligence.timeMachine || [];
   const scenario = intelligence.consequenceScenario || null;
@@ -2912,6 +2979,7 @@ function renderComplaintDetail(complaint, intelligence = {}) {
       </section>
 
       <div class="detail-support-grid">
+        ${renderHumanReviewPanel(complaint, reviewOptions)}
         <section class="detail-support-card">
           <p class="detail-section-label">Routing</p>
           <strong>${escapeHtml(complaint.routing?.unit || complaint.assignedAuthority || "Gram Panchayat")}</strong>
@@ -2956,11 +3024,11 @@ function renderComplaintDetail(complaint, intelligence = {}) {
           <p class="detail-section-label">Citizen verification</p>
           <strong>${escapeHtml((complaint.verification?.summary?.citizenStatus || "unverified").replace(/_/g, " "))}</strong>
           <p>${renderVerificationSummary(complaint)}</p>
-          <div class="verification-actions" data-complaint-id="${escapeHtml(complaint._id)}">
+          ${canSubmitCitizenVerification ? `<div class="verification-actions" data-complaint-id="${escapeHtml(complaint._id)}">
             <button type="button" class="chip-button verification-vote-btn" data-vote="still_there">Still there</button>
             <button type="button" class="chip-button verification-vote-btn" data-vote="resolved">Looks resolved</button>
             <button type="button" class="chip-button verification-vote-btn" data-vote="got_worse">Got worse</button>
-          </div>
+          </div>` : `<p class="helper-text">Citizen verification is submitted by the original reporter.</p>`}
         </section>
         <section class="detail-support-card resolution-card">
           <p class="detail-section-label">Resolution loop</p>
@@ -3064,6 +3132,55 @@ function renderComplaintDetail(complaint, intelligence = {}) {
   `;
   complaintDetailOverlay.hidden = false;
   document.body.classList.add("auth-open");
+  const humanReviewForm = complaintDetailBody.querySelector(".human-review-form");
+  if (humanReviewForm) {
+    const outcome = humanReviewForm.querySelector(".human-review-outcome");
+    const category = humanReviewForm.querySelector(".human-review-category");
+    const department = humanReviewForm.querySelector(".human-review-department");
+    const decisionFields = [
+      humanReviewForm.querySelector(".human-review-category"),
+      humanReviewForm.querySelector(".human-review-priority"),
+      humanReviewForm.querySelector(".human-review-department")
+    ];
+    const syncReviewFields = () => {
+      const correctionOpen = outcome.value === "corrected";
+      decisionFields.forEach((field) => {
+        field.disabled = !correctionOpen;
+      });
+    };
+    outcome.addEventListener("change", syncReviewFields);
+    category.addEventListener("change", () => {
+      const defaultTeam = category.selectedOptions[0]?.dataset.team;
+      if (outcome.value === "corrected" && defaultTeam) {
+        department.value = defaultTeam;
+      }
+    });
+    syncReviewFields();
+    humanReviewForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submitButton = humanReviewForm.querySelector(".human-review-submit");
+      try {
+        submitButton.disabled = true;
+        const data = await apiRequest(`/api/complaints/${humanReviewForm.dataset.complaintId}/human-review`, {
+          method: "POST",
+          body: JSON.stringify({
+            outcome: outcome.value,
+            categoryId: humanReviewForm.querySelector(".human-review-category").value,
+            priority: humanReviewForm.querySelector(".human-review-priority").value,
+            department: humanReviewForm.querySelector(".human-review-department").value.trim(),
+            reason: humanReviewForm.querySelector(".human-review-reason").value.trim(),
+            expectedVersion: Number(humanReviewForm.dataset.expectedVersion)
+          })
+        });
+        setDashboardMessage(data.message || "Human review recorded.", "success");
+        await openComplaintDetail(humanReviewForm.dataset.complaintId);
+        await loadDashboard();
+      } catch (error) {
+        setDashboardMessage(error.message, "error");
+        submitButton.disabled = false;
+      }
+    });
+  }
   complaintDetailBody.querySelectorAll(".verification-vote-btn").forEach((button) => {
     button.addEventListener("click", async () => {
       const complaintId = button.closest(".verification-actions")?.dataset.complaintId;
@@ -3138,7 +3255,7 @@ function renderComplaintDetail(complaint, intelligence = {}) {
 async function openComplaintDetail(complaintId) {
   try {
     const data = await apiRequest(`/api/complaints/${complaintId}`, { method: "GET" });
-    renderComplaintDetail(data.complaint, data.intelligence || {});
+    renderComplaintDetail(data.complaint, data.intelligence || {}, data.reviewOptions || null);
   } catch (error) {
     setDashboardMessage(error.message, "error");
   }
