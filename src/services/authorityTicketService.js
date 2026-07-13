@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const AuthorityTicket = require("../models/AuthorityTicket");
 const env = require("../config/env");
 const { sendAuthorityTicketEmail } = require("./emailService");
+const { markAuthorityReconciled, markAuthoritySubmitted, newTicketSla, policyForSeverity } = require("./authoritySlaService");
 
 const RECONCILE_STATUSES = new Set(["acknowledged", "in_progress", "resolved", "rejected"]);
 
@@ -84,6 +85,7 @@ async function createOrGetAuthorityTicket(complaint) {
   if (existing) return { ticket: await adoptDeliveryConfig(existing, complaint, payload), created: false };
   const delivery = authorityDeliveryConfig(complaint, payload);
   const code = ticketCode(complaint._id);
+  const createdAt = new Date();
   try {
     const ticket = await AuthorityTicket.create({
       complaintId: complaint._id,
@@ -91,6 +93,7 @@ async function createOrGetAuthorityTicket(complaint) {
       cityName: payload.cityName,
       authority: payload.authority,
       department: payload.department,
+      severity: policyForSeverity(payload.severity).severity,
       unitId: payload.unitId || "unassigned",
       handoffMode: payload.handoffMode,
       portalUrl: payload.officialPortalUrl,
@@ -99,7 +102,9 @@ async function createOrGetAuthorityTicket(complaint) {
       adapter: delivery.adapter,
       status: delivery.status,
       destination: delivery.destination,
-      payloadHash: payloadHash(payload)
+      payloadHash: payloadHash(payload),
+      sla: newTicketSla(payload.severity, createdAt),
+      createdAt
     });
     return { ticket, created: true };
   } catch (error) {
@@ -165,6 +170,7 @@ async function dispatchAuthorityTicket(ticket, complaint, dependencies = {}) {
     ticket.submittedAt = attemptedAt;
     ticket.lastError = "";
     ticket.nextRetryAt = null;
+    markAuthoritySubmitted(ticket, attemptedAt);
     ticket.attempts.push({ attemptedAt, outcome: "submitted", statusCode: result.statusCode, message: "Authority adapter accepted the ticket." });
   } catch (error) {
     const retryable = error.retryable !== false && ticket.attemptCount < env.authorityMaxAttempts;
@@ -207,6 +213,7 @@ async function confirmManualAuthorityHandoff(ticket, { externalReference, note, 
   ticket.submittedAt = confirmedAt;
   ticket.lastError = "";
   ticket.nextRetryAt = null;
+  markAuthoritySubmitted(ticket, confirmedAt);
   ticket.attemptCount += 1;
   ticket.manualSubmission = {
     externalReference: reference,
@@ -232,9 +239,17 @@ async function reconcileAuthorityTicket(ticket, { status, note, role, session = 
     error.statusCode = 409;
     throw error;
   }
+  const reconciliationNote = clean(note, 300);
+  if (reconciliationNote.length < 10) {
+    const error = new Error("Record at least 10 characters of authority response evidence before reconciling status.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const reconciledAt = new Date();
   ticket.status = normalizedStatus;
-  ticket.reconciledAt = new Date();
-  ticket.reconciliationHistory.push({ status: normalizedStatus, note: clean(note, 300), changedByRole: clean(role || "Admin", 40), changedAt: ticket.reconciledAt });
+  ticket.reconciledAt = reconciledAt;
+  markAuthorityReconciled(ticket, normalizedStatus, reconciledAt);
+  ticket.reconciliationHistory.push({ status: normalizedStatus, note: reconciliationNote, changedByRole: clean(role || "Admin", 40), changedAt: ticket.reconciledAt });
   await ticket.save(session ? { session } : undefined);
   return ticket;
 }

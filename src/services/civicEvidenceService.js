@@ -13,8 +13,14 @@ const OFFICIAL_DOMAIN_HINTS = [
   "karnataka",
   "bengaluru",
   "bangalore",
-  "municipal",
-  "nammabengaluru"
+  "nammabengaluru",
+  "mcgm.gov",
+  "portal.mcgm",
+  "mcdonline.nic.in",
+  "chennaicorporation.gov.in",
+  "ghmc.gov.in",
+  ".gov.in",
+  ".nic.in"
 ];
 const PUBLIC_CONTEXT_CATEGORY_IDS = new Set([
   "water_drainage",
@@ -46,14 +52,14 @@ function buildOfficialQuery({ analysis, routing, location }) {
   const issueType = normalizeSearchValue(analysis?.nlp?.issueType || analysis?.cv?.detected || "civic complaint");
   const department = normalizeSearchValue(routing?.department || routing?.unit || analysis?.nlp?.team || "");
   const authority = normalizeSearchValue(routing?.authority || analysis?.assignedAuthority || "");
-  const area = normalizeSearchValue(location || "Bengaluru");
+  const area = normalizeSearchValue(location || "India");
   return [issueType, department, authority, area, "official complaint portal contact"].filter(Boolean).join(" ");
 }
 
 function buildPublicContextQuery({ analysis, location }) {
   const issueType = normalizeSearchValue(analysis?.nlp?.issueType || analysis?.cv?.detected || "civic issue");
-  const area = normalizeSearchValue(location || "Bengaluru");
-  return [area, issueType, "today Bengaluru public report"].filter(Boolean).join(" ");
+  const area = normalizeSearchValue(location || "India");
+  return [area, issueType, "today public report municipal update"].filter(Boolean).join(" ");
 }
 
 function extractHost(url) {
@@ -246,5 +252,8 @@ async function fetchCivicEvidence({ analysis, routing, location }) {
 }
 
 module.exports = {
+  buildOfficialQuery,
+  buildPublicContextQuery,
+  isOfficialLooking,
   fetchCivicEvidence
 };

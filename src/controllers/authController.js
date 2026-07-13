@@ -46,6 +46,12 @@ function validateRole(role) {
   }
 }
 
+function validateSelfRegistrationRole(role) {
+  if (role !== "Citizen") {
+    throw createHttpError("Public registration is available for Citizen accounts only. An existing Admin can grant administrative access after registration.", 403);
+  }
+}
+
 function validatePassword(password) {
   if (typeof password !== "string") {
     throw createHttpError("Password is required.", 400);
@@ -154,7 +160,13 @@ function generateOtpCode() {
 
 function formatAuthError(error) {
   if (error?.code === 11000) {
-    if (error.keyPattern?.email || error.keyValue?.email || String(error.message || "").includes("email_1")) {
+    if (
+      error.keyPattern?.email ||
+      error.keyValue?.email ||
+      error.keyPattern?.username ||
+      error.keyValue?.username ||
+      /(?:email|username)_1/.test(String(error.message || ""))
+    ) {
       return createHttpError("Email is already registered.", 409);
     }
   }
@@ -220,6 +232,7 @@ async function register(req, res, next) {
     }
 
     validateRole(role);
+    validateSelfRegistrationRole(role);
     validateEmail(email);
     validatePassword(password);
 
@@ -280,6 +293,7 @@ async function requestRegistrationOtp(req, res, next) {
     }
 
     validateRole(role);
+    validateSelfRegistrationRole(role);
     validateEmail(email);
     validatePassword(password);
 
@@ -356,11 +370,9 @@ async function requestPasswordResetOtp(req, res, next) {
       });
       return res.json({
         message: PASSWORD_RESET_MESSAGE,
-        deliveryStatus: "skipped",
-        sent: false,
+        deliveryStatus: "sent",
+        sent: true,
         recipient: maskEmail(email),
-        acceptedCount: 0,
-        rejectedCount: 0,
         expiresInSeconds: OTP_TTL_MS / 1000
       });
     }

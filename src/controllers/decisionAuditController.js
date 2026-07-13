@@ -4,6 +4,7 @@ const {
   eventsToCsv,
   verifyDecisionAudit
 } = require("../services/decisionAuditService");
+const { assertOperationalCityAccess, operationalCityDataFilter } = require("../services/operationalAccessService");
 
 function notFound(message) {
   const error = new Error(message);
@@ -15,6 +16,7 @@ async function exportComplaintDecisionAudit(req, res, next) {
   try {
     const complaint = await Complaint.findById(req.params.id).lean();
     if (!complaint) throw notFound("Complaint not found");
+    assertOperationalCityAccess(req.auth, complaint);
     const audit = await verifyDecisionAudit(complaint._id, { complaint });
     if (String(req.query.format || "json").toLowerCase() === "csv") {
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -29,7 +31,10 @@ async function exportComplaintDecisionAudit(req, res, next) {
 
 async function getCorrectionFeedback(req, res, next) {
   try {
-    const feedback = await aggregateCorrectionFeedback();
+    const requestedCityId = req.query.cityId || req.auth.operationalCityIds?.[0] || "bengaluru";
+    const cityId = assertOperationalCityAccess(req.auth, requestedCityId);
+    const complaints = await Complaint.find(operationalCityDataFilter(cityId), { _id: 1 }).lean();
+    const feedback = await aggregateCorrectionFeedback({ complaintIds: complaints.map((complaint) => complaint._id) });
     if (String(req.query.format || "json").toLowerCase() === "csv") {
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", "attachment; filename=human-review-feedback.csv");

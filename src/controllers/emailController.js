@@ -2,6 +2,7 @@ const { sendBbmpComplaintEmail, sendCloseContactsComplaintEmail } = require("../
 const Complaint = require("../models/Complaint");
 const mongoose = require("mongoose");
 const env = require("../config/env");
+const { canAccessComplaint } = require("../services/operationalAccessService");
 
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_SUBJECT_LENGTH = 180;
@@ -109,12 +110,7 @@ async function assertReportComplaintAccess(req, report) {
     throw createHttpError("Complaint not found.", 404);
   }
 
-  const canViewDashboard = req.auth?.permissions?.includes("view_dashboard");
-  const ownsComplaint =
-    (req.auth?.userId && complaint.reporterUserId === String(req.auth.userId)) ||
-    complaint.reporterUsername === req.auth?.username;
-
-  if (!canViewDashboard && !ownsComplaint) {
+  if (!canAccessComplaint(req.auth || {}, complaint)) {
     throw createHttpError("Permission denied for this complaint email.", 403);
   }
 

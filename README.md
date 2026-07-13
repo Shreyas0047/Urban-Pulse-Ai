@@ -63,7 +63,7 @@ The project is built around a simple idea: civic complaint systems should not st
 - Express fallback AI path when the Flask AI service is unavailable.
 - Deterministic AI evaluation scripts for regression checking.
 - Versioned real-world benchmark foundation with provenance, privacy review, independent annotation, and leakage-safe splits.
-- City-first complaint intake backed by a versioned five-city registry, with Bengaluru active and four cities staged for controlled rollout.
+- City-first complaint intake backed by a versioned five-city registry, controlled rollout, city-scoped circuit breakers, and measurable authority-response deadlines; Bengaluru is active and four cities remain staged.
 
 ## Why This Project Exists
 
@@ -84,7 +84,7 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | --- | --- | --- |
 | Authentication | Email/password login, role selection, email OTP registration, forgot-password OTP reset | Integrated |
 | Citizen reporting | Text complaint, voice transcript, image upload, location, map preview | Integrated |
-| Multi-city operations | City-first intake, scoped ownership and handoff, Admin city access, isolated dashboards, and city-safe alerts | Phase 5 integrated |
+| Multi-city operations | Scoped routing, controlled rollout, rolling SLOs, city circuit breakers, and authority response governance | Phase 9 integrated |
 | Image analysis | Browser-side image features, resized image upload, Flask vision analysis, local fallback | Integrated |
 | Threat intelligence | Threat level, risk score, hazards, relationships, confidence, safety gate, duplicate signal | Integrated |
 | Smart routing | Department/unit selection by category, severity, ward, and active workload | Integrated |
@@ -250,7 +250,7 @@ Important design rule: public search context and weather context support the cas
 
 ### Citizen Flow
 
-1. Register or log in with email and password.
+1. Register a Citizen account or log in with an existing Citizen/Admin email and password. Administrative access is granted only by an existing Admin.
 2. Verify registration or password reset through email OTP when needed.
 3. Select an available city before entering complaint evidence.
 4. Enter location and complaint description.
@@ -272,6 +272,8 @@ Important design rule: public search context and weather context support the cas
 7. Use map and city health views for operational awareness.
 8. Manage user accounts if permissions allow.
 9. When marking a complaint resolved, review incoming citizen follow-up evidence before closing high-risk cases.
+10. Monitor city-scoped service health, acknowledge circuit-breaker incidents, and resume intake only after recovery review.
+11. Monitor authority handoff, acknowledgement, and resolution deadlines; record real portal references and authority-response evidence before reconciliation.
 
 ## Tech Stack
 
@@ -364,7 +366,7 @@ pip install -r stt_service/requirements.txt
 
 ## Environment Variables
 
-Create a `.env` file in the project root.
+Create a `.env` file in the project root. Start from [`.env.example`](.env.example) and replace placeholders locally; never commit the populated `.env`.
 
 ### Core App
 
@@ -372,7 +374,7 @@ Create a `.env` file in the project root.
 | --- | --- | --- | --- |
 | `PORT` | No | `3000` | Express server port |
 | `MONGODB_URI` | Yes | `mongodb+srv://...` | MongoDB connection |
-| `JWT_SECRET` | Yes | `replace-with-a-strong-secret` | JWT signing secret |
+| `JWT_SECRET` | Yes | `generate-at-least-32-random-characters` | JWT signing secret; production startup rejects shorter values |
 | `CORS_ORIGIN` | Production | `https://your-web.onrender.com` | Allowed frontend origin |
 | `ALLOW_ROLE_TOKEN_ISSUE` | No | `false` | Keeps direct role-token issuing disabled |
 
@@ -381,6 +383,10 @@ Create a `.env` file in the project root.
 | Variable | Required | Example | Purpose |
 | --- | --- | --- | --- |
 | `AI_SERVICE_URL` | Yes | `http://127.0.0.1:5000` | Flask AI service URL |
+| `AI_SERVICE_TOKEN` | Production | `shared-random-value-at-least-32-characters` | Backend-only token; set the identical value on Node and Flask services |
+| `AI_SERVICE_TIMEOUT_MS` | No | `30000` | Express deadline for primary AI analysis |
+| `AI_SERVICE_REQUIRE_TOKEN` | AI production service | `true` | Reject unauthenticated AI POST requests while keeping `/health` public |
+| `AI_MAX_REQUEST_BYTES` | AI service | `4194304` | Flask request-body ceiling |
 | `DEEPGRAM_API_KEY` | Voice feature | `your_key` | Deepgram speech-to-text |
 | `DEEPGRAM_MODEL` | No | `nova-3` | Deepgram model name |
 | `EMBEDDING_MODEL_NAME` | No | `sentence-transformers/all-MiniLM-L6-v2` | Text embedding model |
@@ -434,8 +440,10 @@ Create a `.env` file in the project root.
 ```bash
 PORT=3000
 MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/urban-pulse
-JWT_SECRET=replace-with-a-strong-secret
+JWT_SECRET=replace-with-at-least-32-random-characters
 AI_SERVICE_URL=http://127.0.0.1:5000
+AI_SERVICE_TOKEN=shared-random-value-at-least-32-characters
+AI_SERVICE_TIMEOUT_MS=30000
 CORS_ORIGIN=http://localhost:3000
 ALLOW_ROLE_TOKEN_ISSUE=false
 
@@ -535,11 +543,17 @@ The first CLIP model run may take longer because the model may need to download 
 | `npm run verify:multi-city-phase3` | Verify category ownership, routing isolation, handoff truth, review constraints, and email safety |
 | `npm run verify:multi-city-phase4` | Verify manual handoff states, protected confirmation, reference integrity, and UI truthfulness |
 | `npm run verify:multi-city-phase5` | Verify dashboard access, city-isolated commands, alerts, observability, and community proof |
+| `npm run verify:multi-city-phase6` | Verify readiness checks, evidence expiry, configuration binding, approval, and startup refusal |
+| `npm run verify:multi-city-phase7` | Verify pilot cohorts, daily limits, audited transitions, pause behavior, and pre-provider gating |
+| `npm run verify:multi-city-phase8` | Verify operational SLOs, data minimization, automatic city pause, incident deduplication, and acknowledgement-gated recovery |
+| `npm run verify:multi-city-phase9` | Verify authority deadline policies, escalation levels, lifecycle truth, idempotency, scheduler, and city-scoped Admin access |
+| `npm run verify:production-integration` | Verify auth role policy, neutral password-reset responses, direct-API city isolation, provider city context, deployment config, and removed dead UI runtime |
+| `npm run verify:ai-service-auth` | Verify public AI health, protected AI POST endpoints, valid service-token access, and Flask payload limits |
 | `npm run verify:accessibility` | Run deterministic static accessibility contracts |
 | `npm run verify:resilience` | Verify rate limits, correlation IDs, and security headers |
 | `npm run verify:load` | Run concurrent local HTTP and payload-boundary checks |
 | `npm run verify:syntax` | Syntax-check project JavaScript and load the Express app |
-| `npm run verify:release` | Run the consolidated Phase 3-8 and cross-service release gate |
+| `npm run verify:release` | Run the consolidated multi-city Phase 2-9 and cross-service release gate |
 
 ## API Reference
 
@@ -553,8 +567,8 @@ All protected endpoints require a bearer token from login or registration.
 | `GET` | `/api/cities` | List active and planned city jurisdictions without private registry metadata |
 | `GET` | `/api/cities/:slug` | Read one public city rollout record and official complaint channels |
 | `GET` | `/api/cities/:slug/routing-units` | Read public category ownership and manual handoff details for one city |
-| `POST` | `/api/auth/register/request-otp` | Send registration OTP to email |
-| `POST` | `/api/auth/register` | Register account with OTP |
+| `POST` | `/api/auth/register/request-otp` | Send a Citizen-registration OTP to email; public Admin registration is refused |
+| `POST` | `/api/auth/register` | Register a Citizen account with OTP |
 | `POST` | `/api/auth/login` | Login with email, password, and role |
 | `POST` | `/api/auth/password-reset/request-otp` | Send password reset OTP |
 | `POST` | `/api/auth/password-reset` | Reset password with OTP |
@@ -572,12 +586,21 @@ Health probes are available at `GET /health/live` for process liveness and `GET 
 | `PATCH` | `/api/complaints/:id/status` | `update_complaint_status` | Update complaint status or priority |
 | `POST` | `/api/complaints/:id/human-review` | `update_complaint_status` | Confirm, correct, or request better evidence for an AI decision |
 | `GET` | `/api/complaints/:id/decision-audit` | `update_complaint_status` | Verify and export one complaint's decision history |
-| `GET` | `/api/decision-audit/feedback` | `update_complaint_status` | Aggregate or export human correction feedback |
+| `GET` | `/api/decision-audit/feedback?cityId=:cityId` | `update_complaint_status` | Aggregate or export human correction feedback for an assigned operations city |
 | `POST` | `/api/complaints/:id/authority-ticket` | `update_complaint_status` | Create an idempotent ticket and dispatch it or prepare its manual handoff |
 | `POST` | `/api/complaints/:id/authority-ticket/retry` | `update_complaint_status` | Retry a due failed delivery |
 | `POST` | `/api/authority-tickets/:ticketId/manual-confirmation` | `update_complaint_status` | Record a portal-issued reference after a real manual submission |
 | `PATCH` | `/api/authority-tickets/:ticketId/reconcile` | `update_complaint_status` | Record an authority acknowledgement or outcome |
 | `POST` | `/api/complaints/:id/alerts/acknowledge` | `manage_alerts` | Acknowledge complaint alert |
+| `GET` | `/api/cities/:slug/activation-readiness` | `update_complaint_status` | Evaluate activation readiness for an assigned operations city |
+| `PUT` | `/api/cities/:slug/activation-readiness/evidence` | `update_complaint_status` | Record staging and operational readiness evidence |
+| `POST` | `/api/cities/:slug/activation-readiness/approve` | `update_complaint_status` | Approve a fully passing, configuration-bound readiness review |
+| `GET` | `/api/cities/:slug/rollout` | `update_complaint_status` | Inspect assigned-city rollout mode, usage, configuration state, and history |
+| `PATCH` | `/api/cities/:slug/rollout` | `update_complaint_status` | Change pilot/open/closed/paused intake controls with an audit reason |
+| `GET` | `/api/cities/:slug/operational-health` | `update_complaint_status` | Inspect rolling complaint, AI, authority, and broadcast health for an assigned city |
+| `POST` | `/api/cities/:slug/operational-incidents/:incidentId/acknowledge` | `update_complaint_status` | Acknowledge an automatic circuit-breaker incident before recovery |
+| `GET` | `/api/cities/:slug/authority-governance` | `update_complaint_status` | Evaluate and inspect assigned-city authority handoff, acknowledgement, and resolution deadlines |
+| `POST` | `/api/cities/:slug/authority-governance/evaluate` | `update_complaint_status` | Trigger an immediate assigned-city authority SLA evaluation |
 | `POST` | `/api/reset-dashboard` | `reset_dashboard` | Clear development records; refused in production to preserve audits |
 
 ### Voice, Chat, And Email Endpoints
@@ -613,8 +636,13 @@ Health probes are available at `GET /health/live` for process liveness and `GET 
 | `PasswordResetOtp` | Mongo-backed password reset OTP records with TTL |
 | `Complaint` | Main complaint record with AI, human review, routing, weather, civic evidence, threat, map, alerts, follow-ups, verification votes, and history |
 | `CityRegistry` | Versioned jurisdiction identity, rollout availability, authority defaults, approximate validation envelope, and official-channel provenance |
+| `CityActivationReview` | Configuration-bound readiness evidence and approval for staged city activation |
+| `CityRolloutState` | Audited city intake mode, pilot cohort, daily limit, pause state, and transition history |
+| `CityDailyIntake` | Atomic UTC daily intake reservation counter for controlled city capacity |
+| `CityOperationalEvent` | Privacy-minimized, 30-day complaint/AI/delivery SLO signal for one city |
+| `CityOperationalIncident` | Deduplicated circuit-breaker incident, acknowledgement, and recovery timeline |
 | `DecisionAuditEvent` | Append-only AI baseline and human-review events linked by sequence and SHA-256 hashes |
-| `AuthorityTicket` | Idempotent authority delivery, retry, external-reference, and reconciliation state |
+| `AuthorityTicket` | Idempotent authority delivery, retry, external-reference, reconciliation, and severity-based SLA state |
 | `DepartmentUnit` | Versioned city/category ownership, workload capacity, and verified handoff metadata |
 | `EmergencyBroadcast` | High-risk broadcast audit and delivery status |
 | `IncidentCommand` | Command-room record with SLA, checklist, timeline, assigned unit |
@@ -702,9 +730,9 @@ Phase 8 adds skip navigation, named and keyboard-contained dialogs, focus restor
 
 ## Multi-City Expansion
 
-Multi-City Phase 1 introduced the validated registry and guarded Bengaluru migration. Phase 2 made city the first complaint field. Phase 3 added 25 city-scoped ownership units and isolated routing workload. Phase 4 added tracked authority-portal handoff and reconciliation. Phase 5 isolates Admin operations, metrics, observability, commands, clusters, emergency recipients, alert subscriptions, and community proof by city. Bengaluru remains the only reporting-enabled jurisdiction; Mumbai, Delhi, Chennai, and Hyderabad remain planned.
+Multi-City Phase 1 introduced the registry and Bengaluru migration. Phase 2 made intake city-first. Phase 3 added ownership, Phase 4 tracked authority handoff, and Phase 5 isolated operations and alerts. Phase 6 added readiness approval. Phase 7 added deterministic pilot cohorts and intake controls. Phase 8 added rolling operational SLOs and city circuit breakers. Phase 9 adds severity-based authority handoff, acknowledgement, and resolution targets with idempotent escalation history and scheduled city governance. Bengaluru remains the only reporting-enabled jurisdiction; Mumbai, Delhi, Chennai, and Hyderabad remain planned.
 
-The server rejects missing, unknown, stale, or disabled city selections and conservatively checks real geocoding results against the selected city before consuming AI/provider resources. Internal ownership is distinct from authority delivery: all current profiles use a verified official portal with manual submission and explicitly deny direct API support. Opening a portal is not recorded as a submission. Existing records without city metadata are constrained to Bengaluru rather than treated globally. See the [Phase 1 registry specification](docs/MULTI_CITY_PHASE_1.md), [Phase 2 intake specification](docs/MULTI_CITY_PHASE_2.md), [Phase 3 routing specification](docs/MULTI_CITY_PHASE_3.md), [Phase 4 handoff specification](docs/MULTI_CITY_PHASE_4.md), and [Phase 5 operations specification](docs/MULTI_CITY_PHASE_5.md).
+The server rejects missing, unknown, stale, disabled, paused, over-capacity, or pilot-ineligible city submissions before provider resources are consumed. Internal ownership is distinct from authority delivery: all current profiles use a verified official portal with manual submission and explicitly deny direct API support. Existing records without city metadata remain constrained to Bengaluru. See the [Phase 1 registry specification](docs/MULTI_CITY_PHASE_1.md), [Phase 2 intake specification](docs/MULTI_CITY_PHASE_2.md), [Phase 3 routing specification](docs/MULTI_CITY_PHASE_3.md), [Phase 4 handoff specification](docs/MULTI_CITY_PHASE_4.md), [Phase 5 operations specification](docs/MULTI_CITY_PHASE_5.md), [Phase 6 activation specification](docs/MULTI_CITY_PHASE_6.md), [Phase 7 rollout specification](docs/MULTI_CITY_PHASE_7.md), [Phase 8 operational safety specification](docs/MULTI_CITY_PHASE_8.md), and [Phase 9 authority governance specification](docs/MULTI_CITY_PHASE_9.md).
 
 ## Evaluation And Testing
 
@@ -727,6 +755,12 @@ npm run verify:multi-city-phase2
 npm run verify:multi-city-phase3
 npm run verify:multi-city-phase4
 npm run verify:multi-city-phase5
+npm run verify:multi-city-phase6
+npm run verify:multi-city-phase7
+npm run verify:multi-city-phase8
+npm run verify:multi-city-phase9
+npm run verify:production-integration
+npm run verify:ai-service-auth
 npm run verify:accessibility
 npm run verify:resilience
 npm run verify:load
@@ -748,8 +782,8 @@ Recommended evaluator scenarios:
 
 | Scenario | Expected Result |
 | --- | --- |
-| Register with email OTP | OTP email sent, account created after correct OTP |
-| Forgot password | OTP sent only to registered email, reset success message shown |
+| Register with email OTP | Citizen OTP email sent, account created after correct OTP; public Admin registration is refused |
+| Forgot password | Outward response does not reveal account existence; a registered email receives the OTP and reset succeeds |
 | Image-only fallen tree | AI guesses tree/obstruction from image evidence |
 | Fallen tree plus live wire text | Threat becomes Critical, routing escalates, broadcast/incident can trigger |
 | Drainage complaint in rainy weather | Weather note appears in complaint detail and PDF |
@@ -759,7 +793,7 @@ Recommended evaluator scenarios:
 
 ## Deployment
 
-The recommended production layout uses two Render services plus MongoDB Atlas.
+The recommended production layout uses two Render services plus MongoDB Atlas. The Node service uses `npm ci` so deployment installs exactly the dependency versions in `package-lock.json`.
 
 | Service | Runtime | Responsibility |
 | --- | --- | --- |
@@ -775,12 +809,14 @@ For the main web service:
 
 ```bash
 AI_SERVICE_URL=https://your-ai-service.onrender.com
+AI_SERVICE_TOKEN=use_the_same_32_plus_character_random_value_on_both_services
+AI_SERVICE_TIMEOUT_MS=30000
 ALLOW_ROLE_TOKEN_ISSUE=false
 BBMP_EMAIL_TO=comm@bbmp.gov.in
 CORS_ORIGIN=https://your-web-service.onrender.com
 DEEPGRAM_API_KEY=your_key
 DEEPGRAM_MODEL=nova-3
-JWT_SECRET=strong_secret
+JWT_SECRET=generate_at_least_32_random_characters
 MONGODB_URI=your_mongodb_uri
 SMTP_FAMILY=4
 SMTP_FROM=your_email@gmail.com
@@ -797,6 +833,10 @@ ZENSERP_API_KEY=your_key
 ZENSERP_BASE_URL=https://app.zenserp.com/api/v2/search
 ZENSERP_ENABLED=true
 ZENSERP_MONTHLY_LIMIT=48
+
+AUTHORITY_ADAPTER=disabled
+AUTHORITY_TIMEOUT_MS=8000
+AUTHORITY_MAX_ATTEMPTS=3
 ```
 
 For the AI service:
@@ -807,14 +847,18 @@ EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
 VISION_MODEL_NAME=sentence-transformers/clip-ViT-B-32
 VISION_CONFIDENCE_THRESHOLD=0.24
 VISION_MAX_IMAGE_BYTES=2097152
+AI_MAX_REQUEST_BYTES=4194304
+AI_SERVICE_REQUIRE_TOKEN=true
+AI_SERVICE_TOKEN=use_the_same_32_plus_character_random_value_on_both_services
 ```
 
 ## Production Checklist
 
 Before pushing live:
 
-- Use a strong `JWT_SECRET`.
+- Use a random `JWT_SECRET` containing at least 32 characters.
 - Confirm `ALLOW_ROLE_TOKEN_ISSUE=false`.
+- Confirm public registration creates only Citizen accounts; create the first Admin through a trusted seed/one-off process and grant later Admin access from protected user management.
 - Verify MongoDB Atlas IP/network access.
 - Verify MongoDB transactions are supported; Phase 4 rejects partial complaint/audit writes.
 - Run `npm run verify:smtp`.
@@ -822,6 +866,7 @@ Before pushing live:
 - Confirm `SMTP_FAMILY=4` if Gmail IPv6 fails with `ENETUNREACH`.
 - Confirm `CORS_ORIGIN` matches the production frontend URL exactly.
 - Confirm `AI_SERVICE_URL` points to the deployed Flask service.
+- Set the same random, 32+ character `AI_SERVICE_TOKEN` on both Render services and keep `AI_SERVICE_REQUIRE_TOKEN=true` on Flask.
 - Run `npm run evaluate:ai`, `npm run verify:dataset`, `npm run verify:decision-audit`, and `python3 scripts/evaluateAiService.py`.
 - Submit a high-risk test complaint and verify routing, broadcast, incident command, and PDF.
 - Confirm Weatherstack and Zenserp quota behavior with limited/free keys.
@@ -829,7 +874,9 @@ Before pushing live:
 - Run `npm run migrate:cities`, review unknown city values, and use `--apply` only from a trusted one-off production shell.
 - Confirm `/api/cities` exposes only Bengaluru as reporting-enabled before enabling the Phase 2 selector.
 - Confirm every `/api/cities/:slug/routing-units` profile reports `manual_portal` and no direct API support until a connector is formally verified.
-- Run `npm run verify:release` and record any manual Phase 8 accessibility/load findings.
+- Confirm Admin complaint, audit, email, authority-ticket, and reconciliation actions are rejected outside the Admin's assigned operations cities.
+- Confirm the authority SLA scheduler is running and that overdue handoff, acknowledgement, and resolution cases appear in the assigned-city dashboard.
+- Run `npm run verify:release` and `npm run verify:production-integration`, then record any manual accessibility, mobile-layout, provider, and failover findings.
 - Replace fallback department unit metadata with real authority contacts when available.
 - Remove or rotate any seed/demo credentials before final deployment.
 
@@ -874,6 +921,8 @@ curl https://your-ai-service.onrender.com/health
 
 Then confirm `AI_SERVICE_URL` in the main service.
 
+If Express receives HTTP 401 from the AI service, confirm both Render services use the exact same `AI_SERVICE_TOKEN` without quotes, spaces, or hidden newlines.
+
 ### CLIP Model Is Slow Or Unavailable
 
 The first CLIP load can be slow. If `sentence-transformers` or `torch` cannot load, the AI service falls back to deterministic image features. This is expected and should not block complaint submission.
@@ -891,16 +940,19 @@ The reset endpoint clears complaints, incident command records, and emergency br
 - API keys and SMTP credentials must stay server-side.
 - JWT secret must be unique and strong in production.
 - Production startup refuses the local demo JWT secret when `NODE_ENV=production`.
+- Production startup also rejects short JWT secrets, missing MongoDB/AI/SMTP configuration, invalid provider URLs or numeric limits, unsafe direct role-token issuing, and invalid authority-adapter configuration.
+- Public self-registration is Citizen-only. Existing Admins can promote accounts through protected user management, which invalidates prior sessions.
 - OTPs are hashed before storage and expire after 5 minutes.
 - Password reset responses do not reveal whether an email is registered.
 - Complaint image payloads are size-limited and MIME-validated before AI analysis.
 - Complaint text, location, voice transcript, and audio uploads are length/size-limited server-side.
-- Authority and close-contact email endpoints verify complaint ownership before sending.
+- Complaint details, status/review actions, decision-audit exports, authority tickets, reconciliation, and email endpoints enforce both permissions and assigned operational-city boundaries.
 - User-management actions preserve at least one active admin account.
 - Password resets, role changes, account disabling, and account deletion invalidate stale registered-user sessions.
 - Nearby community-proof feeds expose only sanitized incident summaries, not reporter identities, descriptions, or evidence.
 - Local area email alerts are opt-in and use saved area names instead of continuous background tracking.
 - External provider failures do not expose API keys to the frontend, PDFs, stored complaints, or logs.
+- Production AI POST endpoints require a shared server-only token and reject payloads larger than 4 MB; the Render health probe remains public.
 
 ## Roadmap
 

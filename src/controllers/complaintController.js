@@ -10,6 +10,8 @@ const { buildComplaintIntelligence } = require("../services/civicIntelligenceSer
 const { areaMatchesLocation } = require("../utils/localAlerts");
 const { applyHumanReview, getReviewOptions, normalizeReviewPayload } = require("../services/humanReviewService");
 const { appendDecisionEvent, decisionSnapshot, recordAiBaseline, verifyDecisionAudit } = require("../services/decisionAuditService");
+const { recordOperationalEventSafely } = require("../services/cityOperationalHealthService");
+const { assertOperationalCityAccess, canAccessComplaint, ownsComplaint } = require("../services/operationalAccessService");
 
 const ALLOWED_STATUSES = ["Queued", "Needs Review", "In Progress", "Resolved", "Escalated"];
 const ALLOWED_VERIFICATION_VOTES = new Set(["still_there", "resolved", "got_worse"]);
@@ -64,21 +66,6 @@ function summarizeVerification(votes = []) {
   return summary;
 }
 
-function canAccessComplaint(auth, complaint) {
-  return Boolean(
-    auth.permissions.includes("view_dashboard") ||
-      (auth.userId && complaint.reporterUserId === String(auth.userId)) ||
-      complaint.reporterUsername === auth.username
-  );
-}
-
-function ownsComplaint(auth, complaint) {
-  return Boolean(
-    (auth.userId && complaint.reporterUserId === String(auth.userId)) ||
-      complaint.reporterUsername === auth.username
-  );
-}
-
 function normalizeResolutionImage(payload) {
   const imageBase64 = String(payload.imageBase64 || "").trim();
   const imageMimeType = String(payload.imageMimeType || "").trim().toLowerCase();
@@ -117,8 +104,34 @@ async function canSubmitCommunityProof(auth, complaint) {
 }
 
 async function analyzeAndCreateComplaint(req, res, next) {
+  const startedAt = Date.now();
   try {
     const { analysis, complaint } = await createComplaintFromPayload(req.auth, req.body);
+
+    const degraded = Boolean(analysis.aiMeta?.fallbackUsed || analysis.aiMeta?.visionFallbackUsed || analysis.cv?.fallbackUsed);
+    await recordOperationalEventSafely({
+      cityId: complaint.cityId,
+      domain: "complaint_processing",
+      outcome: degraded ? "degraded" : "success",
+      eventType: degraded ? "complaint_created_degraded" : "complaint_created",
+      complaintId: complaint._id,
+      latencyMs: Date.now() - startedAt,
+      metadata: {
+        aiFallbackUsed: Boolean(analysis.aiMeta?.fallbackUsed),
+        visionFallbackUsed: Boolean(analysis.aiMeta?.visionFallbackUsed || analysis.cv?.fallbackUsed)
+      }
+    });
+    if (analysis.broadcast?.triggered) {
+      const broadcastStatus = String(analysis.broadcast.status || "created");
+      await recordOperationalEventSafely({
+        cityId: complaint.cityId,
+        domain: "broadcast_delivery",
+        outcome: broadcastStatus === "sent" ? "success" : broadcastStatus === "failed" ? "failure" : "degraded",
+        eventType: `broadcast_${broadcastStatus}`,
+        complaintId: complaint._id,
+        metadata: { providerStatus: broadcastStatus, recipientCount: analysis.broadcast.recipientCount }
+      });
+    }
 
     res.json({
       nlp: analysis.nlp,
@@ -135,6 +148,7 @@ async function analyzeAndCreateComplaint(req, res, next) {
         registryVersion: complaint.cityRegistryVersion
       },
       routing: analysis.routing,
+      rollout: analysis.rollout,
       broadcast: analysis.broadcast,
       incidentCommand: analysis.incidentCommand,
       incidentCluster: analysis.incidentCluster || complaint.incidentCluster,
@@ -157,6 +171,15 @@ async function analyzeAndCreateComplaint(req, res, next) {
       complaintId: complaint._id
     });
   } catch (error) {
+    if (Number(error.statusCode || 500) >= 500 && !String(error.code || "").startsWith("CITY_")) {
+      await recordOperationalEventSafely({
+        cityId: req.body?.cityId,
+        domain: "complaint_processing",
+        outcome: "failure",
+        eventType: "complaint_processing_failed",
+        latencyMs: Date.now() - startedAt
+      });
+    }
     next(error);
   }
 }
@@ -234,6 +257,7 @@ async function updateComplaintStatus(req, res, next) {
       error.statusCode = 404;
       throw error;
     }
+    assertOperationalCityAccess(req.auth, complaint);
 
     let statusOrPriorityChanged = false;
 
@@ -321,6 +345,7 @@ async function acknowledgeAlert(req, res, next) {
       error.statusCode = 404;
       throw error;
     }
+    assertOperationalCityAccess(req.auth, complaint);
 
     const note = `Alert acknowledged by ${req.auth.username}`;
     if (!complaint.alerts.includes(note)) {
@@ -553,6 +578,7 @@ async function submitHumanReview(req, res, next) {
       if (session && typeof query.session === "function") query = query.session(session);
       const complaint = await query;
       if (!complaint) throw createHttpError("Complaint not found", 404);
+      assertOperationalCityAccess(req.auth, complaint);
 
       const review = normalizeReviewPayload(req.body, complaint);
       if (Number(complaint.__v || 0) !== review.expectedVersion) {

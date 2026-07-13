@@ -1,3 +1,4 @@
+import hmac
 import os
 
 from flask import Flask, jsonify, request
@@ -199,7 +200,27 @@ def normalize_complaint_transcript(transcript):
     return normalized, summary
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("AI_MAX_REQUEST_BYTES", str(4 * 1024 * 1024)))
 CORS(app)
+
+AI_SERVICE_TOKEN = os.getenv("AI_SERVICE_TOKEN", "").strip()
+AI_SERVICE_REQUIRE_TOKEN = os.getenv("AI_SERVICE_REQUIRE_TOKEN", "false").lower() == "true"
+if AI_SERVICE_REQUIRE_TOKEN and len(AI_SERVICE_TOKEN) < 32:
+    raise RuntimeError("AI_SERVICE_TOKEN must contain at least 32 characters when service authentication is required.")
+
+
+@app.before_request
+def require_service_token():
+    if request.method == "POST" and AI_SERVICE_REQUIRE_TOKEN:
+        supplied = request.headers.get("X-Urban-Pulse-Service-Token", "")
+        if not hmac.compare_digest(supplied, AI_SERVICE_TOKEN):
+            return jsonify({"error": "Service authentication required."}), 401
+    return None
+
+
+@app.errorhandler(413)
+def request_too_large(_error):
+    return jsonify({"error": "AI request payload is too large."}), 413
 
 
 @app.get("/health")

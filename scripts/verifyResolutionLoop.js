@@ -36,6 +36,7 @@ async function main() {
     type: "Garbage Overflow",
     priority: "Low",
     status: "In Progress",
+    cityId: "bengaluru",
     location: "Indiranagar",
     ai: { categoryId: "garbage" },
     statusHistory: [],
@@ -51,7 +52,7 @@ async function main() {
   await invoke(updateComplaintStatus, {
     params: { id: complaint._id },
     body: { status: "Resolved", note: "Cleanup completed." },
-    auth: { username: "admin@example.com", userId: "admin-1", permissions: ["update_complaint_status", "view_dashboard"] }
+    auth: { role: "Admin", username: "admin@example.com", userId: "admin-1", operationalCityIds: ["bengaluru"], permissions: ["update_complaint_status", "view_dashboard"] }
   });
   assert.equal(complaint.status, "Resolved");
   assert.equal(complaint.resolution.phase, "awaiting_citizen_verification");

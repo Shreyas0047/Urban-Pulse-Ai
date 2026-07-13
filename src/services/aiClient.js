@@ -1089,16 +1089,21 @@ function analyzeComplaintLocally(payload) {
   };
 }
 
+function aiServiceHeaders() {
+  return {
+    "Content-Type": "application/json",
+    ...(env.aiServiceToken ? { "X-Urban-Pulse-Service-Token": env.aiServiceToken } : {})
+  };
+}
+
 async function analyzeComplaint(payload) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), env.aiServiceTimeoutMs);
 
   try {
     const response = await fetch(`${env.aiServiceUrl}/analyze`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: aiServiceHeaders(),
       body: JSON.stringify(payload),
       signal: controller.signal
     });
@@ -1192,7 +1197,7 @@ async function compareResolutionEvidence(payload) {
   try {
     const response = await fetch(`${env.aiServiceUrl}/compare-resolution`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: aiServiceHeaders(),
       body: JSON.stringify(payload),
       signal: controller.signal
     });
@@ -1215,9 +1220,7 @@ async function processTranscriptWithAi(payload) {
   try {
     const response = await fetch(`${env.aiServiceUrl}/transcript/process`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: aiServiceHeaders(),
       body: JSON.stringify(payload),
       signal: controller.signal
     });
@@ -1359,9 +1362,7 @@ async function resolveChatIntent(payload) {
   try {
     const response = await fetch(`${env.aiServiceUrl}/chat`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: aiServiceHeaders(),
       body: JSON.stringify(payload),
       signal: controller.signal
     });

@@ -4,6 +4,11 @@ const IncidentCluster = require("../models/IncidentCluster");
 const EmergencyBroadcast = require("../models/EmergencyBroadcast");
 const DecisionAuditEvent = require("../models/DecisionAuditEvent");
 const AuthorityTicket = require("../models/AuthorityTicket");
+const CityActivationReview = require("../models/CityActivationReview");
+const CityRolloutState = require("../models/CityRolloutState");
+const CityDailyIntake = require("../models/CityDailyIntake");
+const CityOperationalEvent = require("../models/CityOperationalEvent");
+const CityOperationalIncident = require("../models/CityOperationalIncident");
 const { buildAiObservability } = require("../services/aiObservabilityService");
 const User = require("../models/User");
 const { buildCivicDigitalTwin } = require("../services/civicDigitalTwinService");
@@ -134,7 +139,7 @@ function cityDataFilter(cityId) {
 }
 
 function resolveOperationsCity(value, allowedCityIds = [DEFAULT_CITY_ID]) {
-  const cityId = String(value || DEFAULT_CITY_ID).trim().toLowerCase();
+  const cityId = String(value || allowedCityIds[0] || DEFAULT_CITY_ID).trim().toLowerCase();
   if (!CITY_IDS.includes(cityId)) {
     const error = new Error("Choose a registered operations city.");
     error.statusCode = 400;
@@ -283,13 +288,23 @@ async function resetDashboard(req, res, next) {
       error.statusCode = 403;
       throw error;
     }
+    if (cityRegistry.cities.some((city) => city.slug !== DEFAULT_CITY_ID && city.reportingEnabled)) {
+      const error = new Error("Dashboard reset is disabled while an additional city is active.");
+      error.statusCode = 409;
+      throw error;
+    }
     await Promise.all([
       Complaint.deleteMany({}),
       IncidentCommand.deleteMany({}),
       IncidentCluster.deleteMany({}),
       EmergencyBroadcast.deleteMany({}),
       DecisionAuditEvent.collection.deleteMany({}),
-      AuthorityTicket.deleteMany({})
+      AuthorityTicket.deleteMany({}),
+      CityActivationReview.deleteMany({}),
+      CityRolloutState.deleteMany({}),
+      CityDailyIntake.deleteMany({}),
+      CityOperationalEvent.deleteMany({}),
+      CityOperationalIncident.deleteMany({})
     ]);
     await getDashboard(req, res, next);
   } catch (error) {

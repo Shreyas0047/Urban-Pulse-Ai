@@ -155,8 +155,12 @@ function eventsToCsv(events) {
   return [fields.join(","), ...events.map((event) => fields.map((field) => csvCell(field === "complaintId" ? String(event.complaintId) : event[field])).join(","))].join("\n");
 }
 
-async function aggregateCorrectionFeedback() {
-  const rows = await DecisionAuditEvent.find({ eventType: "human_review" }).sort({ occurredAt: -1 }).limit(MAX_EXPORT_EVENTS).lean();
+async function aggregateCorrectionFeedback({ complaintIds = null } = {}) {
+  const filter = {
+    eventType: "human_review",
+    ...(Array.isArray(complaintIds) ? { complaintId: { $in: complaintIds } } : {})
+  };
+  const rows = await DecisionAuditEvent.find(filter).sort({ occurredAt: -1 }).limit(MAX_EXPORT_EVENTS).lean();
   const summary = { totalReviews: rows.length, confirmed: 0, corrected: 0, insufficientEvidence: 0, changedFields: {}, categoryCorrections: {} };
   rows.forEach((event) => {
     if (event.outcome === "confirmed") summary.confirmed += 1;

@@ -21,6 +21,17 @@ const complaintSchema = new mongoose.Schema(
     },
     cityRegistryVersion: { type: String, required: true, default: "1.0.0", trim: true },
     cityAssignedAt: { type: Date, required: true, default: Date.now },
+    rollout: {
+      mode: { type: String, enum: ["pilot", "open"], default: "open" },
+      pilotPercentage: { type: Number, default: null },
+      cohortBucket: { type: Number, default: null },
+      rolloutStateId: { type: mongoose.Schema.Types.ObjectId, ref: "CityRolloutState", default: null },
+      dailyReservation: {
+        utcDate: { type: String, default: "" },
+        used: { type: Number, default: null },
+        limit: { type: Number, default: 0 }
+      }
+    },
     assignedAuthority: { type: String, default: "Gram Panchayat" },
     routing: {
       cityId: String,

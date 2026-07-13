@@ -39,7 +39,7 @@ async function resolveReportingCity({ cityId, registryVersion } = {}, { model = 
   if (String(city.registryVersion || "") !== cityRegistry.registryVersion) {
     throw cityError("City availability is being updated. Try again shortly.", 503, "CITY_REGISTRY_UNAVAILABLE");
   }
-  if (!city.reportingEnabled || city.rolloutStatus !== "active") {
+  if (!city.reportingEnabled || !["active", "pilot"].includes(city.rolloutStatus)) {
     throw cityError(`${city.name} reporting is not open yet. Choose an available city.`, 409, "CITY_REPORTING_UNAVAILABLE");
   }
   return city;
@@ -50,7 +50,7 @@ function validateRegistry(registry = cityRegistry) {
   const cities = Array.isArray(registry.cities) ? registry.cities : [];
   const slugs = new Set();
   if (!registry.registryVersion) errors.push("Registry version is required.");
-  if (registry.defaultCityId !== "bengaluru") errors.push("Phase 1 default city must remain Bengaluru.");
+  if (registry.defaultCityId !== "bengaluru") errors.push("The default city must remain Bengaluru.");
   if (cities.length < 5) errors.push("At least five cities must be defined.");
   cities.forEach((city, index) => {
     const prefix = `cities[${index}]`;
@@ -59,7 +59,7 @@ function validateRegistry(registry = cityRegistry) {
     slugs.add(city.slug);
     if (!city.name || !city.state || city.countryCode !== "IN" || !city.timezone || !city.defaultAuthority) errors.push(`${prefix} is missing identity or authority metadata.`);
     if (!ROLLOUT_STATUSES.has(city.rolloutStatus)) errors.push(`${prefix}.rolloutStatus is invalid.`);
-    if (city.reportingEnabled && city.rolloutStatus !== "active") errors.push(`${prefix} must be active when reporting is enabled.`);
+    if (city.reportingEnabled && !["active", "pilot"].includes(city.rolloutStatus)) errors.push(`${prefix} must be active or pilot when reporting is enabled.`);
     if (!city.officialChannels?.sourceUrl || !city.officialChannels?.verifiedAt) errors.push(`${prefix} is missing official-channel provenance.`);
     if (!/^https:\/\//.test(String(city.officialChannels?.sourceUrl || "")) || !/^https:\/\//.test(String(city.officialChannels?.portalUrl || ""))) errors.push(`${prefix} official URLs must use HTTPS.`);
     if (Number.isNaN(Date.parse(city.officialChannels?.verifiedAt))) errors.push(`${prefix}.officialChannels.verifiedAt is invalid.`);
@@ -77,10 +77,8 @@ function validateRegistry(registry = cityRegistry) {
     });
   });
   if (!slugs.has(registry.defaultCityId)) errors.push("Default city is not present in the registry.");
-  const enabled = cities.filter((city) => city.reportingEnabled);
-  if (enabled.length !== 1 || enabled[0]?.slug !== registry.defaultCityId) {
-    errors.push("The current rollout requires only the default Bengaluru jurisdiction to accept reporting.");
-  }
+  const defaultCity = cities.find((city) => city.slug === registry.defaultCityId);
+  if (!defaultCity?.reportingEnabled || defaultCity?.rolloutStatus !== "active") errors.push("The default Bengaluru jurisdiction must remain active for reporting.");
   return errors;
 }
 

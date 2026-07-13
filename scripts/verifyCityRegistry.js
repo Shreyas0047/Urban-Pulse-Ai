@@ -1,6 +1,7 @@
 const assert = require("assert");
 const CityRegistry = require("../src/models/CityRegistry");
 const Complaint = require("../src/models/Complaint");
+const CityRolloutState = require("../src/models/CityRolloutState");
 const registry = require("../shared/cityRegistry.json");
 const {
   DEFAULT_CITY_ID,
@@ -135,9 +136,13 @@ async function main() {
 
   const originalFind = CityRegistry.find;
   const originalFindOne = CityRegistry.findOne;
+  const originalRolloutFind = CityRolloutState.find;
+  const originalRolloutFindOne = CityRolloutState.findOne;
   try {
     CityRegistry.find = () => ({ sort() { return this; }, async lean() { return documents; } });
     CityRegistry.findOne = ({ slug }) => ({ async lean() { return documents.find((city) => city.slug === slug) || null; } });
+    CityRolloutState.find = () => ({ async lean() { return []; } });
+    CityRolloutState.findOne = () => ({ async lean() { return null; } });
     let listPayload;
     await getCities({}, { json(value) { listPayload = value; } }, (error) => { throw error; });
     assert.equal(listPayload.cities.length, 5);
@@ -150,6 +155,8 @@ async function main() {
   } finally {
     CityRegistry.find = originalFind;
     CityRegistry.findOne = originalFindOne;
+    CityRolloutState.find = originalRolloutFind;
+    CityRolloutState.findOne = originalRolloutFindOne;
   }
 
   console.log(JSON.stringify({

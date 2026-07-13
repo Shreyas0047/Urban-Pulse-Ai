@@ -11,6 +11,7 @@ const { fetchWeatherSnapshot } = require("./weatherService");
 const { recordAiBaseline } = require("./decisionAuditService");
 const { extractAreaIntelligence } = require("../utils/localAlerts");
 const { resolveReportingCity } = require("./cityRegistryService");
+const { assertCityIntakeAllowed } = require("./cityRolloutService");
 
 const LOW_CONFIDENCE_THRESHOLD = 0.52;
 const GEOCODE_TIMEOUT_MS = 3500;
@@ -323,6 +324,8 @@ async function createComplaintFromPayload(auth, payload) {
     throw createHttpError("Add a complaint description, voice transcript, or upload an image before submitting.", 400);
   }
 
+  const rollout = await assertCityIntakeAllowed(city, auth);
+
   const locationContext = `${location}, ${city.name}, ${city.state}, India`;
   const geocoded = await geocodeLocation(locationContext, city.center);
   const mapLocation = { lat: geocoded.lat, lng: geocoded.lng };
@@ -460,6 +463,7 @@ async function createComplaintFromPayload(auth, payload) {
     citySource: "user_selected",
     cityRegistryVersion: city.registryVersion,
     cityAssignedAt: new Date(),
+    rollout,
     assignedAuthority: routing.authority,
     routing,
     mapLocation,
@@ -631,6 +635,7 @@ async function createComplaintFromPayload(auth, payload) {
         triggered: false
       };
   analysis.incidentCommand = incidentSummary;
+  analysis.rollout = rollout;
   analysis.explainability = {
     explanation,
     confidenceLabel: getConfidenceLabel(confidenceScore),

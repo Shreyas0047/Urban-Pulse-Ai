@@ -77,6 +77,10 @@ const complaintsWorkspace = document.getElementById("complaintsWorkspace");
 const adminView = document.getElementById("adminView");
 const adminWorkspace = document.getElementById("adminWorkspace");
 const adminActionCenter = document.getElementById("adminActionCenter");
+const cityActivationPanel = document.getElementById("cityActivationPanel");
+const cityRolloutPanel = document.getElementById("cityRolloutPanel");
+const cityOperationalHealthPanel = document.getElementById("cityOperationalHealthPanel");
+const authorityGovernancePanel = document.getElementById("authorityGovernancePanel");
 const alertsWorkspace = document.getElementById("alertsWorkspace");
 const alertsList = document.getElementById("alertsList");
 const alertSearchInput = document.getElementById("alertSearchInput");
@@ -175,13 +179,6 @@ document.addEventListener("keydown", (event) => {
 });
 let lastSubmittedReport = null;
 let localAlertPreferences = null;
-let audioEnabled = false;
-let audioContext = null;
-let masterGain = null;
-let effectsGain = null;
-let ambienceGain = null;
-let ambienceTimer = null;
-let ambienceStarted = false;
 let emailProgressTimer = null;
 let currentVoiceAudioData = null;
 let currentVoiceAudioObjectUrl = null;
@@ -369,18 +366,23 @@ function selectedCity() {
 
 function updateComplaintSubmitAvailability() {
   const canSubmit = Boolean(authState?.permissions?.includes("submit_complaint"));
-  complaintSubmitBtn.disabled = !canSubmit || !cityRegistryState.ready || !selectedCity()?.reportingEnabled;
+  const city = selectedCity();
+  const intakeAvailable = city?.reportingEnabled && ["open", "pilot"].includes(city?.rollout?.mode || "open");
+  complaintSubmitBtn.disabled = !canSubmit || !cityRegistryState.ready || !intakeAvailable;
 }
 
 function renderSelectedCity() {
   const city = selectedCity();
-  const isAvailable = Boolean(city?.reportingEnabled);
+  const rolloutMode = city?.rollout?.mode || (city?.reportingEnabled ? "open" : "closed");
+  const isAvailable = Boolean(city?.reportingEnabled && ["open", "pilot"].includes(rolloutMode));
   citySelectionCard.dataset.state = isAvailable ? "available" : cityRegistryState.ready ? "planned" : "loading";
   citySelectionTitle.textContent = city ? `${city.name}, ${city.state}` : "Select a city";
   citySelectionStatus.textContent = city
     ? isAvailable
-      ? `Reporting is open for this jurisdiction. Default civic authority: ${city.defaultAuthority}.`
-      : "This city is planned but reporting is not open yet."
+      ? `${rolloutMode === "pilot" ? "Pilot reporting is open for eligible users." : "Reporting is open for this jurisdiction."} Default civic authority: ${city.defaultAuthority}.`
+      : rolloutMode === "paused"
+        ? city.rollout?.reason || "Complaint intake is temporarily paused."
+        : "This city is planned but reporting is not open yet."
     : "Choose an available city before entering complaint details.";
   const portalUrl = city?.officialChannels?.portalUrl || "";
   cityOfficialChannel.hidden = !portalUrl;
@@ -399,7 +401,7 @@ function populateCityScopedControls() {
       .join("");
     dashboardCityFilter.value = operationsCities.some((city) => city.id === previousOperationsCity)
       ? previousOperationsCity
-      : cityRegistryState.defaultCityId;
+      : operationsCities[0]?.id || cityRegistryState.defaultCityId;
   }
   if (localAlertCity) {
     const availableCities = cityRegistryState.cities.filter((city) => city.reportingEnabled);
@@ -430,10 +432,12 @@ async function initializeCitySelector() {
       cities
     };
     reportCitySelect.innerHTML = cities.map((city) => {
-      const suffix = city.reportingEnabled ? "" : " - Coming soon";
-      return `<option value="${escapeHtml(city.id)}" ${city.reportingEnabled ? "" : "disabled"}>${escapeHtml(city.name)}, ${escapeHtml(city.state)}${suffix}</option>`;
+      const mode = city.rollout?.mode || (city.reportingEnabled ? "open" : "closed");
+      const available = city.reportingEnabled && ["open", "pilot"].includes(mode);
+      const suffix = mode === "pilot" ? " - Pilot" : mode === "paused" ? " - Paused" : available ? "" : " - Coming soon";
+      return `<option value="${escapeHtml(city.id)}" ${available ? "" : "disabled"}>${escapeHtml(city.name)}, ${escapeHtml(city.state)}${suffix}</option>`;
     }).join("");
-    const defaultCity = cities.find((city) => city.id === data.defaultCityId && city.reportingEnabled) || cities.find((city) => city.reportingEnabled);
+    const defaultCity = cities.find((city) => city.id === data.defaultCityId && city.reportingEnabled && ["open", "pilot"].includes(city.rollout?.mode || "open")) || cities.find((city) => city.reportingEnabled && ["open", "pilot"].includes(city.rollout?.mode || "open"));
     reportCitySelect.value = defaultCity?.id || "";
     reportCitySelect.disabled = !defaultCity;
     populateCityScopedControls();
@@ -614,236 +618,6 @@ function startOtpCountdown(email, purpose = "register", expiresInSeconds = 300, 
   }, 1000);
 }
 
-function ensureAudioContext() {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) {
-    return null;
-  }
-
-  if (!audioContext) {
-    audioContext = new AudioContextClass();
-    masterGain = audioContext.createGain();
-    masterGain.gain.value = 0.32;
-    masterGain.connect(audioContext.destination);
-
-    effectsGain = audioContext.createGain();
-    effectsGain.gain.value = 0.9;
-    effectsGain.connect(masterGain);
-
-    ambienceGain = audioContext.createGain();
-    ambienceGain.gain.value = 0.12;
-    ambienceGain.connect(masterGain);
-  }
-
-  return audioContext;
-}
-
-async function unlockAudio() {
-  const context = ensureAudioContext();
-  if (!context || !audioEnabled) {
-    return;
-  }
-
-  if (context.state === "suspended") {
-    try {
-      await context.resume();
-    } catch (_error) {
-      return;
-    }
-  }
-
-  if (!ambienceStarted) {
-    ambienceStarted = true;
-    playReadyChime();
-    startAmbientLoop();
-  }
-}
-
-function playReadyChime() {
-  if (!audioContext || audioContext.state !== "running" || !effectsGain) {
-    return;
-  }
-
-  const now = audioContext.currentTime + 0.02;
-  [
-    { frequency: 523.25, duration: 0.08, volume: 0.12, startOffset: 0 },
-    { frequency: 659.25, duration: 0.1, volume: 0.1, startOffset: 0.06 },
-    { frequency: 783.99, duration: 0.12, volume: 0.09, startOffset: 0.12 }
-  ].forEach((tone) => {
-    createTone({
-      frequency: tone.frequency,
-      type: "triangle",
-      start: now + tone.startOffset,
-      duration: tone.duration,
-      volume: tone.volume,
-      destination: effectsGain,
-      attack: 0.01,
-      release: 0.12
-    });
-  });
-}
-
-function stopAmbientLoop() {
-  if (ambienceTimer) {
-    window.clearTimeout(ambienceTimer);
-    ambienceTimer = null;
-  }
-
-  if (ambienceGain && audioContext) {
-    const now = audioContext.currentTime;
-    ambienceGain.gain.cancelScheduledValues(now);
-    ambienceGain.gain.setValueAtTime(ambienceGain.gain.value, now);
-    ambienceGain.gain.linearRampToValueAtTime(0.0001, now + 0.6);
-  }
-}
-
-function createTone({ frequency, type = "sine", start, duration, volume, destination, attack = 0.02, release = 0.2, detune = 0 }) {
-  const oscillator = audioContext.createOscillator();
-  const gainNode = audioContext.createGain();
-
-  oscillator.type = type;
-  oscillator.frequency.setValueAtTime(frequency, start);
-  oscillator.detune.setValueAtTime(detune, start);
-  gainNode.gain.setValueAtTime(0.0001, start);
-  gainNode.gain.linearRampToValueAtTime(volume, start + attack);
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, start + duration + release);
-
-  oscillator.connect(gainNode);
-  gainNode.connect(destination);
-  oscillator.start(start);
-  oscillator.stop(start + duration + release + 0.02);
-}
-
-function scheduleAmbientPhrase(startTime) {
-  const padChords = [
-    [196, 246.94, 293.66],
-    [174.61, 220, 261.63],
-    [196, 246.94, 329.63],
-    [164.81, 220, 261.63]
-  ];
-  const leadNotes = [392, 440, 392, 349.23, 329.63, 349.23, 293.66, 329.63];
-
-  padChords.forEach((chord, index) => {
-    const chordStart = startTime + index * 4;
-    chord.forEach((frequency, voiceIndex) => {
-      createTone({
-        frequency,
-        type: "triangle",
-        start: chordStart,
-        duration: 3.4,
-        volume: 0.045 - voiceIndex * 0.008,
-        destination: ambienceGain,
-        attack: 0.55,
-        release: 0.9,
-        detune: voiceIndex === 0 ? -6 : voiceIndex === 2 ? 5 : 0
-      });
-    });
-  });
-
-  leadNotes.forEach((frequency, index) => {
-    createTone({
-      frequency,
-      type: "sine",
-      start: startTime + 0.8 + index * 1.9,
-      duration: 0.52,
-      volume: 0.024,
-      destination: ambienceGain,
-      attack: 0.04,
-      release: 0.22
-    });
-  });
-}
-
-function startAmbientLoop() {
-  if (!audioEnabled || !ensureAudioContext()) {
-    return;
-  }
-
-  const context = audioContext;
-  const phraseLengthMs = 16000;
-  const phraseLeadSeconds = 0.15;
-
-  ambienceGain.gain.cancelScheduledValues(context.currentTime);
-  ambienceGain.gain.setValueAtTime(ambienceGain.gain.value || 0.0001, context.currentTime);
-  ambienceGain.gain.linearRampToValueAtTime(0.14, context.currentTime + 0.8);
-
-  const scheduleNext = () => {
-    if (!audioEnabled || !audioContext || audioContext.state !== "running") {
-      ambienceTimer = null;
-      return;
-    }
-
-    scheduleAmbientPhrase(audioContext.currentTime + phraseLeadSeconds);
-    ambienceTimer = window.setTimeout(scheduleNext, phraseLengthMs - 400);
-  };
-
-  if (ambienceTimer) {
-    window.clearTimeout(ambienceTimer);
-  }
-
-  scheduleNext();
-}
-
-function playButtonSound(button) {
-  if (!audioEnabled || !ensureAudioContext() || audioContext.state !== "running" || !button) {
-    return;
-  }
-
-  const now = audioContext.currentTime;
-  const soundType = button.classList.contains("danger-button")
-    ? "danger"
-    : button.id === "complaintSubmitBtn"
-      ? "submit"
-      : button.id === "generatePdfBtn"
-        ? "pdf"
-        : button.classList.contains("secondary-button")
-          ? "secondary"
-          : button.classList.contains("chip-button") || button.classList.contains("login-button")
-            ? "navigation"
-            : "default";
-
-  const soundProfiles = {
-    default: [
-      { frequency: 520, duration: 0.05, volume: 0.08, type: "triangle", attack: 0.01, release: 0.08 },
-      { frequency: 780, duration: 0.04, volume: 0.045, type: "sine", attack: 0.01, release: 0.08, startOffset: 0.025 }
-    ],
-    secondary: [
-      { frequency: 430, duration: 0.05, volume: 0.07, type: "triangle", attack: 0.01, release: 0.09 },
-      { frequency: 645, duration: 0.03, volume: 0.035, type: "sine", attack: 0.01, release: 0.08, startOffset: 0.018 }
-    ],
-    submit: [
-      { frequency: 523.25, duration: 0.07, volume: 0.08, type: "triangle", attack: 0.01, release: 0.1 },
-      { frequency: 659.25, duration: 0.07, volume: 0.07, type: "triangle", attack: 0.01, release: 0.1, startOffset: 0.045 },
-      { frequency: 783.99, duration: 0.08, volume: 0.06, type: "sine", attack: 0.012, release: 0.12, startOffset: 0.09 }
-    ],
-    pdf: [
-      { frequency: 392, duration: 0.06, volume: 0.075, type: "triangle", attack: 0.01, release: 0.1 },
-      { frequency: 587.33, duration: 0.06, volume: 0.055, type: "triangle", attack: 0.01, release: 0.1, startOffset: 0.04 }
-    ],
-    navigation: [
-      { frequency: 610, duration: 0.045, volume: 0.065, type: "sine", attack: 0.01, release: 0.07 },
-      { frequency: 915, duration: 0.03, volume: 0.035, type: "sine", attack: 0.01, release: 0.06, startOffset: 0.02 }
-    ],
-    danger: [
-      { frequency: 240, duration: 0.07, volume: 0.085, type: "square", attack: 0.005, release: 0.08 },
-      { frequency: 180, duration: 0.08, volume: 0.05, type: "triangle", attack: 0.005, release: 0.1, startOffset: 0.05 }
-    ]
-  };
-
-  soundProfiles[soundType].forEach((tone) => {
-    createTone({
-      frequency: tone.frequency,
-      type: tone.type,
-      start: now + (tone.startOffset || 0),
-      duration: tone.duration,
-      volume: tone.volume,
-      destination: effectsGain,
-      attack: tone.attack,
-      release: tone.release
-    });
-  });
-}
-
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -949,6 +723,12 @@ function openAuthOverlay(mode = "login") {
   const isRegisterMode = mode === "register";
   const isResetMode = mode === "reset-password";
   const usesOtp = isRegisterMode || isResetMode;
+  const adminRoleOption = authRoleSelect?.querySelector('option[value="Admin"]');
+  if (adminRoleOption) {
+    adminRoleOption.disabled = isRegisterMode;
+    adminRoleOption.hidden = isRegisterMode;
+  }
+  if (isRegisterMode && authRoleSelect) authRoleSelect.value = "Citizen";
   const roleField = authRoleSelect?.closest("label");
   if (roleField) {
     roleField.hidden = isResetMode;
@@ -985,7 +765,7 @@ function openAuthOverlay(mode = "login") {
       ? "Choose Admin or Citizen, then login with your email and password."
       : isResetMode
         ? "Enter your registered email and new password, then request an OTP to reset securely."
-        : "Choose Admin or Citizen, enter your email and password, then request an OTP to complete registration.";
+        : "Create a Citizen account with your email and password, then request an OTP to complete registration.";
 
   window.requestAnimationFrame(() => window.UrbanPulseLiquidGlass?.refresh());
   focusDialog(authOverlay);
@@ -1659,10 +1439,7 @@ async function requestPasswordResetOtp() {
     if (data.deliveryStatus !== "sent") {
       passwordResetOtpIssued = false;
       clearOtpTimer();
-      const message =
-        data.deliveryStatus === "skipped"
-          ? "No OTP was sent. Use the exact email address used during registration."
-          : data.message || "OTP was not sent. Please try again.";
+      const message = data.message || "OTP was not sent. Please try again.";
       setOtpTimerMessage(message, "expired");
       authMessage.textContent = message;
       setDashboardMessage(message, "error");
@@ -2655,6 +2432,7 @@ function buildSubmittedReport(payload, result) {
     reporter: authState?.username || "Citizen",
     role: authState?.role || "Citizen",
     city: result.city || { id: "bengaluru", name: "Bengaluru" },
+    rollout: result.rollout || null,
     location: payload.location || "Unknown",
     textComplaint: payload.textComplaint || "No complaint text provided.",
     aiDescription: finalAiDescription,
@@ -2794,6 +2572,7 @@ function renderRoutingSummary(complaint) {
     `${routing.department || "Response department"} · ${routing.unit || "Response unit"}`,
     `${routing.ward || "Ward not inferred"} · ${routing.escalationLevel || "Routine"} · ${workload}`,
     `Handoff: ${routing.handoff?.mode === "manual_portal" ? "official portal, manual submission" : routing.handoff?.mode || "not configured"}`,
+    complaint.rollout?.mode ? `Intake: ${complaint.rollout.mode}${complaint.rollout.pilotPercentage ? ` (${complaint.rollout.pilotPercentage}% pilot)` : ""}` : "",
     routing.routingReason || ""
   ]
     .filter(Boolean)
@@ -3134,6 +2913,14 @@ function renderAuthorityTicketPanel(complaint, ticket = null, canReview = false)
   const canRetry = ticket && ["failed", "not_configured"].includes(ticket.status) && (!ticket.nextRetryAt || new Date(ticket.nextRetryAt) <= new Date());
   const portalUrl = safeExternalHref(ticket?.portalUrl || complaint.routing?.handoff?.portalUrl || complaint.routing?.portalUrl);
   const awaitingManualSubmission = ticket?.adapter === "manual_portal" && ticket.status === "awaiting_manual_submission";
+  const slaStage = ticket?.sla?.currentStage || "";
+  const slaDueAt = slaStage === "handoff"
+    ? ticket?.sla?.handoffDueAt
+    : slaStage === "acknowledgement"
+      ? ticket?.sla?.acknowledgementDueAt
+      : slaStage === "resolution"
+        ? ticket?.sla?.resolutionDueAt
+        : null;
   return `
     <section class="detail-support-card authority-ticket-card" data-authority-ticket-id="${escapeHtml(ticket?._id || "")}" data-complaint-id="${escapeHtml(complaint._id)}">
       <div class="human-review-heading">
@@ -3141,6 +2928,7 @@ function renderAuthorityTicketPanel(complaint, ticket = null, canReview = false)
         <span>${escapeHtml(ticket?.ticketCode || "Not submitted")}</span>
       </div>
       <p>${ticket ? `${escapeHtml(String(ticket.adapter).replace(/_/g, " "))} · ${ticket.attemptCount || 0} confirmed attempt(s)${ticket.externalReference ? `<br>External reference: ${escapeHtml(ticket.externalReference)}` : ""}${ticket.lastError ? `<br>${escapeHtml(ticket.lastError)}` : ""}` : "Prepare a tracked authority handoff after reviewing the AI decision."}</p>
+      ${ticket?.sla ? `<p class="authority-sla-summary" data-status="${escapeHtml(ticket.sla.status || "on_track")}">${escapeHtml(authorityStageLabel(slaStage))}: ${ticket.sla.status === "completed" ? "completed" : `${escapeHtml(ticket.sla.status || "on track")}${slaDueAt ? ` · due ${escapeHtml(formatDateTime(slaDueAt))}` : ""}`}${ticket.sla.escalationLevel ? ` · escalation level ${escapeHtml(ticket.sla.escalationLevel)}` : ""}</p>` : ""}
       ${awaitingManualSubmission ? `
         <form class="authority-manual-form">
           <div class="authority-manual-heading">
@@ -3493,6 +3281,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
       const data = await apiRequest(`/api/complaints/${authorityPanel.dataset.complaintId}/authority-ticket`, { method: "POST", body: "{}" });
       setDashboardMessage(data.message, data.authorityTicket?.status === "submitted" ? "success" : "info");
       await openComplaintDetail(authorityPanel.dataset.complaintId);
+      await loadDashboard();
     } catch (error) { setDashboardMessage(error.message, "error"); event.currentTarget.disabled = false; }
   });
   authorityPanel?.querySelector(".authority-ticket-retry")?.addEventListener("click", async (event) => {
@@ -3501,6 +3290,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
       const data = await apiRequest(`/api/complaints/${authorityPanel.dataset.complaintId}/authority-ticket/retry`, { method: "POST", body: "{}" });
       setDashboardMessage(data.message, data.authorityTicket?.status === "submitted" ? "success" : "info");
       await openComplaintDetail(authorityPanel.dataset.complaintId);
+      await loadDashboard();
     } catch (error) { setDashboardMessage(error.message, "error"); event.currentTarget.disabled = false; }
   });
   authorityPanel?.querySelector(".authority-manual-form")?.addEventListener("submit", async (event) => {
@@ -3527,7 +3317,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
     try {
       event.currentTarget.disabled = true;
       const status = authorityPanel.querySelector(".authority-ticket-status")?.value;
-      const note = window.prompt("Optional authority status note:") || "";
+      const note = window.prompt("Authority response evidence note (at least 10 characters):") || "";
       const data = await apiRequest(`/api/authority-tickets/${authorityPanel.dataset.authorityTicketId}/reconcile`, { method: "PATCH", body: JSON.stringify({ status, note }) });
       setDashboardMessage(data.message, "success");
       await openComplaintDetail(authorityPanel.dataset.complaintId);
@@ -3759,6 +3549,7 @@ async function generatePdfReport(report, options = {}) {
   drawRow("Reported By", report.reporter);
   drawRow("User Role", report.role);
   drawRow("City", report.city?.name || "Bengaluru");
+  drawRow("Intake Rollout", report.rollout?.mode ? `${report.rollout.mode}${report.rollout.pilotPercentage ? ` · ${report.rollout.pilotPercentage}% pilot` : ""}` : "Open");
   drawRow("Routed Authority", report.assignedAuthority);
   drawRow("Assigned Unit", report.routing?.unit || report.routing?.department || "Not recorded");
   drawRow("Handoff Mode", report.routing?.handoff?.mode === "manual_portal" ? "Official portal (manual submission)" : report.routing?.handoff?.mode || "Not configured");
@@ -4273,6 +4064,317 @@ function renderLocalAlertPreferences(preferences = null) {
       `
     )
     .join("");
+}
+
+function renderCityActivationReadiness(readiness) {
+  if (!cityActivationPanel || !readiness) return;
+  const evidence = readiness.evidence || {};
+  const status = String(readiness.status || "blocked").replace(/_/g, " ");
+  const checks = Array.isArray(readiness.checks) ? readiness.checks : [];
+  cityActivationPanel.innerHTML = `
+    <div class="city-activation-head">
+      <div><p class="eyebrow">City activation gate</p><h3>${escapeHtml(readiness.city?.name || "City")} readiness</h3></div>
+      <span class="city-activation-status" data-status="${escapeHtml(readiness.status || "blocked")}">${escapeHtml(status)}</span>
+    </div>
+    <p class="helper-text">Readiness approval does not enable reporting. Activation still requires a reviewed registry change and deployment.</p>
+    <div class="city-readiness-checks">
+      ${checks.map((item) => `<article data-passed="${item.passed ? "true" : "false"}"><span>${item.passed ? "Pass" : "Blocked"}</span><strong>${escapeHtml(item.label)}</strong><p>${escapeHtml(item.detail)}</p></article>`).join("")}
+    </div>
+    <form class="city-activation-evidence-form">
+      <label class="toggle-row"><input type="checkbox" class="activation-portal-test" ${evidence.portalSubmissionTestedAt ? "checked" : ""}><span>Portal submission tested in staging</span></label>
+      <label class="toggle-row"><input type="checkbox" class="activation-dashboard-test" ${evidence.dashboardIsolationTestedAt ? "checked" : ""}><span>Dashboard isolation tested</span></label>
+      <label class="toggle-row"><input type="checkbox" class="activation-alert-test" ${evidence.alertIsolationTestedAt ? "checked" : ""}><span>Alert isolation tested</span></label>
+      <label>Reconciliation owner<input class="activation-owner" type="text" maxlength="120" required value="${escapeHtml(evidence.reconciliationOwner || "")}" placeholder="Responsible operations team"></label>
+      <label class="activation-note-field">Operational evidence note<textarea class="activation-note" minlength="20" maxlength="1000" required placeholder="Describe the test case, result, and evidence location.">${escapeHtml(evidence.note || "")}</textarea></label>
+      <div class="city-activation-actions">
+        <button type="submit" class="secondary-button activation-evidence-save">Save evidence</button>
+        <button type="button" class="primary-button activation-approve" ${readiness.status === "ready" ? "" : "disabled"}>Approve readiness</button>
+      </div>
+    </form>`;
+
+  const form = cityActivationPanel.querySelector(".city-activation-evidence-form");
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = form.querySelector(".activation-evidence-save");
+    try {
+      button.disabled = true;
+      const data = await apiRequest(`/api/cities/${readiness.city.id}/activation-readiness/evidence`, {
+        method: "PUT",
+        body: JSON.stringify({
+          portalSubmissionTested: form.querySelector(".activation-portal-test").checked,
+          dashboardIsolationTested: form.querySelector(".activation-dashboard-test").checked,
+          alertIsolationTested: form.querySelector(".activation-alert-test").checked,
+          reconciliationOwner: form.querySelector(".activation-owner").value.trim(),
+          note: form.querySelector(".activation-note").value.trim()
+        })
+      });
+      setDashboardMessage(data.message, data.readiness?.status === "ready" ? "success" : "info");
+      renderCityActivationReadiness(data.readiness);
+    } catch (error) {
+      setDashboardMessage(error.message, "error");
+      button.disabled = false;
+    }
+  });
+  form.querySelector(".activation-approve").addEventListener("click", async (event) => {
+    try {
+      event.currentTarget.disabled = true;
+      const data = await apiRequest(`/api/cities/${readiness.city.id}/activation-readiness/approve`, { method: "POST", body: "{}" });
+      setDashboardMessage(data.message, "success");
+      renderCityActivationReadiness(data.readiness);
+    } catch (error) {
+      setDashboardMessage(error.message, "error");
+      event.currentTarget.disabled = false;
+    }
+  });
+}
+
+async function loadCityActivationReadiness(operationsScope) {
+  if (!cityActivationPanel) return;
+  if (!authState?.permissions?.includes("update_complaint_status") || !operationsScope?.id) {
+    cityActivationPanel.innerHTML = "";
+    cityActivationPanel.hidden = true;
+    return;
+  }
+  cityActivationPanel.hidden = false;
+  cityActivationPanel.innerHTML = `<p class="helper-text">Checking ${escapeHtml(operationsScope.name || "city")} activation readiness...</p>`;
+  try {
+    const data = await apiRequest(`/api/cities/${operationsScope.id}/activation-readiness`, { method: "GET" });
+    renderCityActivationReadiness(data.readiness);
+  } catch (error) {
+    cityActivationPanel.innerHTML = `<p class="decision-audit-warning">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function renderCityRollout(rollout) {
+  if (!cityRolloutPanel || !rollout) return;
+  const history = Array.isArray(rollout.history) ? rollout.history : [];
+  cityRolloutPanel.innerHTML = `
+    <div class="city-activation-head">
+      <div><p class="eyebrow">Controlled rollout</p><h3>${escapeHtml(rollout.cityName || "City")} intake</h3></div>
+      <span class="city-activation-status" data-status="${escapeHtml(rollout.mode)}">${escapeHtml(rollout.mode)}</span>
+    </div>
+    <p class="helper-text">${rollout.todayUsed || 0} intake reservation(s) today${rollout.dailyComplaintLimit ? ` of ${rollout.dailyComplaintLimit}` : " · no daily cap"}. Pilot access uses a stable user cohort.</p>
+    ${rollout.pilotStartedAt ? `<p class="helper-text">Pilot observation started ${escapeHtml(formatDateTime(rollout.pilotStartedAt))}; at least 24 hours are required before open rollout.</p>` : ""}
+    ${rollout.configurationStale ? `<p class="decision-audit-warning">The rollout configuration is stale. Intake remains blocked until readiness is reviewed again.</p>` : ""}
+    <form class="city-rollout-form">
+      <label>Mode<select class="rollout-mode"><option value="closed" ${rollout.mode === "closed" ? "selected" : ""}>Closed</option><option value="pilot" ${rollout.mode === "pilot" ? "selected" : ""}>Pilot</option><option value="open" ${rollout.mode === "open" ? "selected" : ""}>Open</option><option value="paused" ${rollout.mode === "paused" ? "selected" : ""}>Paused</option></select></label>
+      <label>Pilot percentage<input class="rollout-percentage" type="number" min="1" max="100" value="${escapeHtml(rollout.pilotPercentage || 10)}"></label>
+      <label>Daily intake limit <span>(0 = unlimited)</span><input class="rollout-daily-limit" type="number" min="0" max="100000" value="${escapeHtml(rollout.dailyComplaintLimit || 0)}"></label>
+      <label class="rollout-reason-field">Change reason<textarea class="rollout-reason" minlength="10" maxlength="500" required placeholder="Explain the rollout decision or incident response."></textarea></label>
+      <div class="city-activation-actions">
+        <button type="submit" class="primary-button rollout-save">Apply rollout change</button>
+        <button type="button" class="danger-button rollout-pause" ${rollout.mode === "paused" ? "disabled" : ""}>Pause intake now</button>
+      </div>
+    </form>
+    <div class="rollout-history">
+      ${history.map((entry) => `<article><strong>${escapeHtml(entry.fromMode)} &rarr; ${escapeHtml(entry.toMode)}</strong><span>${escapeHtml(formatDateTime(entry.changedAt))}</span><p>${escapeHtml(entry.reason)}</p></article>`).join("") || `<p class="helper-text">No persisted rollout changes yet.</p>`}
+    </div>`;
+
+  const form = cityRolloutPanel.querySelector(".city-rollout-form");
+  const submitChange = async (mode) => {
+    const reason = form.querySelector(".rollout-reason").value.trim();
+    if (reason.length < 10) throw new Error("Enter a rollout reason of at least 10 characters.");
+    const data = await apiRequest(`/api/cities/${rollout.cityId}/rollout`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        mode,
+        pilotPercentage: Number(form.querySelector(".rollout-percentage").value),
+        dailyComplaintLimit: Number(form.querySelector(".rollout-daily-limit").value),
+        reason
+      })
+    });
+    setDashboardMessage(data.message, mode === "paused" ? "info" : "success");
+    await Promise.all([
+      loadCityRollout({ id: rollout.cityId, name: rollout.cityName }),
+      loadCityOperationalHealth({ id: rollout.cityId, name: rollout.cityName })
+    ]);
+    await initializeCitySelector().catch(() => {});
+  };
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = form.querySelector(".rollout-save");
+    try {
+      button.disabled = true;
+      await submitChange(form.querySelector(".rollout-mode").value);
+    } catch (error) {
+      setDashboardMessage(error.message, "error");
+      button.disabled = false;
+    }
+  });
+  form.querySelector(".rollout-pause").addEventListener("click", async (event) => {
+    try {
+      event.currentTarget.disabled = true;
+      await submitChange("paused");
+    } catch (error) {
+      setDashboardMessage(error.message, "error");
+      event.currentTarget.disabled = false;
+    }
+  });
+}
+
+async function loadCityRollout(operationsScope) {
+  if (!cityRolloutPanel) return;
+  if (!authState?.permissions?.includes("update_complaint_status") || !operationsScope?.id) {
+    cityRolloutPanel.innerHTML = "";
+    cityRolloutPanel.hidden = true;
+    return;
+  }
+  cityRolloutPanel.hidden = false;
+  cityRolloutPanel.innerHTML = `<p class="helper-text">Loading ${escapeHtml(operationsScope.name || "city")} rollout controls...</p>`;
+  try {
+    const data = await apiRequest(`/api/cities/${operationsScope.id}/rollout`, { method: "GET" });
+    renderCityRollout(data.rollout);
+  } catch (error) {
+    cityRolloutPanel.innerHTML = `<p class="decision-audit-warning">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function operationalRate(value) {
+  return `${Math.round(Number(value || 0) * 100)}%`;
+}
+
+function renderCityOperationalHealth(health) {
+  if (!cityOperationalHealthPanel || !health) return;
+  const evaluations = Array.isArray(health.evaluations) ? health.evaluations : [];
+  const incidents = Array.isArray(health.incidents) ? health.incidents : [];
+  const activeIncidents = incidents.filter((incident) => incident.status !== "resolved");
+  const labels = {
+    complaint_failure_rate: "Complaint processing failures",
+    ai_degradation_rate: "AI degraded or fallback results",
+    authority_failure_rate: "Authority delivery failures",
+    broadcast_failure_rate: "Broadcast delivery failures"
+  };
+  cityOperationalHealthPanel.innerHTML = `
+    <div class="city-activation-head">
+      <div><p class="eyebrow">Operational safeguards</p><h3>${escapeHtml(health.city?.name || "City")} service health</h3></div>
+      <span class="city-activation-status" data-status="${escapeHtml(health.status || "healthy")}">${escapeHtml(String(health.status || "healthy").replace(/_/g, " "))}</span>
+    </div>
+    <p class="helper-text">Rolling ${escapeHtml(health.windowMinutes || 15)} minute measurements. A city pauses only when both its minimum sample and failure threshold are reached.</p>
+    <div class="city-operational-metrics">
+      ${evaluations.map((item) => `
+        <article data-breached="${item.breached ? "true" : "false"}">
+          <span>${escapeHtml(item.sampleSize)} / ${escapeHtml(item.minimumSamples)} samples</span>
+          <strong>${escapeHtml(labels[item.trigger] || item.trigger)}</strong>
+          <p>${escapeHtml(operationalRate(item.observedRate))} observed · ${escapeHtml(operationalRate(item.threshold))} limit</p>
+        </article>`).join("")}
+    </div>
+    <div class="city-operational-incidents">
+      ${activeIncidents.map((incident) => `
+        <article class="operational-incident" data-status="${escapeHtml(incident.status)}">
+          <div><strong>${escapeHtml(labels[incident.trigger] || incident.trigger)}</strong><span>${escapeHtml(incident.status)}</span></div>
+          <p>${escapeHtml(incident.reason)}</p>
+          <small>Opened ${escapeHtml(formatDateTime(incident.openedAt))}</small>
+          ${incident.status === "open" ? `
+            <form class="operational-incident-ack" data-incident-id="${escapeHtml(incident.id)}">
+              <label>Investigation note<textarea minlength="10" maxlength="500" required placeholder="Record what was checked and the recovery decision."></textarea></label>
+              <button type="submit" class="primary-button">Acknowledge incident</button>
+            </form>` : `<p class="helper-text">Acknowledged: ${escapeHtml(incident.acknowledgementNote || "Recovery review pending.")}</p>`}
+        </article>`).join("") || `<p class="helper-text">No active operational incidents.</p>`}
+    </div>`;
+
+  cityOperationalHealthPanel.querySelectorAll(".operational-incident-ack").forEach((form) => {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button");
+      const note = form.querySelector("textarea").value.trim();
+      try {
+        button.disabled = true;
+        const data = await apiRequest(`/api/cities/${health.city.id}/operational-incidents/${form.dataset.incidentId}/acknowledge`, {
+          method: "POST",
+          body: JSON.stringify({ note })
+        });
+        setDashboardMessage(data.message, "success");
+        await Promise.all([
+          loadCityOperationalHealth(health.city),
+          loadCityRollout(health.city)
+        ]);
+      } catch (error) {
+        setDashboardMessage(error.message, "error");
+        button.disabled = false;
+      }
+    });
+  });
+}
+
+async function loadCityOperationalHealth(operationsScope) {
+  if (!cityOperationalHealthPanel) return;
+  if (!authState?.permissions?.includes("update_complaint_status") || !operationsScope?.id) {
+    cityOperationalHealthPanel.innerHTML = "";
+    cityOperationalHealthPanel.hidden = true;
+    return;
+  }
+  cityOperationalHealthPanel.hidden = false;
+  cityOperationalHealthPanel.innerHTML = `<p class="helper-text">Loading ${escapeHtml(operationsScope.name || "city")} service health...</p>`;
+  try {
+    const data = await apiRequest(`/api/cities/${operationsScope.id}/operational-health`, { method: "GET" });
+    renderCityOperationalHealth(data.operationalHealth);
+  } catch (error) {
+    cityOperationalHealthPanel.innerHTML = `<p class="decision-audit-warning">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function authorityStageLabel(stage) {
+  return ({ handoff: "Authority handoff", acknowledgement: "Authority acknowledgement", resolution: "Authority resolution" })[stage] || "Authority response";
+}
+
+function renderAuthorityGovernance(governance) {
+  if (!authorityGovernancePanel || !governance) return;
+  const counts = governance.counts || {};
+  const tickets = Array.isArray(governance.tickets) ? governance.tickets : [];
+  authorityGovernancePanel.innerHTML = `
+    <div class="city-activation-head">
+      <div><p class="eyebrow">Authority response governance</p><h3>${escapeHtml(governance.city?.name || "City")} response deadlines</h3></div>
+      <button type="button" class="secondary-button authority-sla-evaluate">Evaluate now</button>
+    </div>
+    <p class="helper-text">Deadlines begin from recorded platform events. A portal handoff is not treated as submitted until its official reference is recorded.</p>
+    <div class="authority-governance-metrics">
+      <article><span>Total tracked</span><strong>${escapeHtml(counts.total || 0)}</strong></article>
+      <article><span>On track</span><strong>${escapeHtml(counts.onTrack || 0)}</strong></article>
+      <article data-status="overdue"><span>Overdue</span><strong>${escapeHtml(counts.overdue || 0)}</strong></article>
+      <article data-status="critical"><span>Level 3</span><strong>${escapeHtml(counts.level3 || 0)}</strong></article>
+    </div>
+    <div class="authority-governance-list">
+      ${tickets.map((ticket) => `
+        <article class="authority-governance-ticket" data-level="${escapeHtml(ticket.escalationLevel)}">
+          <div><strong>${escapeHtml(ticket.ticketCode)}</strong><span>Level ${escapeHtml(ticket.escalationLevel)}</span></div>
+          <h4>${escapeHtml(authorityStageLabel(ticket.stage))} overdue</h4>
+          <p>${escapeHtml(ticket.department)} · ${escapeHtml(ticket.severity)} priority</p>
+          <small>Due ${escapeHtml(formatDateTime(ticket.dueAt))}${ticket.externalReference ? ` · Ref ${escapeHtml(ticket.externalReference)}` : ""}</small>
+          <button type="button" class="secondary-button authority-governance-open" data-complaint-id="${escapeHtml(ticket.complaintId)}">Open complaint</button>
+        </article>`).join("") || `<p class="helper-text">No authority response deadlines are overdue.</p>`}
+    </div>`;
+
+  authorityGovernancePanel.querySelector(".authority-sla-evaluate")?.addEventListener("click", async (event) => {
+    try {
+      event.currentTarget.disabled = true;
+      const data = await apiRequest(`/api/cities/${governance.city.id}/authority-governance/evaluate`, { method: "POST", body: "{}" });
+      setDashboardMessage(data.message, "success");
+      renderAuthorityGovernance(data.authorityGovernance);
+    } catch (error) {
+      setDashboardMessage(error.message, "error");
+      event.currentTarget.disabled = false;
+    }
+  });
+  authorityGovernancePanel.querySelectorAll(".authority-governance-open").forEach((button) => {
+    button.addEventListener("click", () => openComplaintDetail(button.dataset.complaintId));
+  });
+}
+
+async function loadAuthorityGovernance(operationsScope) {
+  if (!authorityGovernancePanel) return;
+  if (!authState?.permissions?.includes("update_complaint_status") || !operationsScope?.id) {
+    authorityGovernancePanel.innerHTML = "";
+    authorityGovernancePanel.hidden = true;
+    return;
+  }
+  authorityGovernancePanel.hidden = false;
+  authorityGovernancePanel.innerHTML = `<p class="helper-text">Loading ${escapeHtml(operationsScope.name || "city")} authority deadlines...</p>`;
+  try {
+    const data = await apiRequest(`/api/cities/${operationsScope.id}/authority-governance`, { method: "GET" });
+    renderAuthorityGovernance(data.authorityGovernance);
+  } catch (error) {
+    authorityGovernancePanel.innerHTML = `<p class="decision-audit-warning">${escapeHtml(error.message)}</p>`;
+  }
 }
 
 function parseLocalAlertAreasInput() {
@@ -5014,6 +5116,12 @@ async function loadDashboard() {
     saveAuthState();
     applyPermissionState();
   }
+  await Promise.all([
+    loadCityActivationReadiness(data.operationsScope),
+    loadCityRollout(data.operationsScope),
+    loadCityOperationalHealth(data.operationsScope),
+    loadAuthorityGovernance(data.operationsScope)
+  ]);
 }
 
 function resetComposer({ clearDraft = true, preserveCity = true } = {}) {
@@ -5480,7 +5588,7 @@ form.addEventListener("submit", async (event) => {
     const formData = new FormData(event.target);
     const payload = Object.fromEntries(formData.entries());
     const city = selectedCity();
-    if (!cityRegistryState.ready || !city?.reportingEnabled) {
+    if (!cityRegistryState.ready || !city?.reportingEnabled || !["open", "pilot"].includes(city?.rollout?.mode || "open")) {
       throw new Error("Choose an available city before submitting the complaint.");
     }
     payload.cityId = city.id;

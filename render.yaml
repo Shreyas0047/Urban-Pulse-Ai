@@ -5,7 +5,7 @@ services:
     plan: free
     rootDir: ai_service
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: gunicorn --workers 1 --threads 4 --timeout 120 app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
@@ -15,12 +15,18 @@ services:
         value: "0.24"
       - key: VISION_MAX_IMAGE_BYTES
         value: "2097152"
+      - key: AI_MAX_REQUEST_BYTES
+        value: "4194304"
+      - key: AI_SERVICE_REQUIRE_TOKEN
+        value: "true"
+      - key: AI_SERVICE_TOKEN
+        sync: false
 
   - name: smart-community-web
     type: web
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -31,6 +37,10 @@ services:
         generateValue: true
       - key: AI_SERVICE_URL
         sync: false
+      - key: AI_SERVICE_TOKEN
+        sync: false
+      - key: AI_SERVICE_TIMEOUT_MS
+        value: "30000"
       - key: DEEPGRAM_API_KEY
         sync: false
       - key: DEEPGRAM_MODEL

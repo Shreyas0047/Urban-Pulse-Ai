@@ -80,7 +80,8 @@ async function main() {
   assert.match(complaintSubmitBlock, /payload\.cityRegistryVersion = cityRegistryState\.registryVersion/);
   assert.ok(complaintSubmitBlock.indexOf("payload.cityRegistryVersion") < complaintSubmitBlock.indexOf('apiRequest("/api/analyze-complaint"'));
   assert.match(browser, /cityId: reportCitySelect\?\.value/);
-  assert.match(browser, /city\.reportingEnabled \? "" : "disabled"/);
+  assert.match(browser, /const available = city\.reportingEnabled && \["open", "pilot"\]\.includes\(mode\)/);
+  assert.match(browser, /\$\{available \? "" : "disabled"\}/);
 
   console.log(JSON.stringify({
     passed: true,
