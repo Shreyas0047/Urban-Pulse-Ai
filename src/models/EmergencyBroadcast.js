@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const emergencyBroadcastSchema = new mongoose.Schema(
   {
     complaintId: { type: mongoose.Schema.Types.ObjectId, ref: "Complaint", required: true, index: true },
+    cityId: { type: String, required: true, default: "bengaluru", lowercase: true, trim: true, index: true },
+    cityName: { type: String, required: true, default: "Bengaluru", trim: true },
     categoryId: { type: String, required: true, trim: true },
     issueType: { type: String, required: true, trim: true },
     severity: { type: String, required: true, trim: true },
@@ -50,5 +52,6 @@ const emergencyBroadcastSchema = new mongoose.Schema(
 
 emergencyBroadcastSchema.index({ status: 1, createdAt: -1 });
 emergencyBroadcastSchema.index({ severity: 1, categoryId: 1 });
+emergencyBroadcastSchema.index({ cityId: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model("EmergencyBroadcast", emergencyBroadcastSchema);

@@ -571,6 +571,10 @@
                 <p class="eyebrow">Admin</p>
                 <h2>Manage complaint status, alerts, and user access.</h2>
               </div>
+              <label id="operationsCityField" class="operations-city-field">
+                <span>Operations city</span>
+                <select id="dashboardCityFilter" aria-label="Operations city"></select>
+              </label>
             </div>
 
             <div class="ops-grid">
@@ -747,6 +751,7 @@
                   <span>Send me local alert emails</span>
                 </label>
                 <div class="list-toolbar">
+                  <select id="localAlertCity" aria-label="Local alert city"></select>
                   <input type="text" id="localAlertAreasInput" placeholder="Whitefield, Indiranagar, KR Puram" maxlength="480" />
                   <select id="localAlertSeverityThreshold">
                     <option value="High">High and Critical</option>

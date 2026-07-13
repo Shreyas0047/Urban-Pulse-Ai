@@ -93,6 +93,7 @@ const civicIntelligencePanel = document.getElementById("civicIntelligencePanel")
 const communityCasesPanel = document.getElementById("communityCasesPanel");
 const localAlertsForm = document.getElementById("localAlertsForm");
 const localAlertsEnabled = document.getElementById("localAlertsEnabled");
+const localAlertCity = document.getElementById("localAlertCity");
 const localAlertAreasInput = document.getElementById("localAlertAreasInput");
 const localAlertSeverityThreshold = document.getElementById("localAlertSeverityThreshold");
 const localAlertAreasList = document.getElementById("localAlertAreasList");
@@ -106,6 +107,8 @@ const complaintSearchInput = document.getElementById("complaintSearchInput");
 const complaintStatusFilter = document.getElementById("complaintStatusFilter");
 const complaintSortSelect = document.getElementById("complaintSortSelect");
 const clearComplaintFiltersBtn = document.getElementById("clearComplaintFiltersBtn");
+const dashboardCityFilter = document.getElementById("dashboardCityFilter");
+const operationsCityField = document.getElementById("operationsCityField");
 const adminInsights = document.getElementById("adminInsights");
 const aiObservabilityPanel = document.getElementById("aiObservabilityPanel");
 const incidentClusterPanel = document.getElementById("incidentClusterPanel");
@@ -241,6 +244,7 @@ function buildDashboardQueryParams() {
   const alertPriority = alertPriorityFilter?.value || "";
   const userSearch = userSearchInput?.value?.trim();
   const userState = userStateFilter?.value || "";
+  const operationsCityId = dashboardCityFilter?.value || cityRegistryState.defaultCityId;
 
   if (complaintSearch) params.set("complaintSearch", complaintSearch);
   if (complaintStatus) params.set("complaintStatus", complaintStatus);
@@ -249,6 +253,7 @@ function buildDashboardQueryParams() {
   if (alertPriority) params.set("alertPriority", alertPriority);
   if (userSearch) params.set("userSearch", userSearch);
   if (userState) params.set("userState", userState);
+  if (authState?.permissions?.includes("view_dashboard") && operationsCityId) params.set("cityId", operationsCityId);
 
   return params.toString();
 }
@@ -383,6 +388,31 @@ function renderSelectedCity() {
   updateComplaintSubmitAvailability();
 }
 
+function populateCityScopedControls() {
+  const previousOperationsCity = dashboardCityFilter?.value;
+  const previousAlertCity = localAlertCity?.value;
+  if (dashboardCityFilter) {
+    const allowedCityIds = authState?.operationalCityIds?.length ? authState.operationalCityIds : [cityRegistryState.defaultCityId];
+    const operationsCities = cityRegistryState.cities.filter((city) => allowedCityIds.includes(city.id));
+    dashboardCityFilter.innerHTML = operationsCities
+      .map((city) => `<option value="${escapeHtml(city.id)}">${escapeHtml(city.name)}${city.reportingEnabled ? "" : " · planned"}</option>`)
+      .join("");
+    dashboardCityFilter.value = operationsCities.some((city) => city.id === previousOperationsCity)
+      ? previousOperationsCity
+      : cityRegistryState.defaultCityId;
+  }
+  if (localAlertCity) {
+    const availableCities = cityRegistryState.cities.filter((city) => city.reportingEnabled);
+    localAlertCity.innerHTML = availableCities
+      .map((city) => `<option value="${escapeHtml(city.id)}">${escapeHtml(city.name)}, ${escapeHtml(city.state)}</option>`)
+      .join("");
+    localAlertCity.value = availableCities.some((city) => city.id === previousAlertCity)
+      ? previousAlertCity
+      : cityRegistryState.defaultCityId;
+  }
+  if (dashboardDataCache.users?.length) renderUserManagement(dashboardDataCache.users);
+}
+
 async function initializeCitySelector() {
   reportCitySelect.disabled = true;
   refreshCitiesBtn.hidden = true;
@@ -406,6 +436,7 @@ async function initializeCitySelector() {
     const defaultCity = cities.find((city) => city.id === data.defaultCityId && city.reportingEnabled) || cities.find((city) => city.reportingEnabled);
     reportCitySelect.value = defaultCity?.id || "";
     reportCitySelect.disabled = !defaultCity;
+    populateCityScopedControls();
     renderSelectedCity();
   } catch (error) {
     cityRegistryState = { ready: false, registryVersion: "", defaultCityId: "", cities: [] };
@@ -1530,6 +1561,7 @@ function applyPermissionState() {
   document.querySelectorAll('.nav-link[href="#mapWorkspace"]').forEach((link) => {
     link.hidden = !hasToken;
   });
+  if (operationsCityField) operationsCityField.hidden = !permissions.includes("view_dashboard");
 
   updateTubelightNav();
 }
@@ -4073,18 +4105,22 @@ function renderUserManagement(users = []) {
             <strong>${escapeHtml(user.username)}</strong>
             <span>${escapeHtml(user.email || "No email recorded")}</span>
             <span>${user.disabledAt ? `Disabled by ${escapeHtml(user.disabledBy || "admin")}` : "Active account"}</span>
+            <span>${user.role === "Admin" ? `Operations: ${escapeHtml((user.operationalCityIds || ["bengaluru"]).map((cityId) => cityRegistryState.cities.find((city) => city.id === cityId)?.name || cityId).join(", "))}` : "No operational dashboard access"}</span>
           </div>
           <div class="user-admin-actions">
             <select class="user-role-select" data-user-id="${user._id}">
               <option value="Citizen" ${user.role === "Citizen" ? "selected" : ""}>Citizen</option>
               <option value="Admin" ${user.role === "Admin" ? "selected" : ""}>Admin</option>
             </select>
+            <select class="user-city-select" data-user-id="${user._id}" aria-label="Operations city for ${escapeHtml(user.username)}" ${user.role === "Admin" ? "" : "disabled"}>
+              ${cityRegistryState.cities.map((city) => `<option value="${escapeHtml(city.id)}" ${(user.operationalCityIds || ["bengaluru"])[0] === city.id ? "selected" : ""}>${escapeHtml(city.name)}</option>`).join("")}
+            </select>
             <button
               type="button"
               class="secondary-button save-user-btn"
               data-user-id="${user._id}"
             >
-              Save Role
+              Save access
             </button>
             <button
               type="button"
@@ -4114,12 +4150,13 @@ function renderUserManagement(users = []) {
     button.addEventListener("click", async () => {
       const userId = button.dataset.userId;
       const select = userManagementList.querySelector(`.user-role-select[data-user-id="${userId}"]`);
+      const citySelect = userManagementList.querySelector(`.user-city-select[data-user-id="${userId}"]`);
 
       try {
         button.disabled = true;
         const result = await apiRequest(`/api/users/${userId}`, {
           method: "PATCH",
-          body: JSON.stringify({ role: select.value })
+          body: JSON.stringify({ role: select.value, operationalCityIds: select.value === "Admin" ? [citySelect.value] : [] })
         });
         setDashboardMessage(result.message, "success");
         await loadDashboard();
@@ -4195,9 +4232,11 @@ function renderLocalAlertPreferences(preferences = null) {
   const enabled = Boolean(preferences?.enabled);
   const areas = Array.isArray(preferences?.areas) ? preferences.areas : [];
   const threshold = preferences?.severityThreshold || "High";
+  const cityId = preferences?.cityId || cityRegistryState.defaultCityId || "bengaluru";
 
   localAlertsEnabled.checked = enabled;
   localAlertSeverityThreshold.value = threshold;
+  if (localAlertCity && [...localAlertCity.options].some((option) => option.value === cityId)) localAlertCity.value = cityId;
   localAlertAreasInput.value = areas.map((area) => area.label || area.normalized || "").filter(Boolean).join(", ");
 
   if (!authState?.token) {
@@ -4206,6 +4245,7 @@ function renderLocalAlertPreferences(preferences = null) {
     saveLocalAlertsBtn.disabled = true;
     localAlertsEnabled.disabled = true;
     localAlertAreasInput.disabled = true;
+    localAlertCity.disabled = true;
     localAlertSeverityThreshold.disabled = true;
     return;
   }
@@ -4213,6 +4253,7 @@ function renderLocalAlertPreferences(preferences = null) {
   saveLocalAlertsBtn.disabled = false;
   localAlertsEnabled.disabled = false;
   localAlertAreasInput.disabled = false;
+  localAlertCity.disabled = false;
   localAlertSeverityThreshold.disabled = false;
 
   if (!areas.length) {
@@ -4226,7 +4267,7 @@ function renderLocalAlertPreferences(preferences = null) {
         <article class="table-row">
           <div>
             <strong>${escapeHtml(area.label || "Saved area")}</strong>
-            <span>${enabled ? `Email alerts enabled for ${escapeHtml(threshold)} severity and above.` : "Saved, but email alerts are disabled."}</span>
+            <span>${enabled ? `Email alerts enabled in ${escapeHtml(preferences?.cityName || "Bengaluru")} for ${escapeHtml(threshold)} severity and above.` : "Saved, but email alerts are disabled."}</span>
           </div>
         </article>
       `
@@ -4273,6 +4314,8 @@ async function saveLocalAlertPreferences(event) {
       method: "PATCH",
       body: JSON.stringify({
         enabled: localAlertsEnabled.checked,
+        cityId: localAlertCity.value,
+        cityRegistryVersion: cityRegistryState.registryVersion,
         severityThreshold: localAlertSeverityThreshold.value,
         areas: parseLocalAlertAreasInput()
       })
@@ -4882,6 +4925,7 @@ function setupDashboardFilters() {
   complaintSearchInput?.addEventListener("input", reload);
   complaintStatusFilter?.addEventListener("change", reload);
   complaintSortSelect?.addEventListener("change", reload);
+  dashboardCityFilter?.addEventListener("change", reload);
   clearComplaintFiltersBtn?.addEventListener("click", () => {
     complaintSearchInput.value = "";
     complaintStatusFilter.value = "";
@@ -4934,6 +4978,9 @@ async function loadDashboard() {
   const query = buildDashboardQueryParams();
   const path = query ? `/api/dashboard?${query}` : "/api/dashboard";
   const data = await apiRequest(path, { method: "GET" });
+  if (data.operationsScope && dashboardCityFilter && dashboardCityFilter.value !== data.operationsScope.id) {
+    dashboardCityFilter.value = data.operationsScope.id;
+  }
   dashboardDataCache = {
     complaints: data.complaints || [],
     users: data.manageableUsers || [],
@@ -4962,7 +5009,8 @@ async function loadDashboard() {
   await loadLocalAlertPreferences();
 
   if (data.auth) {
-    authState = { ...authState, role: data.auth.role, username: data.auth.username, permissions: data.auth.permissions };
+    authState = { ...authState, role: data.auth.role, username: data.auth.username, permissions: data.auth.permissions, operationalCityIds: data.auth.operationalCityIds || [] };
+    if (cityRegistryState.ready) populateCityScopedControls();
     saveAuthState();
     applyPermissionState();
   }

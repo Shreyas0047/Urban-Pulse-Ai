@@ -6,6 +6,7 @@ const checks = [
   ["multi-city-phase2", "node", ["scripts/verifyMultiCityPhase2.js"]],
   ["multi-city-phase3", "node", ["scripts/verifyMultiCityPhase3.js"]],
   ["multi-city-phase4", "node", ["scripts/verifyMultiCityPhase4.js"]],
+  ["multi-city-phase5", "node", ["scripts/verifyMultiCityPhase5.js"]],
   ["human-review", "node", ["scripts/verifyHumanReview.js"]],
   ["decision-audit", "node", ["scripts/verifyDecisionAudit.js"]],
   ["observability", "node", ["scripts/verifyAiObservability.js"]],

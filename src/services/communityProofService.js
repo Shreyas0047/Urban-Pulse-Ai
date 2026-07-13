@@ -25,9 +25,11 @@ function buildCommunityCases(complaints, preferences, currentUserId, currentUser
   const userId = String(currentUserId || "");
   const username = String(currentUsername || "");
   const threshold = preferences.severityThreshold || "High";
+  const cityId = String(preferences.cityId || "bengaluru").trim().toLowerCase();
 
   return (complaints || [])
     .filter((complaint) => {
+      if (String(complaint.cityId || "bengaluru").trim().toLowerCase() !== cityId) return false;
       const isOwner =
         (userId && String(complaint.reporterUserId || "") === userId) ||
         (username && String(complaint.reporterUsername || "") === username);
@@ -46,6 +48,8 @@ function buildCommunityCases(complaints, preferences, currentUserId, currentUser
       const ownSignal = signals.find((entry) => userId && String(entry.userId || "") === userId);
       return {
         id: String(complaint._id || ""),
+        cityId,
+        cityName: String(complaint.cityName || preferences.cityName || "Bengaluru"),
         type: String(complaint.type || "Civic issue"),
         priority: String(complaint.priority || "Medium"),
         status: String(complaint.status || "Queued"),

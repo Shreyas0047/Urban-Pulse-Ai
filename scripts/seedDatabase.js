@@ -32,7 +32,7 @@ async function run() {
   const userCount = await User.countDocuments();
   if (!userCount) {
     await User.insertMany([
-      { username: "admin", passwordHash: hashPassword("admin123"), role: "Admin" },
+      { username: "admin", passwordHash: hashPassword("admin123"), role: "Admin", operationalCityIds: ["bengaluru"] },
       { username: "citizen", passwordHash: hashPassword("citizen123"), role: "Citizen" }
     ]);
   }

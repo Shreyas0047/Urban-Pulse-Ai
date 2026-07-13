@@ -78,8 +78,10 @@ function buildLocationParts({ complaint, routing, areaIntelligence }) {
   ].filter(Boolean);
 }
 
-function localAlertMatch(user, locationParts, priority) {
+function localAlertMatch(user, locationParts, priority, cityId = "bengaluru") {
   const preferences = user.localAlertPreferences || {};
+  const preferenceCityId = String(preferences.cityId || "bengaluru").trim().toLowerCase();
+  if (preferenceCityId !== String(cityId || "bengaluru").trim().toLowerCase()) return null;
   if (!preferences.enabled || !meetsSeverityThreshold(priority, preferences.severityThreshold || "High")) {
     return null;
   }
@@ -99,8 +101,12 @@ async function resolveRecipients({ complaint, routing, recentAreaComplaints, tri
   const { usernames, userIds } = nearbyReporterKeys(recentAreaComplaints);
   const priority = canonicalPriority(complaint.priority);
   const locationParts = buildLocationParts({ complaint, routing, areaIntelligence });
+  const cityId = String(complaint.cityId || "bengaluru").trim().toLowerCase();
+  const adminCityScope = cityId === "bengaluru"
+    ? { $or: [{ operationalCityIds: cityId }, { operationalCityIds: { $exists: false } }, { operationalCityIds: { $size: 0 } }] }
+    : { operationalCityIds: cityId };
   const filters = [
-    { role: "Admin", disabledAt: null }
+    { role: "Admin", disabledAt: null, ...adminCityScope }
   ];
 
   if (usernames.size) {
@@ -125,7 +131,7 @@ async function resolveRecipients({ complaint, routing, recentAreaComplaints, tri
   return users
     .filter((user) => user.email && String(user._id) !== String(triggeredByUserId || ""))
     .map((user) => {
-      const matchedArea = localAlertMatch(user, locationParts, priority);
+      const matchedArea = localAlertMatch(user, locationParts, priority, cityId);
       const isPriorReporter =
         usernames.has(String(user.username || "").trim()) ||
         userIds.has(String(user._id || "").trim());
@@ -163,6 +169,8 @@ async function createEmergencyBroadcast({ complaint, analysis, routing, mapLocat
   const channels = ["in-app", "email", "sms-ready"];
   const broadcast = await EmergencyBroadcast.create({
     complaintId: complaint._id,
+    cityId: complaint.cityId || "bengaluru",
+    cityName: complaint.cityName || "Bengaluru",
     categoryId: analysis.aiMeta?.categoryId || "general",
     issueType: complaint.type,
     severity: canonicalPriority(complaint.priority),
@@ -231,5 +239,7 @@ async function createEmergencyBroadcast({ complaint, analysis, routing, mapLocat
 module.exports = {
   DANGEROUS_CATEGORY_IDS,
   createEmergencyBroadcast,
+  localAlertMatch,
+  resolveRecipients,
   shouldTriggerEmergencyBroadcast
 };

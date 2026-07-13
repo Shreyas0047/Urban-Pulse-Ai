@@ -84,7 +84,7 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | --- | --- | --- |
 | Authentication | Email/password login, role selection, email OTP registration, forgot-password OTP reset | Integrated |
 | Citizen reporting | Text complaint, voice transcript, image upload, location, map preview | Integrated |
-| Multi-city operations | City-first intake, 25 city-scoped ownership units, workload isolation, and tracked manual authority handoff | Phase 4 integrated |
+| Multi-city operations | City-first intake, scoped ownership and handoff, Admin city access, isolated dashboards, and city-safe alerts | Phase 5 integrated |
 | Image analysis | Browser-side image features, resized image upload, Flask vision analysis, local fallback | Integrated |
 | Threat intelligence | Threat level, risk score, hazards, relationships, confidence, safety gate, duplicate signal | Integrated |
 | Smart routing | Department/unit selection by category, severity, ward, and active workload | Integrated |
@@ -534,6 +534,7 @@ The first CLIP model run may take longer because the model may need to download 
 | `npm run verify:multi-city-phase2` | Verify city-first UI, server guards, location consistency, chatbot flow, and city isolation |
 | `npm run verify:multi-city-phase3` | Verify category ownership, routing isolation, handoff truth, review constraints, and email safety |
 | `npm run verify:multi-city-phase4` | Verify manual handoff states, protected confirmation, reference integrity, and UI truthfulness |
+| `npm run verify:multi-city-phase5` | Verify dashboard access, city-isolated commands, alerts, observability, and community proof |
 | `npm run verify:accessibility` | Run deterministic static accessibility contracts |
 | `npm run verify:resilience` | Verify rate limits, correlation IDs, and security headers |
 | `npm run verify:load` | Run concurrent local HTTP and payload-boundary checks |
@@ -565,7 +566,7 @@ Health probes are available at `GET /health/live` for process liveness and `GET 
 
 | Method | Endpoint | Permission | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/dashboard` | `submit_complaint` | Load dashboard, complaints, analytics, risk forecast |
+| `GET` | `/api/dashboard?cityId=:cityId` | `submit_complaint` | Load a citizen dashboard or an Admin's assigned city-scoped operations view |
 | `POST` | `/api/analyze-complaint` | `submit_complaint` | Create a complaint using required `cityId` and `cityRegistryVersion`, then run the AI workflow |
 | `GET` | `/api/complaints/:id` | `submit_complaint` | Load complaint detail |
 | `PATCH` | `/api/complaints/:id/status` | `update_complaint_status` | Update complaint status or priority |
@@ -701,9 +702,9 @@ Phase 8 adds skip navigation, named and keyboard-contained dialogs, focus restor
 
 ## Multi-City Expansion
 
-Multi-City Phase 1 introduced the validated registry and guarded Bengaluru migration. Phase 2 made city the first complaint field. Phase 3 added 25 city-scoped ownership units, guaranteed one primary owner for every AI category in every city, isolated routing workload, and prevented cross-city authority-email delivery. Phase 4 adds a tracked operator workflow for verified civic portals: a ticket remains awaiting manual submission until an Admin records the portal-issued reference, after which authority outcomes can be reconciled. Bengaluru remains the only reporting-enabled jurisdiction; Mumbai, Delhi, Chennai, and Hyderabad remain planned.
+Multi-City Phase 1 introduced the validated registry and guarded Bengaluru migration. Phase 2 made city the first complaint field. Phase 3 added 25 city-scoped ownership units and isolated routing workload. Phase 4 added tracked authority-portal handoff and reconciliation. Phase 5 isolates Admin operations, metrics, observability, commands, clusters, emergency recipients, alert subscriptions, and community proof by city. Bengaluru remains the only reporting-enabled jurisdiction; Mumbai, Delhi, Chennai, and Hyderabad remain planned.
 
-The server rejects missing, unknown, stale, or disabled city selections and conservatively checks real geocoding results against the selected city before consuming AI/provider resources. Internal ownership is distinct from authority delivery: all current profiles use a verified official portal with manual submission and explicitly deny direct API support. Opening a portal is not recorded as a submission. See the [Phase 1 registry specification](docs/MULTI_CITY_PHASE_1.md), [Phase 2 intake specification](docs/MULTI_CITY_PHASE_2.md), [Phase 3 routing specification](docs/MULTI_CITY_PHASE_3.md), and [Phase 4 handoff specification](docs/MULTI_CITY_PHASE_4.md).
+The server rejects missing, unknown, stale, or disabled city selections and conservatively checks real geocoding results against the selected city before consuming AI/provider resources. Internal ownership is distinct from authority delivery: all current profiles use a verified official portal with manual submission and explicitly deny direct API support. Opening a portal is not recorded as a submission. Existing records without city metadata are constrained to Bengaluru rather than treated globally. See the [Phase 1 registry specification](docs/MULTI_CITY_PHASE_1.md), [Phase 2 intake specification](docs/MULTI_CITY_PHASE_2.md), [Phase 3 routing specification](docs/MULTI_CITY_PHASE_3.md), [Phase 4 handoff specification](docs/MULTI_CITY_PHASE_4.md), and [Phase 5 operations specification](docs/MULTI_CITY_PHASE_5.md).
 
 ## Evaluation And Testing
 
@@ -725,6 +726,7 @@ npm run verify:authority-tickets
 npm run verify:multi-city-phase2
 npm run verify:multi-city-phase3
 npm run verify:multi-city-phase4
+npm run verify:multi-city-phase5
 npm run verify:accessibility
 npm run verify:resilience
 npm run verify:load

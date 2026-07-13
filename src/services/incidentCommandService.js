@@ -77,6 +77,8 @@ async function createIncidentCommand({ complaint, analysis, routing, confidenceS
     { complaintId: complaint._id },
     {
       complaintId: complaint._id,
+      cityId: complaint.cityId || "bengaluru",
+      cityName: complaint.cityName || "Bengaluru",
       incidentCode,
       title: `${priority} ${complaint.type}`,
       categoryId,
@@ -114,6 +116,8 @@ function summarizeIncidentCommand(command) {
   return {
     triggered: true,
     incidentId: String(command._id),
+    cityId: command.cityId || "bengaluru",
+    cityName: command.cityName || "Bengaluru",
     incidentCode: command.incidentCode,
     status: command.commandStatus,
     severity: command.severity,

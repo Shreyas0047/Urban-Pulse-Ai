@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const { CITY_IDS, DEFAULT_CITY_ID } = require("../services/cityRegistryService");
 
 const ALLOWED_ROLES = ["Admin", "Citizen"];
 
@@ -14,6 +15,7 @@ function serializeUser(user) {
     username: user.username,
     email: user.email || "",
     role: user.role,
+    operationalCityIds: user.role === "Admin" && user.operationalCityIds?.length ? user.operationalCityIds : user.role === "Admin" ? [DEFAULT_CITY_ID] : [],
     disabledAt: user.disabledAt || null,
     disabledBy: user.disabledBy || "",
     lastLoginAt: user.lastLoginAt || null,
@@ -78,6 +80,29 @@ async function updateUser(req, res, next) {
       invalidateSessions = invalidateSessions || disabled !== Boolean(user.disabledAt);
       user.disabledAt = disabled ? new Date() : null;
       user.disabledBy = disabled ? req.auth.username : "";
+    }
+
+    if (req.body.operationalCityIds !== undefined) {
+      if (!Array.isArray(req.body.operationalCityIds)) {
+        throw createHttpError("Operations cities must be provided as a list.", 400);
+      }
+      const nextCityIds = [...new Set(req.body.operationalCityIds.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
+      if (nextCityIds.some((cityId) => !CITY_IDS.includes(cityId))) {
+        throw createHttpError("An operations city is not in the Urban Pulse registry.", 400);
+      }
+      if (user.role === "Admin" && !nextCityIds.length) {
+        throw createHttpError("An Admin must be assigned to at least one operations city.", 400);
+      }
+      const currentCityIds = (user.operationalCityIds || []).map(String).sort();
+      const normalizedNextCityIds = user.role === "Admin" ? nextCityIds.sort() : [];
+      invalidateSessions = invalidateSessions || JSON.stringify(currentCityIds) !== JSON.stringify(normalizedNextCityIds);
+      user.operationalCityIds = normalizedNextCityIds;
+    } else if (req.body.role !== undefined && user.role === "Admin" && !user.operationalCityIds?.length) {
+      user.operationalCityIds = [DEFAULT_CITY_ID];
+      invalidateSessions = true;
+    } else if (req.body.role !== undefined && user.role !== "Admin" && user.operationalCityIds?.length) {
+      user.operationalCityIds = [];
+      invalidateSessions = true;
     }
 
     if (invalidateSessions) {

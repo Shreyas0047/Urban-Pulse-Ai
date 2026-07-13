@@ -3,6 +3,8 @@ const mongoose = require("mongoose");
 const incidentCommandSchema = new mongoose.Schema(
   {
     complaintId: { type: mongoose.Schema.Types.ObjectId, ref: "Complaint", required: true, unique: true, index: true },
+    cityId: { type: String, required: true, default: "bengaluru", lowercase: true, trim: true, index: true },
+    cityName: { type: String, required: true, default: "Bengaluru", trim: true },
     incidentCode: { type: String, required: true, unique: true, trim: true },
     title: { type: String, required: true, trim: true },
     categoryId: { type: String, required: true, trim: true },
@@ -41,5 +43,6 @@ const incidentCommandSchema = new mongoose.Schema(
 
 incidentCommandSchema.index({ commandStatus: 1, slaDueAt: 1 });
 incidentCommandSchema.index({ severity: 1, ward: 1 });
+incidentCommandSchema.index({ cityId: 1, commandStatus: 1, slaDueAt: 1 });
 
 module.exports = mongoose.model("IncidentCommand", incidentCommandSchema);

@@ -17,7 +17,8 @@ async function authenticate(req, _res, next) {
         username: 1,
         role: 1,
         disabledAt: 1,
-        tokenVersion: 1
+        tokenVersion: 1,
+        operationalCityIds: 1
       }).lean();
       if (!user || user.disabledAt) {
         const error = new Error("This session is no longer active. Please login again.");
@@ -32,6 +33,9 @@ async function authenticate(req, _res, next) {
       tokenAuth.username = user.username;
       tokenAuth.role = user.role;
       tokenAuth.permissions = rolePermissions[user.role] || [];
+      tokenAuth.operationalCityIds = user.role === "Admin" && user.operationalCityIds?.length
+        ? user.operationalCityIds.map((cityId) => String(cityId).trim().toLowerCase())
+        : user.role === "Admin" ? ["bengaluru"] : [];
     }
     req.auth = tokenAuth;
     next();

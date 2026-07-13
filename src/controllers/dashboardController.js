@@ -11,6 +11,8 @@ const { refreshFollowUpsForComplaints } = require("../services/followUpService")
 const { buildCivicRiskPredictions } = require("../services/riskPredictionService");
 const { buildCivicIntelligence } = require("../services/civicIntelligenceService");
 const { buildCommunityCases } = require("../services/communityProofService");
+const { CITY_IDS, DEFAULT_CITY_ID, DEFAULT_CITY_NAME } = require("../services/cityRegistryService");
+const cityRegistry = require("../../shared/cityRegistry.json");
 
 const iotReadings = [
   { sensor: "Gas Sensor", zone: "Community Kitchen", value: 74, unit: "ppm", status: "Warning" },
@@ -124,12 +126,37 @@ function filterUsers(users, filters) {
   });
 }
 
+function cityDataFilter(cityId) {
+  const normalized = String(cityId || DEFAULT_CITY_ID).trim().toLowerCase();
+  return normalized === DEFAULT_CITY_ID
+    ? { $or: [{ cityId: normalized }, { cityId: { $exists: false } }] }
+    : { cityId: normalized };
+}
+
+function resolveOperationsCity(value, allowedCityIds = [DEFAULT_CITY_ID]) {
+  const cityId = String(value || DEFAULT_CITY_ID).trim().toLowerCase();
+  if (!CITY_IDS.includes(cityId)) {
+    const error = new Error("Choose a registered operations city.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!allowedCityIds.includes(cityId)) {
+    const error = new Error("This Admin account is not assigned to the selected operations city.");
+    error.statusCode = 403;
+    throw error;
+  }
+  const city = cityRegistry.cities.find((item) => item.slug === cityId);
+  return { id: cityId, name: city?.name || DEFAULT_CITY_NAME };
+}
+
 async function getDashboard(req, res, next) {
   try {
     const canViewDashboard = req.auth.permissions.includes("view_dashboard");
     const canViewSensors = req.auth.permissions.includes("view_sensors");
     const canDeleteUsers = req.auth.permissions.includes("delete_users");
-    const complaintFilter = canViewDashboard ? {} : { reporterUsername: req.auth.username };
+    const allowedCityIds = req.auth.operationalCityIds?.length ? req.auth.operationalCityIds : [DEFAULT_CITY_ID];
+    const operationsCity = canViewDashboard ? resolveOperationsCity(req.query.cityId, allowedCityIds) : null;
+    const complaintFilter = canViewDashboard ? cityDataFilter(operationsCity.id) : { reporterUsername: req.auth.username };
     const filters = {
       complaintSearchRegex: buildRegex(req.query.complaintSearch),
       complaintStatus: String(req.query.complaintStatus || "").trim(),
@@ -141,27 +168,26 @@ async function getDashboard(req, res, next) {
     };
 
     const observabilityStart = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
-    const [complaintDocs, users, incidentCommands, incidentClusters, decisionEvents] = await Promise.all([
+    const [complaintDocs, users, incidentCommands, incidentClusters] = await Promise.all([
       Complaint.find(complaintFilter).sort({ createdAt: -1 }),
       canDeleteUsers
-        ? User.find({}, { username: 1, email: 1, role: 1, disabledAt: 1, disabledBy: 1, lastLoginAt: 1, createdAt: 1 }).sort({ role: 1, username: 1 }).lean()
+        ? User.find({}, { username: 1, email: 1, role: 1, operationalCityIds: 1, disabledAt: 1, disabledBy: 1, lastLoginAt: 1, createdAt: 1 }).sort({ role: 1, username: 1 }).lean()
         : Promise.resolve([]),
       canViewDashboard
-        ? IncidentCommand.find({ commandStatus: { $in: ["Active", "Monitoring"] } }).sort({ riskScore: -1, slaDueAt: 1 }).limit(12).lean()
+        ? IncidentCommand.find({ ...cityDataFilter(operationsCity.id), commandStatus: { $in: ["Active", "Monitoring"] } }).sort({ riskScore: -1, slaDueAt: 1 }).limit(12).lean()
         : Promise.resolve([]),
       canViewDashboard
-        ? IncidentCluster.find({ status: { $in: ["active", "monitoring"] } }).sort({ mergedCount: -1, lastReportedAt: -1 }).limit(12).lean()
-        : Promise.resolve([]),
-      canViewDashboard
-        ? DecisionAuditEvent.find({ occurredAt: { $gte: observabilityStart } }).sort({ occurredAt: -1 }).limit(5000).lean()
+        ? IncidentCluster.find({ ...cityDataFilter(operationsCity.id), status: { $in: ["active", "monitoring"] } }).sort({ mergedCount: -1, lastReportedAt: -1 }).limit(12).lean()
         : Promise.resolve([])
     ]);
+    const decisionEvents = canViewDashboard && complaintDocs.length
+      ? await DecisionAuditEvent.find({ complaintId: { $in: complaintDocs.map((item) => item._id) }, occurredAt: { $gte: observabilityStart } }).sort({ occurredAt: -1 }).limit(5000).lean()
+      : [];
     let communityCases = [];
     if (!canViewDashboard && req.auth.userId) {
-      const [currentUser, nearbyComplaintDocs] = await Promise.all([
-        User.findById(req.auth.userId, { localAlertPreferences: 1 }).lean(),
-        Complaint.find({ status: { $ne: "Resolved" } }).sort({ createdAt: -1 }).limit(100).lean()
-      ]);
+      const currentUser = await User.findById(req.auth.userId, { localAlertPreferences: 1 }).lean();
+      const preferenceCityId = currentUser?.localAlertPreferences?.cityId || DEFAULT_CITY_ID;
+      const nearbyComplaintDocs = await Complaint.find({ ...cityDataFilter(preferenceCityId), status: { $ne: "Resolved" } }).sort({ createdAt: -1 }).limit(100).lean();
       communityCases = buildCommunityCases(
         nearbyComplaintDocs,
         currentUser?.localAlertPreferences,
@@ -237,10 +263,12 @@ async function getDashboard(req, res, next) {
       incidentClusters,
       iotReadings: canViewSensors ? iotReadings : [],
       manageableUsers,
+      operationsScope: operationsCity,
       auth: {
         role: req.auth.role,
         username: req.auth.username,
-        permissions: req.auth.permissions
+        permissions: req.auth.permissions,
+        operationalCityIds: canViewDashboard ? allowedCityIds : []
       }
     });
   } catch (error) {
@@ -270,6 +298,8 @@ async function resetDashboard(req, res, next) {
 }
 
 module.exports = {
+  cityDataFilter,
   getDashboard,
+  resolveOperationsCity,
   resetDashboard
 };

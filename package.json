@@ -17,6 +17,7 @@
     "verify:multi-city-phase2": "node scripts/verifyMultiCityPhase2.js",
     "verify:multi-city-phase3": "node scripts/verifyMultiCityPhase3.js",
     "verify:multi-city-phase4": "node scripts/verifyMultiCityPhase4.js",
+    "verify:multi-city-phase5": "node scripts/verifyMultiCityPhase5.js",
     "verify:smtp": "node scripts/verifySmtp.js",
     "verify:resolution": "node scripts/verifyResolutionLoop.js",
     "verify:civic-intelligence": "node scripts/verifyCivicIntelligence.js",
