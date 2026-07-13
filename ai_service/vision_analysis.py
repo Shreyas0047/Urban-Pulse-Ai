@@ -17,7 +17,32 @@ except ImportError:  # pragma: no cover
 
 
 def clamp01(value):
-    return max(0.0, min(1.0, value))
+    try:
+        return max(0.0, min(1.0, float(value or 0)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def safe_feature(features, key, default=0.0):
+    if not isinstance(features, dict):
+        return default
+    return clamp01(features.get(key, default))
+
+
+def sanitize_feature_payload(image_features):
+    if not isinstance(image_features, dict):
+        return {}
+
+    sanitized = {}
+    for key, value in image_features.items():
+        if key in {"width", "height"}:
+            try:
+                sanitized[key] = int(max(0, min(12000, float(value or 0))))
+            except (TypeError, ValueError):
+                sanitized[key] = 0
+        else:
+            sanitized[key] = safe_feature(image_features, key)
+    return sanitized
 
 
 def build_category_prompts(category):
@@ -76,33 +101,33 @@ def decode_image(image_base64):
 
 
 def feature_signal_candidates(image_features, image_hint):
-    features = image_features or {}
+    features = sanitize_feature_payload(image_features)
     normalized_hint = normalize_text(image_hint)
     vegetation_strength = clamp01(
-        features.get("greenRatio", 0) * 1.12
-        + features.get("averageSaturation", 0) * 0.24
-        + features.get("edgeDensity", 0) * 0.18
-        - features.get("blueRatio", 0) * 0.14
+        safe_feature(features, "greenRatio") * 1.12
+        + safe_feature(features, "averageSaturation") * 0.24
+        + safe_feature(features, "edgeDensity") * 0.18
+        - safe_feature(features, "blueRatio") * 0.14
     )
     pooled_water_strength = clamp01(
-        features.get("blueRatio", 0) * 0.92
-        + features.get("neutralRatio", 0) * 0.34
-        + (1 - features.get("averageSaturation", 0)) * 0.18
-        - features.get("greenRatio", 0) * 0.42
+        safe_feature(features, "blueRatio") * 0.92
+        + safe_feature(features, "neutralRatio") * 0.34
+        + (1 - safe_feature(features, "averageSaturation")) * 0.18
+        - safe_feature(features, "greenRatio") * 0.42
     )
     signals = [
-        ("fire or smoke hazard", "safety_fire", clamp01(features.get("redHeatRatio", 0) * 1.05 + features.get("smokeLikeRatio", 0) * 0.88 + features.get("hotspotRatio", 0) * 0.76)),
-        ("road damage", "road_damage", clamp01(features.get("edgeDensity", 0) * 0.72 + features.get("contrast", 0) * 0.54 + features.get("darkRatio", 0) * 0.2 - features.get("greenRatio", 0) * 0.1)),
-        ("tree obstruction", "tree_obstruction", clamp01(vegetation_strength + features.get("contrast", 0) * 0.12)),
-        ("garbage overflow", "garbage", clamp01(features.get("edgeDensity", 0) * 0.34 + features.get("contrast", 0) * 0.26 + features.get("averageSaturation", 0) * 0.2 - features.get("greenRatio", 0) * 0.16)),
-        ("sewage or manhole overflow", "sewage_overflow", clamp01(features.get("neutralRatio", 0) * 0.34 + features.get("darkRatio", 0) * 0.3 + (1 - features.get("blueRatio", 0)) * 0.12)),
+        ("fire or smoke hazard", "safety_fire", clamp01(safe_feature(features, "redHeatRatio") * 1.05 + safe_feature(features, "smokeLikeRatio") * 0.88 + safe_feature(features, "hotspotRatio") * 0.76)),
+        ("road damage", "road_damage", clamp01(safe_feature(features, "edgeDensity") * 0.72 + safe_feature(features, "contrast") * 0.54 + safe_feature(features, "darkRatio") * 0.2 - safe_feature(features, "greenRatio") * 0.1)),
+        ("tree obstruction", "tree_obstruction", clamp01(vegetation_strength + safe_feature(features, "contrast") * 0.12)),
+        ("garbage overflow", "garbage", clamp01(safe_feature(features, "edgeDensity") * 0.34 + safe_feature(features, "contrast") * 0.26 + safe_feature(features, "averageSaturation") * 0.2 - safe_feature(features, "greenRatio") * 0.16)),
+        ("sewage or manhole overflow", "sewage_overflow", clamp01(safe_feature(features, "neutralRatio") * 0.34 + safe_feature(features, "darkRatio") * 0.3 + (1 - safe_feature(features, "blueRatio")) * 0.12)),
         ("waterlogging", "water_drainage", clamp01(pooled_water_strength)),
-        ("water leakage", "water_leakage", clamp01(features.get("blueRatio", 0) * 0.36 + features.get("neutralRatio", 0) * 0.18 + features.get("averageBrightness", 0) * 0.12)),
-        ("wall or structural damage", "wall_damage", clamp01(features.get("edgeDensity", 0) * 0.46 + features.get("contrast", 0) * 0.3 + features.get("neutralRatio", 0) * 0.2)),
-        ("security concern", "security", clamp01(features.get("darkRatio", 0) * 0.34 + features.get("contrast", 0) * 0.18)),
-        ("utility fault", "utility_fault", clamp01(features.get("hotspotRatio", 0) * 0.38 + features.get("edgeDensity", 0) * 0.22 + features.get("redHeatRatio", 0) * 0.18)),
-        ("animal intrusion", "animal_intrusion", clamp01(features.get("edgeDensity", 0) * 0.24 + features.get("contrast", 0) * 0.2 + features.get("greenRatio", 0) * 0.14)),
-        ("vehicle obstruction", "vehicle_obstruction", clamp01(features.get("neutralRatio", 0) * 0.24 + features.get("edgeDensity", 0) * 0.26 + features.get("contrast", 0) * 0.2)),
+        ("water leakage", "water_leakage", clamp01(safe_feature(features, "blueRatio") * 0.36 + safe_feature(features, "neutralRatio") * 0.18 + safe_feature(features, "averageBrightness") * 0.12)),
+        ("wall or structural damage", "wall_damage", clamp01(safe_feature(features, "edgeDensity") * 0.46 + safe_feature(features, "contrast") * 0.3 + safe_feature(features, "neutralRatio") * 0.2)),
+        ("security concern", "security", clamp01(safe_feature(features, "darkRatio") * 0.34 + safe_feature(features, "contrast") * 0.18)),
+        ("utility fault", "utility_fault", clamp01(safe_feature(features, "hotspotRatio") * 0.38 + safe_feature(features, "edgeDensity") * 0.22 + safe_feature(features, "redHeatRatio") * 0.18)),
+        ("animal intrusion", "animal_intrusion", clamp01(safe_feature(features, "edgeDensity") * 0.24 + safe_feature(features, "contrast") * 0.2 + safe_feature(features, "greenRatio") * 0.14)),
+        ("vehicle obstruction", "vehicle_obstruction", clamp01(safe_feature(features, "neutralRatio") * 0.24 + safe_feature(features, "edgeDensity") * 0.26 + safe_feature(features, "contrast") * 0.2)),
     ]
     hint_boosts = {
         "safety_fire": ["fire", "smoke", "gas", "spark"],
@@ -125,8 +150,8 @@ def feature_signal_candidates(image_features, image_hint):
             score = max(score, 0.44)
         if category_id == "tree_obstruction" and vegetation_strength > 0.28:
             score = clamp01(score + 0.12 + vegetation_strength * 0.12)
-        if category_id == "water_drainage" and features.get("greenRatio", 0) > 0.24:
-            score = clamp01(score - (0.14 + features.get("greenRatio", 0) * 0.18))
+        if category_id == "water_drainage" and safe_feature(features, "greenRatio") > 0.24:
+            score = clamp01(score - (0.14 + safe_feature(features, "greenRatio") * 0.18))
         if category_id == "garbage" and vegetation_strength > 0.28:
             score = clamp01(score - 0.14)
         structural_hint = any(term in normalized_hint for term in ["crack", "cracked", "ceiling", "plaster"]) or (
@@ -304,7 +329,8 @@ def detect_objects_from_features(
     recent_area_complaints=None,
     location="",
 ):
-    feature_items = feature_signal_candidates(image_features, image_hint)
+    sanitized_features = sanitize_feature_payload(image_features)
+    feature_items = feature_signal_candidates(sanitized_features, image_hint)
     image = decode_image(image_base64)
     clip_items, pass_diagnostics = clip_candidates_multi_pass(image)
     candidates = merge_candidates(clip_items, feature_items) if clip_items else feature_items
@@ -317,7 +343,7 @@ def detect_objects_from_features(
         image=image,
         image_base64=image_base64,
         image_mime_type=image_mime_type,
-        image_features=image_features,
+        image_features=sanitized_features,
         image_hint=image_hint,
         candidates=candidates,
         top_detection=top_detection,

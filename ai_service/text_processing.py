@@ -88,6 +88,7 @@ def semantic_multi_label_classification(text, threshold=0.34):
     text_vector = _embed_text(text)
     keyword_terms = keyword_extract(text, limit=8)
     normalized = normalize_text(text)
+    embedding_model_available = get_embedding_model() is not None
     scored = []
 
     for category in COMPLAINT_CATEGORIES:
@@ -97,17 +98,32 @@ def semantic_multi_label_classification(text, threshold=0.34):
         keyword_bonus = min(0.45, keyword_bonus * 0.24)
         ngram_bonus = sum(0.08 for keyword in keyword_terms if keyword in category["aliases"] or keyword in [term for term, _ in category["keywords"]])
         score = min(1.0, similarity * 0.74 + keyword_bonus + min(0.18, ngram_bonus))
+        matched_keywords = [term for term, _weight in category["keywords"] if term in normalized][:4]
+        matched_aliases = [alias for alias in category["aliases"] if alias in normalized][:2]
         scored.append(
             {
                 "id": category["id"],
                 "label": category["label"],
                 "confidence": round(score, 3),
-                "matched_keywords": [term for term, _weight in category["keywords"] if term in normalized][:4],
+                "matched_keywords": matched_keywords + matched_aliases,
             }
         )
 
     scored.sort(key=lambda item: item["confidence"], reverse=True)
-    selected = [item for item in scored if item["confidence"] >= threshold]
+    top_score = scored[0]["confidence"] if scored else 0
+    second_score = scored[1]["confidence"] if len(scored) > 1 else 0
+    semantic_margin = top_score - second_score
+    selected = [
+        item
+        for item in scored
+        if item["confidence"] >= threshold
+        and (
+            item["matched_keywords"]
+            # A real embedding model may classify paraphrases without literal keywords,
+            # but the hash fallback must never turn generic wording into a civic incident.
+            or (embedding_model_available and item["confidence"] >= 0.6 and semantic_margin >= 0.1)
+        )
+    ]
 
     if not selected:
         return {
@@ -115,7 +131,7 @@ def semantic_multi_label_classification(text, threshold=0.34):
             "fallback": {
                 "suggested_category": scored[0]["id"],
                 "suggested_label": scored[0]["label"],
-                "confidence": scored[0]["confidence"],
+                "confidence": round(min(scored[0]["confidence"], 0.3), 3),
             },
             "all_scores": scored,
         }
@@ -159,4 +175,3 @@ def analyze_sentiment_and_severity(text, categories):
         "severity_score": severity,
         "critical_keyword_hits": critical_hits,
     }
-

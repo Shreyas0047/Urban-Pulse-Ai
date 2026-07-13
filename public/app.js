@@ -83,6 +83,8 @@ const mapComplaintList = document.getElementById("mapComplaintList");
 const mapVisibleCount = document.getElementById("mapVisibleCount");
 const mapHotspotLabel = document.getElementById("mapHotspotLabel");
 const mapPriorityWatch = document.getElementById("mapPriorityWatch");
+const civicIntelligencePanel = document.getElementById("civicIntelligencePanel");
+const communityCasesPanel = document.getElementById("communityCasesPanel");
 const localAlertsForm = document.getElementById("localAlertsForm");
 const localAlertsEnabled = document.getElementById("localAlertsEnabled");
 const localAlertAreasInput = document.getElementById("localAlertAreasInput");
@@ -151,7 +153,7 @@ let loginAttemptsRemaining = 4;
 let loginLockTimer = null;
 let otpTimer = null;
 let otpSecondsRemaining = 0;
-let dashboardDataCache = { complaints: [], users: [], digitalTwin: null, riskPredictions: null, incidentCommands: [] };
+let dashboardDataCache = { complaints: [], users: [], digitalTwin: null, riskPredictions: null, incidentCommands: [], civicIntelligence: null, communityCases: [] };
 let draftSaveTimer = null;
 let dashboardReloadTimer = null;
 
@@ -734,6 +736,17 @@ function saveAuthState() {
 function clearAuthState(message) {
   authState = null;
   lastSubmittedReport = null;
+  localAlertPreferences = null;
+  dashboardDataCache = {
+    complaints: [],
+    users: [],
+    digitalTwin: null,
+    riskPredictions: null,
+    incidentCommands: [],
+    incidentClusters: [],
+    civicIntelligence: null,
+    communityCases: []
+  };
   saveAuthState();
   applyPermissionState();
   setPdfButtonState(false);
@@ -2228,6 +2241,102 @@ function renderRiskPredictions(riskPredictions = null) {
   `;
 }
 
+function renderCivicIntelligence(intelligence = null) {
+  if (!civicIntelligencePanel) return;
+  if (!intelligence) {
+    civicIntelligencePanel.innerHTML = "";
+    return;
+  }
+  const waves = intelligence.radar || [];
+  const scenarios = intelligence.scenarios || [];
+  civicIntelligencePanel.innerHTML = `
+    <article class="intelligence-card radar-card">
+      <p class="detail-section-label">Urban Pulse Radar</p>
+      <strong>${escapeHtml(intelligence.summary?.strongestZone || "No active zone")}</strong>
+      <p>${waves.length} active risk wave${waves.length === 1 ? "" : "s"} · strongest intensity ${intelligence.summary?.strongestIntensity || 0}/100.</p>
+      <div class="radar-wave-list">${waves.slice(0, 4).map((wave) => `<span><i style="--wave-intensity:${wave.intensity}"></i>${escapeHtml(wave.zone)} · ${wave.intensity}</span>`).join("") || "<span>No open incidents to visualize.</span>"}</div>
+    </article>
+    <article class="intelligence-card scenario-card">
+      <p class="detail-section-label">If no action is taken</p>
+      <strong>${escapeHtml(scenarios[0]?.band || "No active scenario")}</strong>
+      <p>${escapeHtml(scenarios[0]?.type || "Open complaints will produce constrained response scenarios here.")}</p>
+      <small>${escapeHtml(scenarios[0]?.disclaimer || "Scenarios are planning aids, not future facts.")}</small>
+    </article>
+  `;
+}
+
+function renderCommunityCases(cases = []) {
+  if (!communityCasesPanel) return;
+  if (!authState?.token) {
+    communityCasesPanel.innerHTML = "";
+    return;
+  }
+  if (authState?.permissions?.includes("view_dashboard")) {
+    communityCasesPanel.innerHTML = "";
+    return;
+  }
+
+  if (!localAlertPreferences?.enabled) {
+    communityCasesPanel.innerHTML = `
+      <article class="community-cases-empty">
+        <p class="detail-section-label">Community proof</p>
+        <strong>Enable local alerts to help verify nearby incidents.</strong>
+        <p>Your saved areas are used for matching. Reporter details and complaint evidence stay private.</p>
+      </article>`;
+    return;
+  }
+
+  if (!cases.length) {
+    communityCasesPanel.innerHTML = `
+      <article class="community-cases-empty">
+        <p class="detail-section-label">Community proof</p>
+        <strong>No matching open incidents.</strong>
+        <p>New incidents at or above your selected severity will appear here.</p>
+      </article>`;
+    return;
+  }
+
+  communityCasesPanel.innerHTML = `
+    <div class="community-cases-head">
+      <div><p class="detail-section-label">Community proof</p><strong>Nearby incidents</strong></div>
+      <span>${cases.length} matched</span>
+    </div>
+    <div class="community-cases-grid">
+      ${cases.map((item) => `
+        <article class="community-case-card" data-community-case-id="${escapeHtml(item.id)}">
+          <div class="community-case-meta"><span>${escapeHtml(item.priority)}</span><span>${escapeHtml(item.status)}</span></div>
+          <strong>${escapeHtml(item.type)}</strong>
+          <p>${escapeHtml(item.area)} · ${escapeHtml(formatDateTime(item.createdAt))}</p>
+          <small>${item.communityProof?.summary?.total || 0} community signal${item.communityProof?.summary?.total === 1 ? "" : "s"}${item.communityProof?.userSignal ? ` · You marked ${escapeHtml(item.communityProof.userSignal)}` : ""}</small>
+          <div class="verification-actions">
+            <button type="button" class="chip-button nearby-proof-btn" data-signal="corroborates">I see it too</button>
+            <button type="button" class="chip-button nearby-proof-btn" data-signal="cleared">Looks cleared</button>
+            <button type="button" class="chip-button nearby-proof-btn" data-signal="worsening">Getting worse</button>
+          </div>
+        </article>`).join("")}
+    </div>`;
+
+  communityCasesPanel.querySelectorAll(".nearby-proof-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const complaintId = button.closest("[data-community-case-id]")?.dataset.communityCaseId;
+      if (!complaintId) return;
+      try {
+        button.disabled = true;
+        const note = window.prompt("Optional note for the community proof network:") || "";
+        const data = await apiRequest(`/api/complaints/${complaintId}/community-proof`, {
+          method: "POST",
+          body: JSON.stringify({ signal: button.dataset.signal, note })
+        });
+        setDashboardMessage(data.message || "Community proof recorded.", "success");
+        await loadDashboard();
+      } catch (error) {
+        setDashboardMessage(error.message, "error");
+        button.disabled = false;
+      }
+    });
+  });
+}
+
 function renderIncidentCommands(commands = []) {
   const panel = document.getElementById("incidentCommandPanel");
   if (!panel) return;
@@ -2603,6 +2712,22 @@ function renderVerificationSummary(complaint) {
     .join("<br>");
 }
 
+function renderResolutionSummary(complaint) {
+  const resolution = complaint.resolution || {};
+  const assessment = resolution.aiAssessment || {};
+  const evidenceCount = Array.isArray(resolution.citizenEvidence) ? resolution.citizenEvidence.length : 0;
+  return [
+    `Phase: ${String(resolution.phase || "not_requested").replace(/_/g, " ")}`,
+    resolution.authorityUpdate?.markedAt ? `Authority update: ${formatDateTime(resolution.authorityUpdate.markedAt)}` : "",
+    assessment.confidence ? `AI review confidence: ${formatPercent(assessment.confidence)}` : "",
+    `Follow-ups: ${evidenceCount}`,
+    assessment.reason || "An authority resolution update will open this verification loop."
+  ]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join("<br>");
+}
+
 function formatWeatherValue(value, suffix = "") {
   return Number.isFinite(Number(value)) ? `${Number(value)}${suffix}` : "Not recorded";
 }
@@ -2719,13 +2844,19 @@ function renderThreatDuplicates(threat) {
     .join("<br>");
 }
 
-function renderComplaintDetail(complaint) {
+function renderComplaintDetail(complaint, intelligence = {}) {
   complaintDetailTitle.textContent = complaint.type || "Complaint";
   const mapsUrl = buildGoogleMapsUrl(complaint.location, complaint.mapLocation);
   const ageInDays = countDaysOpen(complaint.createdAt);
   const alternatives = Array.isArray(complaint.ai?.visionCandidates) ? complaint.ai.visionCandidates.slice(1, 4) : [];
   const timelineHistory = Array.isArray(complaint.statusHistory) ? [...complaint.statusHistory].reverse() : [];
   const threat = getThreatAssessment(complaint);
+  const resolutionOpen = ["awaiting_citizen_verification", "needs_admin_review"].includes(complaint.resolution?.phase);
+  const canSubmitResolutionEvidence = !authState?.permissions?.includes("view_dashboard");
+  const canSubmitCommunityProof = !authState?.permissions?.includes("view_dashboard");
+  const dna = intelligence.dna || { strands: [] };
+  const timeMachine = intelligence.timeMachine || [];
+  const scenario = intelligence.consequenceScenario || null;
   complaintDetailBody.innerHTML = `
     <div class="detail-case-layout">
       <section class="detail-hero">
@@ -2831,6 +2962,51 @@ function renderComplaintDetail(complaint) {
             <button type="button" class="chip-button verification-vote-btn" data-vote="got_worse">Got worse</button>
           </div>
         </section>
+        <section class="detail-support-card resolution-card">
+          <p class="detail-section-label">Resolution loop</p>
+          <strong>${escapeHtml(String(complaint.resolution?.phase || "not_requested").replace(/_/g, " "))}</strong>
+          <p>${renderResolutionSummary(complaint)}</p>
+          ${
+            resolutionOpen && canSubmitResolutionEvidence
+              ? `
+                <div class="resolution-evidence-form" data-complaint-id="${escapeHtml(complaint._id)}">
+                  <label>Follow-up note
+                    <textarea class="resolution-note" maxlength="280" placeholder="What did you observe after the reported repair?"></textarea>
+                  </label>
+                  <label>Follow-up photo (optional)
+                    <input class="resolution-photo" type="file" accept="image/jpeg,image/png,image/webp" />
+                  </label>
+                  <div class="verification-actions">
+                    <button type="button" class="chip-button resolution-evidence-btn" data-vote="resolved">Confirm resolved</button>
+                    <button type="button" class="chip-button resolution-evidence-btn" data-vote="still_there">Still unresolved</button>
+                    <button type="button" class="chip-button resolution-evidence-btn" data-vote="got_worse">Got worse</button>
+                  </div>
+                </div>
+              `
+              : "<p class=\"helper-text\">This step becomes available to the original reporter after an authority marks the complaint resolved.</p>"
+          }
+        </section>
+        <section class="detail-support-card dna-card">
+          <p class="detail-section-label">Incident DNA</p>
+          <strong>${dna.confidence || 0}% evidence signal</strong>
+          <div class="dna-strands">${(dna.strands || []).map((strand) => `<span title="${escapeHtml(strand.detail || "")}"><i style="--strand:${Math.round(Number(strand.strength || 0) * 100)}%"></i>${escapeHtml(strand.label)}</span>`).join("") || "No evidence strands recorded."}</div>
+        </section>
+        <section class="detail-support-card scenario-card">
+          <p class="detail-section-label">Consequence scenario</p>
+          <strong>${escapeHtml(scenario?.band || "Not available")} · ${scenario?.impactScore || 0}/100</strong>
+          <p>${(scenario?.effects || []).map(escapeHtml).join("<br>") || "No open-case scenario is available."}</p>
+          <small>${escapeHtml(scenario?.disclaimer || "Scenario information is a planning aid, not a prediction.")}</small>
+        </section>
+        <section class="detail-support-card community-proof-card">
+          <p class="detail-section-label">Community proof network</p>
+          <strong>${complaint.communityProof?.summary?.total || 0} nearby signals</strong>
+          <p>Nearby users with a matching saved alert area can corroborate, clear, or escalate this live incident.</p>
+          ${canSubmitCommunityProof ? `<div class="verification-actions" data-community-complaint-id="${escapeHtml(complaint._id)}">
+            <button type="button" class="chip-button community-proof-btn" data-signal="corroborates">I see it too</button>
+            <button type="button" class="chip-button community-proof-btn" data-signal="cleared">Looks cleared</button>
+            <button type="button" class="chip-button community-proof-btn" data-signal="worsening">Getting worse</button>
+          </div>` : "<p class=\"helper-text\">Community proof is collected from citizens with matching local-alert areas.</p>"}
+        </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Threat assessment</p>
           <strong>${threat ? `${escapeHtml(threat.threatLevel || "Not assessed")} · ${formatPercent(threat.riskScore)}` : "Not recorded"}</strong>
@@ -2875,6 +3051,10 @@ function renderComplaintDetail(complaint) {
           <p class="detail-section-label">Status timeline</p>
           <div class="detail-timeline-list">${renderStatusHistory(timelineHistory)}</div>
         </section>
+        <section class="detail-timeline time-machine-card">
+          <p class="detail-section-label">Civic time machine</p>
+          <div class="detail-timeline-list">${timeMachine.map((event) => `<div class="timeline-entry"><strong>${escapeHtml(event.title || "Event")}</strong><span>${escapeHtml(formatDateTime(event.at))} · ${escapeHtml(event.detail || "")}</span></div>`).join("") || "No historic events recorded."}</div>
+        </section>
         <section class="detail-timeline">
           <p class="detail-section-label">Alert notes</p>
           <div class="detail-timeline-list">${renderAlertsHistory(complaint.alerts || [])}</div>
@@ -2904,12 +3084,61 @@ function renderComplaintDetail(complaint) {
       }
     });
   });
+  complaintDetailBody.querySelectorAll(".resolution-evidence-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const container = button.closest(".resolution-evidence-form");
+      const complaintId = container?.dataset.complaintId;
+      if (!complaintId || !container) return;
+
+      try {
+        button.disabled = true;
+        const imageFile = container.querySelector(".resolution-photo")?.files?.[0];
+        const payload = {
+          vote: button.dataset.vote,
+          note: container.querySelector(".resolution-note")?.value.trim() || ""
+        };
+        if (imageFile) {
+          const imageAiPayload = await prepareImageForAi(imageFile);
+          payload.imageFeatures = await extractImageFeatures(imageFile);
+          payload.imageBase64 = imageAiPayload?.base64 || "";
+          payload.imageMimeType = imageAiPayload?.mimeType || "";
+        }
+        const data = await apiRequest(`/api/complaints/${complaintId}/resolution-evidence`, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        setDashboardMessage(data.message || "Resolution evidence recorded.", "success");
+        await openComplaintDetail(complaintId);
+        await loadDashboard();
+      } catch (error) {
+        setDashboardMessage(error.message, "error");
+        button.disabled = false;
+      }
+    });
+  });
+  complaintDetailBody.querySelectorAll(".community-proof-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const complaintId = button.closest("[data-community-complaint-id]")?.dataset.communityComplaintId;
+      if (!complaintId) return;
+      try {
+        button.disabled = true;
+        const note = window.prompt("Optional note for the community proof network:") || "";
+        const data = await apiRequest(`/api/complaints/${complaintId}/community-proof`, { method: "POST", body: JSON.stringify({ signal: button.dataset.signal, note }) });
+        setDashboardMessage(data.message || "Community proof recorded.", "success");
+        await openComplaintDetail(complaintId);
+        await loadDashboard();
+      } catch (error) {
+        setDashboardMessage(error.message, "error");
+        button.disabled = false;
+      }
+    });
+  });
 }
 
 async function openComplaintDetail(complaintId) {
   try {
     const data = await apiRequest(`/api/complaints/${complaintId}`, { method: "GET" });
-    renderComplaintDetail(data.complaint);
+    renderComplaintDetail(data.complaint, data.intelligence || {});
   } catch (error) {
     setDashboardMessage(error.message, "error");
   }
@@ -3577,6 +3806,7 @@ async function loadLocalAlertPreferences() {
     const data = await apiRequest("/api/local-alert-preferences", { method: "GET" });
     localAlertPreferences = data.preferences || null;
     renderLocalAlertPreferences(localAlertPreferences);
+    renderCommunityCases(dashboardDataCache.communityCases || []);
   } catch (error) {
     localAlertsMessage.textContent = error.message;
   }
@@ -3605,6 +3835,7 @@ async function saveLocalAlertPreferences(event) {
     renderLocalAlertPreferences(localAlertPreferences);
     localAlertsMessage.textContent = data.message || "Local alert areas saved.";
     setDashboardMessage(localAlertsMessage.textContent, "success");
+    await loadDashboard();
   } catch (error) {
     localAlertsMessage.textContent = error.message;
     setDashboardMessage(error.message, "error");
@@ -3620,7 +3851,7 @@ function markerColor(status) {
   return "#ff6b7a";
 }
 
-function renderMap(complaints) {
+function renderMap(complaints, intelligence = null) {
   if (!complaintsMapCanvas || !mapComplaintList) {
     return;
   }
@@ -3690,6 +3921,14 @@ function renderMap(complaints) {
       `;
     })
     .join("");
+
+  (intelligence?.radar || []).forEach((wave) => {
+    if (!wave.mapLocation) return;
+    const x = 10 + ((Number(wave.mapLocation.lng) - minLng) / lngSpan) * 80;
+    const y = 12 + (1 - (Number(wave.mapLocation.lat) - minLat) / latSpan) * 74;
+    const size = 44 + Math.round(Number(wave.intensity || 0) * 0.8);
+    complaintsMapCanvas.insertAdjacentHTML("beforeend", `<div class="radar-map-wave" style="left:${x}%;top:${y}%;--wave-size:${size}px;--wave-alpha:${Math.max(0.16, Number(wave.intensity || 0) / 180)}" title="${escapeHtml(wave.zone)} risk wave"></div>`);
+  });
 
   Object.entries(hotspotGroups)
     .filter(([, group]) => group.count > 1)
@@ -4118,6 +4357,8 @@ function renderLoggedOutState() {
   renderAdminInsights([]);
   renderDigitalTwin(null);
   renderRiskPredictions(null);
+  renderCivicIntelligence(null);
+  renderCommunityCases([]);
   renderIncidentCommands([]);
   renderIncidentClusters([]);
   document.getElementById("recentComplaints").innerHTML = `<div class="table-row empty-state"><span>Login to view recent complaints.</span></div>`;
@@ -4179,7 +4420,11 @@ function rerenderDashboardViews() {
   renderUserManagement(dashboardDataCache.users || []);
   renderDigitalTwin(dashboardDataCache.digitalTwin || null);
   renderRiskPredictions(dashboardDataCache.riskPredictions || null);
+  renderCivicIntelligence(dashboardDataCache.civicIntelligence || null);
+  renderCommunityCases(dashboardDataCache.communityCases || []);
   renderIncidentCommands(dashboardDataCache.incidentCommands || []);
+  renderIncidentClusters(dashboardDataCache.incidentClusters || []);
+  renderMap(dashboardDataCache.complaints || [], dashboardDataCache.civicIntelligence || null);
 }
 
 function setupDashboardFilters() {
@@ -4244,6 +4489,8 @@ async function loadDashboard() {
     users: data.manageableUsers || [],
     digitalTwin: data.digitalTwin || null,
     riskPredictions: data.riskPredictions || null,
+    civicIntelligence: data.civicIntelligence || null,
+    communityCases: data.communityCases || [],
     incidentCommands: data.incidentCommands || [],
     incidentClusters: data.incidentClusters || []
   };
@@ -4253,11 +4500,13 @@ async function loadDashboard() {
   renderAdminInsights(data.complaints, data.analytics || null);
   renderDigitalTwin(data.digitalTwin || null);
   renderRiskPredictions(data.riskPredictions || null);
+  renderCivicIntelligence(data.civicIntelligence || null);
+  renderCommunityCases(data.communityCases || []);
   renderIncidentCommands(data.incidentCommands || []);
   renderIncidentClusters(data.incidentClusters || []);
   renderAdminTable(data.complaints);
   renderAlerts(data.complaints);
-  renderMap(data.complaints);
+  renderMap(data.complaints, data.civicIntelligence || null);
   renderUserManagement(data.manageableUsers || []);
   await loadLocalAlertPreferences();
 

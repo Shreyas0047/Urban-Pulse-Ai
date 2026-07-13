@@ -158,6 +158,55 @@ const complaintSchema = new mongoose.Schema(
         }
       ]
     },
+    resolution: {
+      phase: {
+        type: String,
+        enum: ["not_requested", "awaiting_citizen_verification", "citizen_confirmed", "needs_rework", "needs_admin_review"],
+        default: "not_requested"
+      },
+      authorityUpdate: {
+        markedBy: { type: String, default: "" },
+        markedAt: { type: Date, default: null },
+        note: { type: String, default: "" }
+      },
+      citizenEvidence: [
+        {
+          userId: { type: String, default: "" },
+          username: { type: String, default: "" },
+          vote: { type: String, enum: ["still_there", "resolved", "got_worse"] },
+          note: { type: String, default: "" },
+          imageProvided: { type: Boolean, default: false },
+          imageFingerprint: { type: String, default: "" },
+          submittedAt: { type: Date, default: Date.now }
+        }
+      ],
+      aiAssessment: {
+        outcome: { type: String, default: "" },
+        confidence: { type: Number, default: 0 },
+        reason: { type: String, default: "" },
+        visualComparison: { type: String, default: "" },
+        engine: { type: String, default: "" },
+        assessedAt: { type: Date, default: null },
+        disclaimer: { type: String, default: "" }
+      }
+    },
+    communityProof: {
+      summary: {
+        total: { type: Number, default: 0 },
+        corroborates: { type: Number, default: 0 },
+        cleared: { type: Number, default: 0 },
+        worsening: { type: Number, default: 0 },
+        lastSignalAt: { type: Date, default: null }
+      },
+      signals: [
+        {
+          userId: { type: String, default: "" },
+          signal: { type: String, enum: ["corroborates", "cleared", "worsening"] },
+          note: { type: String, default: "" },
+          createdAt: { type: Date, default: Date.now }
+        }
+      ]
+    },
     statusHistory: [
       {
         status: { type: String, required: true },

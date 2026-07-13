@@ -11,7 +11,6 @@ if (process.env.NODE_ENV === "production" && jwtSecret === "smart-community-demo
 module.exports = {
   port: Number(process.env.PORT || 3000),
   publicDir: path.join(__dirname, "..", "..", "public"),
-  receiptsDir: path.join(__dirname, "..", "..", "receipts"),
   mongoUri: process.env.MONGODB_URI || "",
   jwtSecret,
   tokenTtlSeconds: 60 * 60 * 8,

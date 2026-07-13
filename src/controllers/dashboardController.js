@@ -6,6 +6,8 @@ const User = require("../models/User");
 const { buildCivicDigitalTwin } = require("../services/civicDigitalTwinService");
 const { refreshFollowUpsForComplaints } = require("../services/followUpService");
 const { buildCivicRiskPredictions } = require("../services/riskPredictionService");
+const { buildCivicIntelligence } = require("../services/civicIntelligenceService");
+const { buildCommunityCases } = require("../services/communityProofService");
 
 const iotReadings = [
   { sensor: "Gas Sensor", zone: "Community Kitchen", value: 74, unit: "ppm", status: "Warning" },
@@ -147,6 +149,19 @@ async function getDashboard(req, res, next) {
         ? IncidentCluster.find({ status: { $in: ["active", "monitoring"] } }).sort({ mergedCount: -1, lastReportedAt: -1 }).limit(12).lean()
         : Promise.resolve([])
     ]);
+    let communityCases = [];
+    if (!canViewDashboard && req.auth.userId) {
+      const [currentUser, nearbyComplaintDocs] = await Promise.all([
+        User.findById(req.auth.userId, { localAlertPreferences: 1 }).lean(),
+        Complaint.find({ status: { $ne: "Resolved" } }).sort({ createdAt: -1 }).limit(100).lean()
+      ]);
+      communityCases = buildCommunityCases(
+        nearbyComplaintDocs,
+        currentUser?.localAlertPreferences,
+        req.auth.userId,
+        req.auth.username
+      );
+    }
     await refreshFollowUpsForComplaints(complaintDocs);
     const allComplaints = complaintDocs.map((complaint) => complaint.toObject());
 
@@ -169,6 +184,7 @@ async function getDashboard(req, res, next) {
     const clusteredComplaintCount = complaints.filter((item) => item.incidentCluster?.clustered).length;
     const digitalTwin = canViewDashboard ? buildCivicDigitalTwin(allComplaints) : buildCivicDigitalTwin(complaints);
     const riskPredictions = canViewDashboard ? buildCivicRiskPredictions(allComplaints) : buildCivicRiskPredictions(complaints);
+    const civicIntelligence = buildCivicIntelligence(canViewDashboard ? allComplaints : complaints);
     const activeIncidentCount = complaints.filter(hasActiveIncident).length;
 
     res.json({
@@ -206,6 +222,8 @@ async function getDashboard(req, res, next) {
       },
       digitalTwin,
       riskPredictions,
+      civicIntelligence,
+      communityCases,
       incidentCommands,
       incidentClusters,
       iotReadings: canViewSensors ? iotReadings : [],

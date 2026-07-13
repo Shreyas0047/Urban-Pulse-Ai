@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const mongoose = require("mongoose");
 const path = require("path");
 const env = require("./config/env");
 const apiRoutes = require("./routes/api");
@@ -36,16 +37,29 @@ app.use("/api/transcribe-audio", createRateLimiter({ windowMs: 10 * 60 * 1000, m
 app.use("/api/chatbot", createRateLimiter({ windowMs: 10 * 60 * 1000, max: 40, keyPrefix: "chatbot", message: "Too many chatbot requests. Please wait and try again." }));
 
 app.use("/api", apiRoutes);
-app.use("/receipts", express.static(env.receiptsDir));
 app.use(express.static(env.publicDir));
+
+app.get("/health", (_req, res) => {
+  const databaseReady = mongoose.connection.readyState === 1;
+  res.status(databaseReady ? 200 : 503).json({
+    status: databaseReady ? "ok" : "degraded",
+    service: "urban-pulse-web",
+    database: databaseReady ? "connected" : "disconnected"
+  });
+});
 
 app.get("*", (_req, res) => {
   res.sendFile(path.join(env.publicDir, "index.html"));
 });
 
 app.use((error, _req, res, _next) => {
-  res.status(error.statusCode || 400).json({
-    error: error.userMessage || error.message || "Unexpected server error",
+  const statusCode = Number(error.statusCode || 500);
+  const safeMessage =
+    statusCode >= 500 && process.env.NODE_ENV === "production" && !error.userMessage
+      ? "Unexpected server error"
+      : error.userMessage || error.message || "Unexpected server error";
+  res.status(statusCode).json({
+    error: safeMessage,
     code: error.code || undefined,
     deliveryStatus: error.deliveryStatus || undefined,
     retryable: typeof error.retryable === "boolean" ? error.retryable : undefined

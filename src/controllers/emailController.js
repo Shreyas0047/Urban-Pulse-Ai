@@ -55,11 +55,31 @@ function validateReport(report) {
     textComplaint: normalizeText(report.textComplaint, 1000),
     location: normalizeText(report.location, 180),
     aiDescription: normalizeText(report.aiDescription, 400),
-    authority: normalizeText(report.authority, 80),
+    assignedAuthority: normalizeText(report.assignedAuthority || report.authority, 120),
     issueType: normalizeText(report.issueType, 100),
     severity: normalizeText(report.severity || report.priority, 40),
     priority: normalizeText(report.priority || report.severity, 40),
-    mapsLink: normalizeText(report.mapsLink, 500)
+    googleMapsUrl: normalizeText(report.googleMapsUrl || report.mapsLink, 500)
+  };
+}
+
+function buildTrustedEmailReport(report, complaint) {
+  const location = normalizeText(complaint.location || report.location, 180);
+  return {
+    ...report,
+    complaintId: String(complaint._id),
+    textComplaint: normalizeText(complaint.description || report.textComplaint, 1000),
+    location,
+    issueType: normalizeText(complaint.type || report.issueType, 100),
+    priority: normalizeText(complaint.priority || report.priority, 40),
+    severity: normalizeText(complaint.priority || report.severity, 40),
+    assignedAuthority: normalizeText(
+      complaint.routing?.authority || complaint.assignedAuthority || report.assignedAuthority,
+      120
+    ),
+    googleMapsUrl:
+      report.googleMapsUrl ||
+      (location ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}` : "")
   };
 }
 
@@ -114,14 +134,15 @@ function validateCloseContactEmails(emails) {
 async function emailBbmpComplaint(req, res, next) {
   try {
     const report = validateReport(req.body.report);
-    await assertReportComplaintAccess(req, report);
+    const complaint = await assertReportComplaintAccess(req, report);
+    const trustedReport = buildTrustedEmailReport(report, complaint);
     const pdfBase64 = validateAttachment(req.body.pdfBase64);
     const filename = sanitizeFilename(req.body.filename);
     const subject = normalizeText(req.body.subject || report.textComplaint || report.issueType || "Community complaint report", MAX_SUBJECT_LENGTH);
 
     const emailResult = await sendBbmpComplaintEmail({
       subject,
-      report,
+      report: trustedReport,
       pdfBase64,
       filename
     });
@@ -139,11 +160,12 @@ async function emailBbmpComplaint(req, res, next) {
 async function informCloseContacts(req, res, next) {
   try {
     const report = validateReport(req.body.report);
-    await assertReportComplaintAccess(req, report);
+    const complaint = await assertReportComplaintAccess(req, report);
+    const trustedReport = buildTrustedEmailReport(report, complaint);
     const emails = validateCloseContactEmails(req.body.emails);
     const emailResult = await sendCloseContactsComplaintEmail({
       emails,
-      report,
+      report: trustedReport,
       reporter: req.auth?.username || report.reporter
     });
 

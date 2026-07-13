@@ -448,7 +448,12 @@ def build_duplicate_correlation(integrity, category_id, normalized_text, previou
     related_ids = set()
     current_month = datetime.now(timezone.utc).strftime("%Y-%m")
 
-    for complaint in list(previous_complaints or []) + list(recent_area_complaints or []):
+    previous_items = previous_complaints if isinstance(previous_complaints, list) else []
+    recent_items = recent_area_complaints if isinstance(recent_area_complaints, list) else []
+
+    for complaint in previous_items + recent_items:
+        if not isinstance(complaint, dict):
+            continue
         complaint_id = str(complaint.get("_id") or complaint.get("id") or "")
         stored_hash = complaint.get("threatFingerprint") or complaint.get("imageFingerprint") or ""
         stored_dhash = complaint.get("threatDHash") or complaint.get("dHash") or ""
@@ -533,7 +538,8 @@ def build_threat_assessment(
 
     base_priority = float(category.get("base_priority", 0.42))
     max_relationship_score = max((SEVERITY_SCORES.get(item["severity"], 0) for item in relationships), default=0)
-    risk_text_boost = 0.12 if _has_any(normalized_text, TEXT_RISK_TERMS) else 0
+    critical_text_boost = 0.12 if _has_any(normalized_text, ["fire", "smoke", "gas leak", "explosion", "live wire", "spark", "collapse"]) else 0
+    exposure_text_boost = 0.04 if _has_any(normalized_text, ["school", "hospital", "main road", "junction", "ambulance", "children"]) else 0
     cluster = build_duplicate_correlation(
         integrity,
         category_id,
@@ -542,7 +548,7 @@ def build_threat_assessment(
         recent_area_complaints,
     )
     cluster_boost = 0.08 if cluster["clusterRisk"] == "elevated" else 0
-    risk_score = clamp01(base_priority * 0.66 + top_confidence * 0.18 + max_relationship_score + risk_text_boost + cluster_boost)
+    risk_score = clamp01(base_priority * 0.66 + top_confidence * 0.18 + max_relationship_score + critical_text_boost + exposure_text_boost + cluster_boost)
 
     if any(item["severity"] == "Critical" for item in hazards) or risk_score >= 0.86:
         threat_level = "Critical"

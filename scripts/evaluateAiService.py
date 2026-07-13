@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "ai_service"))
 
 from pipeline import run_hybrid_pipeline  # noqa: E402
+from resolution_analysis import compare_resolution_evidence  # noqa: E402
 
 
 CASES = [
@@ -74,6 +75,84 @@ CASES = [
         "expectedConflict": True,
         "expectReview": True,
     },
+    {
+        "name": "high_risk_fire_escalation",
+        "payload": {
+            "textComplaint": "There is fire and smoke from a transformer with sparks near the hospital entrance. People are nearby.",
+            "location": "Hospital entrance",
+            "imageFeatures": {
+                "redHeatRatio": 0.72,
+                "smokeLikeRatio": 0.68,
+                "hotspotRatio": 0.45,
+                "edgeDensity": 0.4,
+                "contrast": 0.5,
+            },
+        },
+        "expectedCategory": "safety_fire",
+        "expectedPriority": "CRITICAL",
+        "expectedThreat": "Critical",
+        "expectReview": False,
+    },
+    {
+        "name": "water_electrical_contact_escalation",
+        "payload": {
+            "textComplaint": "Water is flooding around an electric pole with live wire sparks on the main road.",
+            "location": "Main road",
+            "imageFeatures": {
+                "blueRatio": 0.42,
+                "neutralRatio": 0.42,
+                "edgeDensity": 0.3,
+                "redHeatRatio": 0.32,
+                "hotspotRatio": 0.3,
+            },
+        },
+        "expectedPriority": "CRITICAL",
+        "expectedThreat": "Critical",
+        "expectReview": True,
+    },
+    {
+        "name": "malformed_context_and_features_do_not_crash",
+        "payload": {
+            "textComplaint": "There is smoke and sparks near a transformer by the school gate.",
+            "location": "School gate",
+            "imageFeatures": {
+                "greenRatio": "bad",
+                "edgeDensity": 2,
+                "blueRatio": -1,
+                "contrast": None,
+            },
+            "previousComplaints": {"bad": "shape"},
+            "recentAreaComplaints": "bad",
+        },
+        "expectedPriority": "CRITICAL",
+        "expectedThreat": "Critical",
+        "expectReview": True,
+    },
+    {
+        "name": "vague_text_abstains_instead_of_guessing",
+        "payload": {
+            "textComplaint": "Please check this issue in my area.",
+            "location": "Unknown",
+        },
+        "expectedCategory": "general",
+        "expectedAbstained": True,
+        "expectReview": True,
+    },
+    {
+        "name": "weak_image_abstains_instead_of_guessing",
+        "payload": {
+            "imageFeatures": {
+                "edgeDensity": 0.12,
+                "contrast": 0.1,
+                "neutralRatio": 0.2,
+                "averageBrightness": 0.5,
+            },
+            "location": "Unknown",
+        },
+        "expectedCategory": "general",
+        "expectedAbstained": True,
+        "expectReview": True,
+    },
 ]
 
 
@@ -83,6 +162,7 @@ REQUIRED_DECISION_KEYS = {
     "confidence",
     "confidenceLabel",
     "reviewRequired",
+    "abstained",
     "conflictDetected",
     "evidenceUsed",
     "reasoning",
@@ -110,14 +190,23 @@ def evaluate_case(case):
         passed = passed and bool(decision.get("conflictDetected")) == case["expectedConflict"]
     if "expectReview" in case:
         passed = passed and bool(decision.get("reviewRequired")) == case["expectReview"]
+    if "expectedAbstained" in case:
+        passed = passed and bool(decision.get("abstained")) == case["expectedAbstained"]
+    if case.get("expectedPriority"):
+        passed = passed and result.get("priority", {}).get("level") == case["expectedPriority"]
+    if case.get("expectedThreat"):
+        passed = passed and result.get("threatAssessment", {}).get("threatLevel") == case["expectedThreat"]
 
     return {
         "name": case["name"],
         "passed": passed,
         "category": category,
+        "priority": result.get("priority", {}).get("level"),
+        "threat": result.get("threatAssessment", {}).get("threatLevel"),
         "confidence": decision.get("confidence"),
         "confidenceLabel": decision.get("confidenceLabel"),
         "reviewRequired": decision.get("reviewRequired"),
+        "abstained": decision.get("abstained"),
         "conflictDetected": decision.get("conflictDetected"),
         "missingDecisionKeys": missing,
     }
@@ -125,6 +214,28 @@ def evaluate_case(case):
 
 def main():
     results = [evaluate_case(case) for case in CASES]
+    resolution_cases = [
+        {
+            "name": "resolved_high_risk_requires_review",
+            "payload": {"originalCategoryId": "utility_fault", "originalType": "Utility Fault", "originalPriority": "High", "vote": "resolved", "note": "The wire was repaired."},
+            "expectedOutcome": "needs_admin_review",
+        },
+        {
+            "name": "still_there_requests_rework",
+            "payload": {"originalCategoryId": "garbage", "originalType": "Garbage Overflow", "originalPriority": "Low", "vote": "still_there", "note": "Garbage is still on the road."},
+            "expectedOutcome": "needs_rework",
+        },
+    ]
+    for case in resolution_cases:
+        comparison = compare_resolution_evidence(case["payload"])
+        results.append(
+            {
+                "name": case["name"],
+                "passed": comparison.get("outcome") == case["expectedOutcome"],
+                "outcome": comparison.get("outcome"),
+                "confidence": comparison.get("confidence"),
+            }
+        )
     failures = [result for result in results if not result["passed"]]
     report = {
         "evaluated": len(results),

@@ -162,7 +162,7 @@ function formatAuthError(error) {
 }
 
 function buildAuthResponse(user) {
-  const token = issueRoleToken(user.role, user.username, user._id);
+  const token = issueRoleToken(user.role, user.username, user._id, user.tokenVersion);
   return {
     token,
     role: user.role,
@@ -450,6 +450,7 @@ async function resetPassword(req, res, next) {
     }
 
     user.passwordHash = hashPassword(password);
+    user.tokenVersion = Number(user.tokenVersion || 0) + 1;
     await user.save();
     await PasswordResetOtp.deleteOne({ _id: pendingReset._id });
     clearLoginFailures(req, email);

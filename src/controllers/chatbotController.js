@@ -13,6 +13,9 @@ function getUserKey(auth, requestedUserId) {
   if (authUserId && bodyUserId && authUserId !== bodyUserId) {
     throw createHttpError("User identity mismatch for chatbot session.", 403);
   }
+  if (!authUserId && bodyUserId && bodyUserId !== auth.username) {
+    throw createHttpError("User identity mismatch for chatbot session.", 403);
+  }
 
   return authUserId || bodyUserId || auth.username;
 }

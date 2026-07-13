@@ -89,6 +89,8 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | Quota guard | MongoDB-backed monthly usage limits for Weatherstack and Zenserp | Integrated |
 | Emergency broadcast | In-app/email-ready broadcast records for high-risk complaints | Integrated |
 | Local area alerts | Users can opt in to area-based email alerts for serious nearby complaints | Integrated |
+| Community proof | Citizens discover sanitized matching incidents in saved areas and submit corroborated, cleared, or worsening signals | Integrated |
+| Resolution loop | Reporter follow-up notes/photos and conservative AI comparison after authority resolution | Integrated |
 | AI area understanding | Extracts likely area, landmarks, ward hints, and matching terms from messy complaint locations | Integrated |
 | AI complaint clustering | Groups likely duplicate reports into durable incident clusters without deleting individual complaints | Integrated |
 | Auto follow-up scheduler | Creates due/overdue follow-up notes for unresolved complaints based on priority | Integrated |
@@ -190,6 +192,16 @@ Current category coverage includes:
 
 ## Threat Detection
 
+## Civic Intelligence Layer
+
+Urban Pulse also turns stored complaint evidence into an explainable civic operations view:
+
+- **Urban Pulse Radar:** animated risk waves over active mapped zones, based on open-case severity and threat signals.
+- **Civic Time Machine:** a chronological account of reporting, status changes, community proof, and resolution evidence.
+- **Consequence Scenario:** a constrained planning scenario for an unresolved case, clearly labeled as a non-predictive decision aid.
+- **Community Proof Network:** citizens with matching saved local-alert areas can corroborate, clear, or flag an active issue as worsening; one signal per user is retained.
+- **Incident DNA:** a visual breakdown of report text, image checks, location, risk, context, and community signals.
+
 Threat detection is one of the most important AI sections of the project. It is designed to make the platform stronger than a plain classifier.
 
 The `threatAssessment` object can include:
@@ -236,6 +248,8 @@ Important design rule: public search context and weather context support the cas
 6. Review generated issue type, severity, authority, routing, and alerts.
 7. Download a PDF report or send escalation emails.
 8. Track complaint status later from the complaints view or chatbot.
+9. After an authority marks a case resolved, submit a follow-up confirmation with an optional photo. The resolution loop records citizen evidence and returns `citizen_confirmed`, `needs_rework`, or `needs_admin_review` without treating a weak image as proof of completed work.
+10. Enable local alerts to view privacy-safe nearby incidents and contribute a community proof signal without accessing another reporter's case file.
 
 ### Admin Flow
 
@@ -247,6 +261,7 @@ Important design rule: public search context and weather context support the cas
 6. Monitor emergency broadcasts and incident command rooms.
 7. Use map and city health views for operational awareness.
 8. Manage user accounts if permissions allow.
+9. When marking a complaint resolved, review incoming citizen follow-up evidence before closing high-risk cases.
 
 ## Tech Stack
 
@@ -546,8 +561,8 @@ Weatherstack and Zenserp are free/limited APIs in this project, so usage is guar
 
 | Provider | Default Limit | Month Key | Behavior When Exhausted |
 | --- | --- | --- | --- |
-| Weatherstack | `90` successful reservations/month | UTC `YYYY-MM` | Weather snapshot is stored as unavailable and complaint still submits |
-| Zenserp | `48` successful reservations/month | UTC `YYYY-MM` | Civic evidence is stored as quota-limited and complaint still submits |
+| Weatherstack | `90` attempted external calls/month | UTC `YYYY-MM` | Weather snapshot is stored as unavailable and complaint still submits |
+| Zenserp | `48` attempted external calls/month | UTC `YYYY-MM` | Civic evidence is stored as quota-limited and complaint still submits |
 
 The API keys are never sent to the frontend. Provider failure, disabled keys, missing keys, or quota exhaustion should never block complaint submission.
 
@@ -558,6 +573,8 @@ Run the full local checks before production deployment:
 ```bash
 node -e "require('./src/app'); console.log('app-load ok')"
 npm run evaluate:ai
+npm run verify:resolution
+npm run verify:civic-intelligence
 python scripts/evaluateAiService.py
 python -m compileall ai_service stt_service scripts
 ```
@@ -716,6 +733,8 @@ The reset endpoint clears complaints, incident command records, and emergency br
 - Complaint text, location, voice transcript, and audio uploads are length/size-limited server-side.
 - Authority and close-contact email endpoints verify complaint ownership before sending.
 - User-management actions preserve at least one active admin account.
+- Password resets, role changes, account disabling, and account deletion invalidate stale registered-user sessions.
+- Nearby community-proof feeds expose only sanitized incident summaries, not reporter identities, descriptions, or evidence.
 - Local area email alerts are opt-in and use saved area names instead of continuous background tracking.
 - External provider failures do not expose API keys to the frontend, PDFs, stored complaints, or logs.
 

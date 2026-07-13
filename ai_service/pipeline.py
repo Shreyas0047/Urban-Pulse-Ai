@@ -130,6 +130,17 @@ def run_hybrid_pipeline(payload):
         threat_assessment,
     )
     confidence = decision["confidence"]
+    abstained = bool(decision.get("abstained"))
+
+    # Do not expose a weak fallback as if it were a verified incident type.
+    if abstained:
+        primary_category_id = "general"
+        primary_category_label = "Needs Manual Review"
+        final_categories = []
+        fallback = None
+        reason = "Evidence is insufficient for a precise automatic category. Manual review is required."
+        decision["finalCategory"] = primary_category_label
+        decision["finalCategoryId"] = primary_category_id
 
     return {
         "category": primary_category_id,
@@ -153,6 +164,7 @@ def run_hybrid_pipeline(payload):
         "imagePrediction": decision["imagePrediction"],
         "conflictDetected": decision["conflictDetected"],
         "reviewRequired": decision["reviewRequired"],
+        "abstained": abstained,
         "confidenceLabel": decision["confidenceLabel"],
         "evidenceUsed": decision["evidenceUsed"],
         "reasoning": decision["reasoning"],
@@ -202,6 +214,7 @@ def run_hybrid_pipeline(payload):
             "evaluationVersion": "ai-service-decision-engine-v4",
             "confidenceLabel": decision["confidenceLabel"],
             "reviewRequired": decision["reviewRequired"],
+            "abstained": abstained,
             "conflictDetected": decision["conflictDetected"],
             "threatEngine": threat_assessment.get("engine", "visual-consensus-threat-v1"),
             "threatStatus": threat_assessment.get("status", "not_available"),

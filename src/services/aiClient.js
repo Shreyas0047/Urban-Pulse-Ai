@@ -1145,6 +1145,69 @@ async function analyzeComplaint(payload) {
   }
 }
 
+function compareResolutionEvidenceLocally(payload) {
+  const vote = String(payload.vote || "").trim().toLowerCase();
+  const originalPriority = String(payload.originalPriority || "").trim().toUpperCase();
+  const hasImage = Boolean(payload.imageBase64 || payload.imageFeatures);
+
+  if (vote === "still_there" || vote === "got_worse") {
+    return {
+      outcome: "needs_rework",
+      confidence: vote === "got_worse" ? 0.92 : 0.86,
+      reason: vote === "got_worse" ? "Citizen follow-up reports that the issue has worsened." : "Citizen follow-up reports that the original issue remains.",
+      visualComparison: hasImage ? "follow_up_image_recorded" : "no_follow_up_image",
+      followUpEvidence: { hasImage, reviewRequired: true, confidenceLabel: "Needs Review" },
+      engine: "resolution-evidence-comparator-fallback-v1",
+      disclaimer: "This comparison supports review; it does not independently prove that physical work was completed."
+    };
+  }
+
+  if (vote === "resolved" && ["HIGH", "CRITICAL"].includes(originalPriority)) {
+    return {
+      outcome: "needs_admin_review",
+      confidence: 0.64,
+      reason: "A high-risk incident needs an authority review even after a citizen marks it resolved.",
+      visualComparison: hasImage ? "follow_up_image_recorded" : "no_follow_up_image",
+      followUpEvidence: { hasImage, reviewRequired: true, confidenceLabel: "Needs Review" },
+      engine: "resolution-evidence-comparator-fallback-v1",
+      disclaimer: "This comparison supports review; it does not independently prove that physical work was completed."
+    };
+  }
+
+  return {
+    outcome: vote === "resolved" ? "citizen_confirmed" : "needs_admin_review",
+    confidence: hasImage ? 0.68 : 0.56,
+    reason: vote === "resolved" ? "Citizen marked the issue resolved." : "Follow-up evidence needs manual review.",
+    visualComparison: hasImage ? "follow_up_image_recorded" : "no_follow_up_image",
+    followUpEvidence: { hasImage, reviewRequired: !hasImage, confidenceLabel: hasImage ? "Medium" : "Needs Review" },
+    engine: "resolution-evidence-comparator-fallback-v1",
+    disclaimer: "This comparison supports review; it does not independently prove that physical work was completed."
+  };
+}
+
+async function compareResolutionEvidence(payload) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(`${env.aiServiceUrl}/compare-resolution`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Resolution comparison failed");
+    }
+    return data;
+  } catch (_error) {
+    return compareResolutionEvidenceLocally(payload);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function processTranscriptWithAi(payload) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 7000);
@@ -1435,6 +1498,7 @@ async function transcribeAudio(payload) {
 
 module.exports = {
   analyzeComplaint,
+  compareResolutionEvidence,
   transcribeAudio,
   processTranscriptWithAi,
   resolveChatIntent,

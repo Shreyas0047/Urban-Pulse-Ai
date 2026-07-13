@@ -44,6 +44,7 @@ async function updateUser(req, res, next) {
       throw createHttpError("User not found.", 404);
     }
     const updatingCurrentUser = isSameUser(user, req.auth);
+    let invalidateSessions = false;
 
     if (req.body.role !== undefined) {
       const nextRole = String(req.body.role || "").trim();
@@ -59,6 +60,7 @@ async function updateUser(req, res, next) {
           throw createHttpError("At least one active admin account must remain.", 400);
         }
       }
+      invalidateSessions = invalidateSessions || nextRole !== user.role;
       user.role = nextRole;
     }
 
@@ -73,8 +75,13 @@ async function updateUser(req, res, next) {
           throw createHttpError("At least one active admin account must remain.", 400);
         }
       }
+      invalidateSessions = invalidateSessions || disabled !== Boolean(user.disabledAt);
       user.disabledAt = disabled ? new Date() : null;
       user.disabledBy = disabled ? req.auth.username : "";
+    }
+
+    if (invalidateSessions) {
+      user.tokenVersion = Number(user.tokenVersion || 0) + 1;
     }
 
     await user.save();

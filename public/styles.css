@@ -1108,6 +1108,188 @@ select,
   margin-top: 12px;
 }
 
+.resolution-evidence-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.resolution-evidence-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.resolution-evidence-form textarea,
+.resolution-evidence-form input[type="file"] {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(7, 12, 20, 0.44);
+  color: var(--text-main);
+  padding: 10px;
+  font: inherit;
+}
+
+.resolution-evidence-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.civic-intelligence-deck {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.community-cases-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.community-cases-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.community-cases-head > span,
+.community-case-meta span {
+  padding: 5px 9px;
+  border: 1px solid rgba(135, 193, 255, 0.16);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.community-cases-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.community-case-card,
+.community-cases-empty {
+  padding: 16px;
+  border: 1px solid rgba(135, 193, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(13, 22, 36, 0.38);
+}
+
+.community-case-card {
+  display: grid;
+  gap: 9px;
+}
+
+.community-case-meta {
+  display: flex;
+  gap: 7px;
+}
+
+.community-case-card p,
+.community-case-card small,
+.community-cases-empty p {
+  margin: 0;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .community-cases-grid { grid-template-columns: 1fr; }
+}
+
+.intelligence-card,
+.dna-card,
+.community-proof-card {
+  overflow: hidden;
+}
+
+.intelligence-card {
+  position: relative;
+  padding: 18px;
+  border: 1px solid rgba(135, 193, 255, 0.16);
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(51, 125, 183, 0.14), rgba(13, 22, 36, 0.5));
+}
+
+.intelligence-card::after {
+  content: "";
+  position: absolute;
+  inset: -45% auto auto 65%;
+  width: 160px;
+  aspect-ratio: 1;
+  border: 1px solid rgba(130, 211, 255, 0.22);
+  border-radius: 50%;
+  box-shadow: 0 0 0 25px rgba(86, 170, 255, 0.04), 0 0 0 55px rgba(86, 170, 255, 0.025);
+  pointer-events: none;
+}
+
+.radar-wave-list,
+.dna-strands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.radar-wave-list span,
+.dna-strands span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.radar-wave-list i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(calc(210 - var(--wave-intensity) * 1.4), 90%, 64%);
+  box-shadow: 0 0 12px currentColor;
+}
+
+.dna-strands i {
+  width: 26px;
+  height: 5px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #65b9ff var(--strand), rgba(255, 255, 255, 0.12) var(--strand));
+}
+
+.radar-map-wave {
+  position: absolute;
+  z-index: 1;
+  width: var(--wave-size);
+  height: var(--wave-size);
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(105, 202, 255, var(--wave-alpha));
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(82, 176, 255, calc(var(--wave-alpha) * 0.72)) 0%, rgba(82, 176, 255, 0) 66%);
+  pointer-events: none;
+  animation: civic-radar-pulse 2.8s ease-out infinite;
+}
+
+@keyframes civic-radar-pulse {
+  0% { opacity: 0.82; transform: translate(-50%, -50%) scale(0.55); }
+  72% { opacity: 0.18; transform: translate(-50%, -50%) scale(1.2); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-map-wave { animation: none; }
+}
+
+@media (max-width: 720px) {
+  .civic-intelligence-deck { grid-template-columns: 1fr; }
+}
+
 .insight-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

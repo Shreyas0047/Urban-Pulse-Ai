@@ -11,6 +11,8 @@
     "seed": "node scripts/seedDatabase.js",
     "seed:fresh": "node scripts/seedDatabase.js --fresh",
     "verify:smtp": "node scripts/verifySmtp.js",
+    "verify:resolution": "node scripts/verifyResolutionLoop.js",
+    "verify:civic-intelligence": "node scripts/verifyCivicIntelligence.js",
     "evaluate:ai": "node scripts/evaluateAi.js"
   },
   "dependencies": {
@@ -20,7 +22,7 @@
     "jsonwebtoken": "^9.0.2",
     "liquid-glass-react": "^1.1.1",
     "mongoose": "^8.13.2",
-    "nodemailer": "^8.0.4",
+    "nodemailer": "^9.0.3",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

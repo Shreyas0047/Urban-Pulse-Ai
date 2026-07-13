@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     mobileNumber: { type: String, unique: true, sparse: true, trim: true },
     passwordHash: { type: String, required: true },
+    tokenVersion: { type: Number, default: 0 },
     role: { type: String, required: true, enum: ["Admin", "Citizen"] },
     disabledAt: { type: Date, default: null },
     disabledBy: { type: String, default: "" },

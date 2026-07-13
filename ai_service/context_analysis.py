@@ -3,9 +3,15 @@ from collections import Counter
 from text_processing import normalize_text
 
 
+def valid_history_items(value):
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
 def context_features(payload, semantic_result):
-    user_history = payload.get("previousComplaints") or []
-    area_history = payload.get("recentAreaComplaints") or []
+    user_history = valid_history_items(payload.get("previousComplaints"))
+    area_history = valid_history_items(payload.get("recentAreaComplaints"))
     category_ids = [item["id"] for item in semantic_result["labels"]]
     location_text = normalize_text(payload.get("location"))
 
@@ -33,4 +39,3 @@ def context_features(payload, semantic_result):
         "repeat_count": user_repeat_count + area_repeat_count,
         "top_recent_types": Counter(normalize_text(item.get("type")) for item in area_history if item.get("type")).most_common(3),
     }
-

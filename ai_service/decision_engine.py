@@ -118,6 +118,26 @@ def calibrate_confidence(base_confidence, text_prediction, image_prediction, con
     return round(clamp01(confidence), 3), round(top_margin, 3)
 
 
+def weak_text_prediction(text_prediction):
+    if not text_prediction:
+        return True
+    return (
+        text_prediction.get("source") == "semantic-fallback"
+        and text_prediction.get("confidence", 0) < 0.48
+        and not text_prediction.get("matchedKeywords")
+    )
+
+
+def weak_image_prediction(image_prediction, vision_result, vision_margin):
+    if not image_prediction:
+        return True
+    return (
+        bool((vision_result or {}).get("fallbackUsed", True))
+        and image_prediction.get("confidence", 0) < 0.5
+        and vision_margin < 0.1
+    )
+
+
 def build_structured_decision(
     primary_category_id,
     primary_category_label,
@@ -160,12 +180,19 @@ def build_structured_decision(
         context_bundle,
         vision_result,
     )
+    insufficient_evidence = bool(
+        (not text_prediction and not image_prediction)
+        or (text_prediction and not image_prediction and weak_text_prediction(text_prediction))
+        or (image_prediction and not text_prediction and weak_image_prediction(image_prediction, vision_result, vision_margin))
+    )
+    if insufficient_evidence:
+        calibrated_confidence = min(calibrated_confidence, 0.33)
     label = confidence_label(calibrated_confidence)
     threat_assessment = threat_assessment or (vision_result or {}).get("threatAssessment") or {}
     threat_gate = threat_assessment.get("safetyGate") or {}
     threat_status = threat_assessment.get("status")
     threat_review_required = threat_gate.get("abstained") or threat_gate.get("action") in {"needs_review", "request_more_evidence"}
-    review_required = conflict_detected or calibrated_confidence < MEDIUM_CONFIDENCE or bool(threat_review_required)
+    review_required = insufficient_evidence or conflict_detected or calibrated_confidence < MEDIUM_CONFIDENCE or bool(threat_review_required)
 
     evidence_used = []
     if text_prediction:
@@ -195,7 +222,9 @@ def build_structured_decision(
 
     risk_factors = _collect_risk_factors(text, context_bundle, priority, primary_category_id)
     decision_sentence = f"Final category is {primary_category_label} with {label.lower()} confidence."
-    if conflict_detected:
+    if insufficient_evidence:
+        decision_sentence = "Evidence is insufficient for a precise automatic category, so manual review is required."
+    elif conflict_detected:
         decision_sentence += " Text and image evidence disagree, so admin review is required."
     elif threat_review_required:
         decision_sentence += " Threat evidence needs confirmation before automatic closure."
@@ -210,6 +239,7 @@ def build_structured_decision(
         "confidence": calibrated_confidence,
         "confidenceLabel": label,
         "reviewRequired": review_required,
+        "abstained": insufficient_evidence,
         "conflictDetected": conflict_detected,
         "evidenceUsed": evidence_used,
         "textPrediction": text_prediction,
@@ -232,9 +262,11 @@ def build_structured_decision(
                 "safetyAction": threat_gate.get("action", "not_available"),
             },
             "decision": decision_sentence,
+            "abstentionReason": "Insufficient reliable text/image evidence." if insufficient_evidence else "",
         },
         "quality": {
             "needsHumanReview": review_required,
+            "insufficientEvidence": insufficient_evidence,
             "lowConfidence": calibrated_confidence < MEDIUM_CONFIDENCE,
             "visionFallbackUsed": bool((vision_result or {}).get("fallbackUsed", True)),
             "visionCandidateMargin": vision_margin,
