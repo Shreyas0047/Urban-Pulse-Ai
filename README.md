@@ -37,7 +37,7 @@ The project is built around a simple idea: civic complaint systems should not st
 - [Scripts](#scripts)
 - [API Reference](#api-reference)
 - [Data Models](#data-models)
-- [Multi-City Expansion](#multi-city-expansion)
+- [Bengaluru Operations](#bengaluru-operations)
 - [Evaluation And Testing](#evaluation-and-testing)
 - [Deployment](#deployment)
 - [Production Checklist](#production-checklist)
@@ -51,7 +51,8 @@ The project is built around a simple idea: civic complaint systems should not st
 - AI complaint intake with text, image, voice, and location evidence.
 - Image-first incident guessing, including image-only complaint handling.
 - Structured threat assessment with risk score, hazards, safety gate, duplicate signal, and image integrity snapshot.
-- Smart routing to department units based on category, severity, ward inference, and active workload.
+- Versioned Bengaluru ward and department routing based on location, category, severity, and active workload.
+- Privacy-safe community verification for still-present, worsening, resolved, and duplicate reports.
 - Emergency broadcast records for high-risk complaints.
 - Incident command rooms with SLA, checklist, timeline, assigned unit, and risk score.
 - Weatherstack context for weather-sensitive civic issues.
@@ -63,7 +64,7 @@ The project is built around a simple idea: civic complaint systems should not st
 - Express fallback AI path when the Flask AI service is unavailable.
 - Deterministic AI evaluation scripts for regression checking.
 - Versioned real-world benchmark foundation with provenance, privacy review, independent annotation, and leakage-safe splits.
-- City-first complaint intake backed by a versioned five-city registry, controlled rollout, city-scoped circuit breakers, and measurable authority-response deadlines; Bengaluru is active and four cities remain staged.
+- Bengaluru-focused complaint intake with BBMP-aligned routing, official handoff tracking, and measurable authority-response deadlines.
 
 ## Why This Project Exists
 
@@ -84,16 +85,16 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | --- | --- | --- |
 | Authentication | Email/password login, role selection, email OTP registration, forgot-password OTP reset | Integrated |
 | Citizen reporting | Text complaint, voice transcript, image upload, location, map preview | Integrated |
-| Multi-city operations | Scoped routing, controlled rollout, rolling SLOs, city circuit breakers, and authority response governance | Phase 9 integrated |
+| Bengaluru operations | BBMP-aligned routing, authority handoff, response deadlines, and local-area intelligence | Integrated |
 | Image analysis | Browser-side image features, resized image upload, Flask vision analysis, local fallback | Integrated |
 | Threat intelligence | Threat level, risk score, hazards, relationships, confidence, safety gate, duplicate signal | Integrated |
-| Smart routing | Department/unit selection by category, severity, ward, and active workload | Integrated |
+| Smart routing | Nine configurable BBMP-aligned departments with explicit, boundary-ready, area-alias, and safe fallback ward resolution | Integrated |
 | Weather context | Weatherstack current conditions for weather-sensitive complaints | Integrated |
 | Civic evidence | Zenserp official-source links and public incident context | Integrated |
 | Quota guard | MongoDB-backed monthly usage limits for Weatherstack and Zenserp | Integrated |
 | Emergency broadcast | In-app/email-ready broadcast records for high-risk complaints | Integrated |
 | Local area alerts | Users can opt in to area-based email alerts for serious nearby complaints | Integrated |
-| Community proof | Citizens discover sanitized matching incidents in saved areas and submit corroborated, cleared, or worsening signals | Integrated |
+| Community verification | Nearby opted-in citizens submit still-present, worsening, resolved, or duplicate status without seeing reporter identity or evidence | Integrated |
 | Resolution loop | Reporter follow-up notes/photos and conservative AI comparison after authority resolution | Integrated |
 | Human AI review | Admin confirmation, correction, and insufficient-evidence workflow with mandatory reasoning and stale-write protection | Integrated |
 | Decision audit | Append-only, hash-chained AI baselines and human corrections with integrity verification and exports | Integrated |
@@ -207,7 +208,7 @@ Current category coverage includes:
 Urban Pulse also turns stored complaint evidence into an explainable civic operations view:
 
 - **Urban Pulse Radar:** animated risk waves over active mapped zones, based on open-case severity and threat signals.
-- **Civic Time Machine:** a chronological account of reporting, status changes, community proof, and resolution evidence.
+- **Civic Time Machine:** a chronological account of reporting, status changes, community verification, and resolution evidence.
 - **Consequence Scenario:** a constrained planning scenario for an unresolved case, clearly labeled as a non-predictive decision aid.
 - **Community Proof Network:** citizens with matching saved local-alert areas can corroborate, clear, or flag an active issue as worsening; one signal per user is retained.
 - **Incident DNA:** a visual breakdown of report text, image checks, location, risk, context, and community signals.
@@ -252,14 +253,13 @@ Important design rule: public search context and weather context support the cas
 
 1. Register a Citizen account or log in with an existing Citizen/Admin email and password. Administrative access is granted only by an existing Admin.
 2. Verify registration or password reset through email OTP when needed.
-3. Select an available city before entering complaint evidence.
-4. Enter location and complaint description.
+3. Enter a Bengaluru location and complaint description.
 5. Optionally attach an image or record voice.
 6. Submit the complaint for AI analysis.
 7. Review generated issue type, severity, authority, routing, and alerts.
 8. Download a PDF report or send escalation emails, then track status from the complaints view or chatbot.
 9. After an authority marks a case resolved, submit a follow-up confirmation with an optional photo. The resolution loop records citizen evidence and returns `citizen_confirmed`, `needs_rework`, or `needs_admin_review` without treating a weak image as proof of completed work.
-10. Enable local alerts to view privacy-safe nearby incidents and contribute a community proof signal without accessing another reporter's case file.
+10. Enable local alerts to view privacy-safe nearby incidents and contribute a community verification without accessing another reporter's case file. One active response is retained per citizen and complaint.
 
 ### Admin Flow
 
@@ -317,8 +317,8 @@ Urban-Pulse-Ai/
 |-- scripts/                    # Evaluation, benchmark, seed, SMTP verification
 |-- shared/
 |   |-- aiCategories.json       # Shared AI category catalog
-|   |-- cityRegistry.json       # Versioned five-city rollout registry
-|   `-- cityRoutingRegistry.json # City/category ownership and handoff profiles
+|   |-- bengaluruRouting.json   # Versioned category ownership, departments, escalation and handoff profile
+|   `-- bengaluruWards.json     # Versioned ward-office aliases, optional boundaries, zones and safe fallback
 |-- src/
 |   |-- app.js                  # Express app bootstrap
 |   |-- server.js               # Server entrypoint
@@ -515,10 +515,6 @@ The first CLIP model run may take longer because the model may need to download 
 | `npm run start:stt` | Start optional local STT service |
 | `npm run seed` | Seed local/demo database data |
 | `npm run seed:fresh` | Clear and reseed local/demo data |
-| `npm run cities:sync` | Validate and idempotently synchronize the city registry |
-| `npm run routing:sync` | Validate and synchronize all 25 city-scoped routing units |
-| `npm run migrate:cities` | Dry-run the legacy complaint-to-Bengaluru migration |
-| `npm run migrate:cities -- --apply` | Apply the guarded legacy city migration after reviewing dry-run output |
 | `npm run verify:smtp` | Verify SMTP connection without sending an email |
 | `npm run verify:smtp -- --send-test=email@example.com` | Send one test OTP email through registration email path |
 | `npm run evaluate:ai` | Run deterministic Node AI evaluation |
@@ -538,22 +534,15 @@ The first CLIP model run may take longer because the model may need to download 
 | `npm run benchmark:compare -- --baseline ... --candidate ...` | Apply champion/challenger safety and non-regression gates |
 | `npm run verify:benchmark-comparison` | Verify model promotion and rejection decisions |
 | `npm run verify:authority-tickets` | Verify adapter privacy, idempotency, delivery, retries, and reconciliation |
-| `npm run verify:city-registry` | Verify registry safety, public discovery, complaint defaults, and migration behavior |
-| `npm run verify:multi-city-phase2` | Verify city-first UI, server guards, location consistency, chatbot flow, and city isolation |
-| `npm run verify:multi-city-phase3` | Verify category ownership, routing isolation, handoff truth, review constraints, and email safety |
-| `npm run verify:multi-city-phase4` | Verify manual handoff states, protected confirmation, reference integrity, and UI truthfulness |
-| `npm run verify:multi-city-phase5` | Verify dashboard access, city-isolated commands, alerts, observability, and community proof |
-| `npm run verify:multi-city-phase6` | Verify readiness checks, evidence expiry, configuration binding, approval, and startup refusal |
-| `npm run verify:multi-city-phase7` | Verify pilot cohorts, daily limits, audited transitions, pause behavior, and pre-provider gating |
-| `npm run verify:multi-city-phase8` | Verify operational SLOs, data minimization, automatic city pause, incident deduplication, and acknowledgement-gated recovery |
-| `npm run verify:multi-city-phase9` | Verify authority deadline policies, escalation levels, lifecycle truth, idempotency, scheduler, and city-scoped Admin access |
-| `npm run verify:production-integration` | Verify auth role policy, neutral password-reset responses, direct-API city isolation, provider city context, deployment config, and removed dead UI runtime |
 | `npm run verify:ai-service-auth` | Verify public AI health, protected AI POST endpoints, valid service-token access, and Flask payload limits |
+| `npm run verify:bengaluru-scope` | Verify server-owned Bengaluru intake, BBMP routing, and absence of multi-city UI/API paths |
+| `npm run verify:bengaluru-routing` | Verify all 12 categories have one department owner and test ward resolution strategies |
+| `npm run verify:community-verification` | Verify privacy, eligibility, conflict handling, idempotency, cooldowns, and community-wide detection |
 | `npm run verify:accessibility` | Run deterministic static accessibility contracts |
 | `npm run verify:resilience` | Verify rate limits, correlation IDs, and security headers |
 | `npm run verify:load` | Run concurrent local HTTP and payload-boundary checks |
 | `npm run verify:syntax` | Syntax-check project JavaScript and load the Express app |
-| `npm run verify:release` | Run the consolidated multi-city Phase 2-9 and cross-service release gate |
+| `npm run verify:release` | Run the consolidated application and cross-service release gate |
 
 ## API Reference
 
@@ -564,9 +553,6 @@ All protected endpoints require a bearer token from login or registration.
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/roles` | List available roles and permissions |
-| `GET` | `/api/cities` | List active and planned city jurisdictions without private registry metadata |
-| `GET` | `/api/cities/:slug` | Read one public city rollout record and official complaint channels |
-| `GET` | `/api/cities/:slug/routing-units` | Read public category ownership and manual handoff details for one city |
 | `POST` | `/api/auth/register/request-otp` | Send a Citizen-registration OTP to email; public Admin registration is refused |
 | `POST` | `/api/auth/register` | Register a Citizen account with OTP |
 | `POST` | `/api/auth/login` | Login with email, password, and role |
@@ -580,27 +566,22 @@ Health probes are available at `GET /health/live` for process liveness and `GET 
 
 | Method | Endpoint | Permission | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/dashboard?cityId=:cityId` | `submit_complaint` | Load a citizen dashboard or an Admin's assigned city-scoped operations view |
-| `POST` | `/api/analyze-complaint` | `submit_complaint` | Create a complaint using required `cityId` and `cityRegistryVersion`, then run the AI workflow |
+| `GET` | `/api/dashboard` | `submit_complaint` | Load the citizen or Bengaluru Admin dashboard |
+| `POST` | `/api/analyze-complaint` | `submit_complaint` | Create and analyze a Bengaluru civic complaint |
 | `GET` | `/api/complaints/:id` | `submit_complaint` | Load complaint detail |
 | `PATCH` | `/api/complaints/:id/status` | `update_complaint_status` | Update complaint status or priority |
 | `POST` | `/api/complaints/:id/human-review` | `update_complaint_status` | Confirm, correct, or request better evidence for an AI decision |
+| `POST` | `/api/complaints/:id/community-verification` | `submit_complaint` | Submit a nearby still-present, worsening, resolved, or duplicate verification |
+| `POST` | `/api/complaints/:id/community-proof` | `submit_complaint` | Backward-compatible alias for community verification |
 | `GET` | `/api/complaints/:id/decision-audit` | `update_complaint_status` | Verify and export one complaint's decision history |
-| `GET` | `/api/decision-audit/feedback?cityId=:cityId` | `update_complaint_status` | Aggregate or export human correction feedback for an assigned operations city |
+| `GET` | `/api/decision-audit/feedback` | `update_complaint_status` | Aggregate or export human correction feedback |
 | `POST` | `/api/complaints/:id/authority-ticket` | `update_complaint_status` | Create an idempotent ticket and dispatch it or prepare its manual handoff |
 | `POST` | `/api/complaints/:id/authority-ticket/retry` | `update_complaint_status` | Retry a due failed delivery |
 | `POST` | `/api/authority-tickets/:ticketId/manual-confirmation` | `update_complaint_status` | Record a portal-issued reference after a real manual submission |
 | `PATCH` | `/api/authority-tickets/:ticketId/reconcile` | `update_complaint_status` | Record an authority acknowledgement or outcome |
 | `POST` | `/api/complaints/:id/alerts/acknowledge` | `manage_alerts` | Acknowledge complaint alert |
-| `GET` | `/api/cities/:slug/activation-readiness` | `update_complaint_status` | Evaluate activation readiness for an assigned operations city |
-| `PUT` | `/api/cities/:slug/activation-readiness/evidence` | `update_complaint_status` | Record staging and operational readiness evidence |
-| `POST` | `/api/cities/:slug/activation-readiness/approve` | `update_complaint_status` | Approve a fully passing, configuration-bound readiness review |
-| `GET` | `/api/cities/:slug/rollout` | `update_complaint_status` | Inspect assigned-city rollout mode, usage, configuration state, and history |
-| `PATCH` | `/api/cities/:slug/rollout` | `update_complaint_status` | Change pilot/open/closed/paused intake controls with an audit reason |
-| `GET` | `/api/cities/:slug/operational-health` | `update_complaint_status` | Inspect rolling complaint, AI, authority, and broadcast health for an assigned city |
-| `POST` | `/api/cities/:slug/operational-incidents/:incidentId/acknowledge` | `update_complaint_status` | Acknowledge an automatic circuit-breaker incident before recovery |
-| `GET` | `/api/cities/:slug/authority-governance` | `update_complaint_status` | Evaluate and inspect assigned-city authority handoff, acknowledgement, and resolution deadlines |
-| `POST` | `/api/cities/:slug/authority-governance/evaluate` | `update_complaint_status` | Trigger an immediate assigned-city authority SLA evaluation |
+| `GET` | `/api/authority-governance` | `update_complaint_status` | Inspect Bengaluru authority handoff, acknowledgement, and resolution deadlines |
+| `POST` | `/api/authority-governance/evaluate` | `update_complaint_status` | Trigger an immediate authority SLA evaluation |
 | `POST` | `/api/reset-dashboard` | `reset_dashboard` | Clear development records; refused in production to preserve audits |
 
 ### Voice, Chat, And Email Endpoints
@@ -611,7 +592,7 @@ Health probes are available at `GET /health/live` for process liveness and `GET 
 | `GET` | `/api/chatbot/history` | Load chatbot conversation state |
 | `POST` | `/api/chatbot/message` | Send chatbot message |
 | `DELETE` | `/api/chatbot/history` | Clear chatbot history |
-| `POST` | `/api/email-authority` | Send a complaint PDF only through the verified city email destination |
+| `POST` | `/api/email-authority` | Send a complaint PDF through the configured BBMP email destination |
 | `POST` | `/api/email-bbmp` | Backward-compatible alias for `/api/email-authority` |
 | `POST` | `/api/inform-close-contacts` | Email close contacts about a complaint |
 | `GET` | `/api/local-alert-preferences` | Load the signed-in user's local alert areas |
@@ -635,15 +616,10 @@ Health probes are available at `GET /health/live` for process liveness and `GET 
 | `RegistrationOtp` | Mongo-backed registration OTP records with TTL |
 | `PasswordResetOtp` | Mongo-backed password reset OTP records with TTL |
 | `Complaint` | Main complaint record with AI, human review, routing, weather, civic evidence, threat, map, alerts, follow-ups, verification votes, and history |
-| `CityRegistry` | Versioned jurisdiction identity, rollout availability, authority defaults, approximate validation envelope, and official-channel provenance |
-| `CityActivationReview` | Configuration-bound readiness evidence and approval for staged city activation |
-| `CityRolloutState` | Audited city intake mode, pilot cohort, daily limit, pause state, and transition history |
-| `CityDailyIntake` | Atomic UTC daily intake reservation counter for controlled city capacity |
-| `CityOperationalEvent` | Privacy-minimized, 30-day complaint/AI/delivery SLO signal for one city |
-| `CityOperationalIncident` | Deduplicated circuit-breaker incident, acknowledgement, and recovery timeline |
+| `CommunityVerificationEvent` | Immutable, pseudonymous audit event for nearby verification creation and revision |
 | `DecisionAuditEvent` | Append-only AI baseline and human-review events linked by sequence and SHA-256 hashes |
 | `AuthorityTicket` | Idempotent authority delivery, retry, external-reference, reconciliation, and severity-based SLA state |
-| `DepartmentUnit` | Versioned city/category ownership, workload capacity, and verified handoff metadata |
+| `DepartmentUnit` | Bengaluru category ownership, workload capacity, and verified BBMP handoff metadata |
 | `EmergencyBroadcast` | High-risk broadcast audit and delivery status |
 | `IncidentCommand` | Command-room record with SLA, checklist, timeline, assigned unit |
 | `IncidentCluster` | Similar complaint cluster with merged report count, confidence, match reason, and linked complaints |
@@ -728,11 +704,21 @@ Phase 7 provides disabled, email, and generic webhook adapters with one idempote
 
 Phase 8 adds skip navigation, named and keyboard-contained dialogs, focus restoration, live status feedback, reduced-motion behavior, separate liveness/readiness probes, correlation IDs, graceful shutdown, payload boundaries, concurrent local load checks, and a consolidated release gate. Automated checks do not replace manual screen-reader, user-study, staging provider, failover, and production-like load validation. See [the Phase 8 validation specification](docs/PHASE_8_VALIDATION_AND_RESILIENCE.md).
 
-## Multi-City Expansion
+## Bengaluru Operations
 
-Multi-City Phase 1 introduced the registry and Bengaluru migration. Phase 2 made intake city-first. Phase 3 added ownership, Phase 4 tracked authority handoff, and Phase 5 isolated operations and alerts. Phase 6 added readiness approval. Phase 7 added deterministic pilot cohorts and intake controls. Phase 8 added rolling operational SLOs and city circuit breakers. Phase 9 adds severity-based authority handoff, acknowledgement, and resolution targets with idempotent escalation history and scheduled city governance. Bengaluru remains the only reporting-enabled jurisdiction; Mumbai, Delhi, Chennai, and Hyderabad remain planned.
+Urban Pulse AI is intentionally scoped to Bengaluru. The server assigns every submitted complaint to Bengaluru, validates geocoded results against the metropolitan envelope, resolves a ward result, and selects one of nine configurable BBMP-aligned departments by category, severity, location relevance, and current workload. Routing policy lives in `shared/bengaluruRouting.json`; ward aliases, zones, optional polygons, and fallback metadata live in `shared/bengaluruWards.json`, not in controllers.
 
-The server rejects missing, unknown, stale, disabled, paused, over-capacity, or pilot-ineligible city submissions before provider resources are consumed. Internal ownership is distinct from authority delivery: all current profiles use a verified official portal with manual submission and explicitly deny direct API support. Existing records without city metadata remain constrained to Bengaluru. See the [Phase 1 registry specification](docs/MULTI_CITY_PHASE_1.md), [Phase 2 intake specification](docs/MULTI_CITY_PHASE_2.md), [Phase 3 routing specification](docs/MULTI_CITY_PHASE_3.md), [Phase 4 handoff specification](docs/MULTI_CITY_PHASE_4.md), [Phase 5 operations specification](docs/MULTI_CITY_PHASE_5.md), [Phase 6 activation specification](docs/MULTI_CITY_PHASE_6.md), [Phase 7 rollout specification](docs/MULTI_CITY_PHASE_7.md), [Phase 8 operational safety specification](docs/MULTI_CITY_PHASE_8.md), and [Phase 9 authority governance specification](docs/MULTI_CITY_PHASE_9.md).
+Ward resolution is confidence-aware. An explicit `Ward N` location or a configured geographic polygon can be treated as a direct match. Area aliases such as Indiranagar or Whitefield route to the matching operational ward office but remain marked `requiresConfirmation`; unknown locations use `BBMP-CENTRAL-INTAKE` rather than inventing a ward number. Replace or extend the versioned ward directory when official boundaries or authority contacts change.
+
+The department catalog covers Solid Waste Management, Roads and Infrastructure, Electrical and Street Lighting, Storm Water Drains and Drainage, Public Health and Emergency Coordination, Animal Husbandry, Parks and Urban Forestry, Water-related Civic Services, and General Ward Administration. Complaint and Admin views show ward, zone, match quality, department, reason, actual authority-ticket delivery status, and escalation destination.
+
+Authority delivery remains truthful: a configured BBMP email or approved webhook can submit automatically, while the official portal path remains a tracked manual handoff until an Admin records the authority-issued reference. Severity-based handoff, acknowledgement, and resolution deadlines continue to surface overdue cases without claiming an unverified direct BBMP API integration.
+
+### Community Verification
+
+Citizens opt in by saving local-alert areas. Open incidents in matching areas are exposed as sanitized cards containing only issue type, severity, case status, broad area, time, and aggregate verification state. The original reporter's identity, description, evidence, and contact details are never included. Reporters cannot verify their own incident, and Admin accounts cannot submit citizen verification.
+
+New verification records use an HMAC-derived actor key instead of a raw user ID, email, or username. Each actor has one active response per complaint; identical retries are idempotent, changes have a five-minute cooldown, and repeated revisions are bounded. Conflicting responses produce `conflicting_reports` rather than automatically resolving or reclassifying a case. Repeated trusted confirmations can mark an incident community-wide and adjust displayed effective confidence/urgency, but community data never overwrites the AI baseline or authority status by itself.
 
 ## Evaluation And Testing
 
@@ -742,6 +728,8 @@ Run the full local checks before production deployment:
 node -e "require('./src/app'); console.log('app-load ok')"
 npm run evaluate:ai
 npm run verify:resolution
+npm run verify:bengaluru-routing
+npm run verify:community-verification
 npm run verify:civic-intelligence
 npm run verify:dataset
 npm run dataset:validate
@@ -751,15 +739,6 @@ npm run verify:decision-audit
 npm run verify:observability
 npm run verify:benchmark-comparison
 npm run verify:authority-tickets
-npm run verify:multi-city-phase2
-npm run verify:multi-city-phase3
-npm run verify:multi-city-phase4
-npm run verify:multi-city-phase5
-npm run verify:multi-city-phase6
-npm run verify:multi-city-phase7
-npm run verify:multi-city-phase8
-npm run verify:multi-city-phase9
-npm run verify:production-integration
 npm run verify:ai-service-auth
 npm run verify:accessibility
 npm run verify:resilience
@@ -789,6 +768,9 @@ Recommended evaluator scenarios:
 | Drainage complaint in rainy weather | Weather note appears in complaint detail and PDF |
 | High-risk complaint | Incident command room, SLA, checklist, and dashboard count appear |
 | Complaint detail | Shows AI decision, threat evidence, routing, official sources, public context, weather, alerts, timeline |
+| Bengaluru ward routing | Explicit and known-area locations show ward code, zone, match quality, department, reason, delivery, and escalation destination |
+| Nearby community verification | Matching opted-in citizen sees a sanitized card; reporter/private evidence is absent; self-verification is rejected |
+| Conflicting verification | Mixed still-present/resolved reports are flagged for review and do not auto-close the complaint |
 | PDF export | Includes complaint narrative, image, map link, AI assessment, threat evidence, weather, sources |
 
 ## Deployment
@@ -869,14 +851,14 @@ Before pushing live:
 - Set the same random, 32+ character `AI_SERVICE_TOKEN` on both Render services and keep `AI_SERVICE_REQUIRE_TOKEN=true` on Flask.
 - Run `npm run evaluate:ai`, `npm run verify:dataset`, `npm run verify:decision-audit`, and `python3 scripts/evaluateAiService.py`.
 - Submit a high-risk test complaint and verify routing, broadcast, incident command, and PDF.
+- Run `npm run verify:bengaluru-routing` and confirm known, explicit, and unmatched location behavior against the deployed ward directory.
+- Test community verification with two Citizen accounts in one saved area; confirm self-verification, rapid revision, and invalid duplicate targets are rejected.
 - Confirm Weatherstack and Zenserp quota behavior with limited/free keys.
 - Keep `AUTHORITY_ADAPTER=disabled` until a destination is approved, then verify email or webhook delivery in staging.
-- Run `npm run migrate:cities`, review unknown city values, and use `--apply` only from a trusted one-off production shell.
-- Confirm `/api/cities` exposes only Bengaluru as reporting-enabled before enabling the Phase 2 selector.
-- Confirm every `/api/cities/:slug/routing-units` profile reports `manual_portal` and no direct API support until a connector is formally verified.
-- Confirm Admin complaint, audit, email, authority-ticket, and reconciliation actions are rejected outside the Admin's assigned operations cities.
-- Confirm the authority SLA scheduler is running and that overdue handoff, acknowledgement, and resolution cases appear in the assigned-city dashboard.
-- Run `npm run verify:release` and `npm run verify:production-integration`, then record any manual accessibility, mobile-layout, provider, and failover findings.
+- Confirm the server ignores client attempts to select another city and binds new complaints to Bengaluru.
+- Confirm the BBMP official-portal handoff remains manual unless an approved email or webhook adapter is configured.
+- Confirm the authority SLA scheduler is running and overdue handoff, acknowledgement, and resolution cases appear in the Admin dashboard.
+- Run `npm run verify:release`, then record any manual accessibility, mobile-layout, provider, and failover findings.
 - Replace fallback department unit metadata with real authority contacts when available.
 - Remove or rotate any seed/demo credentials before final deployment.
 
@@ -949,7 +931,8 @@ The reset endpoint clears complaints, incident command records, and emergency br
 - Complaint details, status/review actions, decision-audit exports, authority tickets, reconciliation, and email endpoints enforce both permissions and assigned operational-city boundaries.
 - User-management actions preserve at least one active admin account.
 - Password resets, role changes, account disabling, and account deletion invalidate stale registered-user sessions.
-- Nearby community-proof feeds expose only sanitized incident summaries, not reporter identities, descriptions, or evidence.
+- Nearby community-verification feeds expose only sanitized incident summaries, not reporter identities, descriptions, contact details, or evidence.
+- New community verification signals store pseudonymous actor and area hashes; aggregate status is shown publicly while raw verifier identity is not returned.
 - Local area email alerts are opt-in and use saved area names instead of continuous background tracking.
 - External provider failures do not expose API keys to the frontend, PDFs, stored complaints, or logs.
 - Production AI POST endpoints require a shared server-only token and reject payloads larger than 4 MB; the Render health probe remains public.
@@ -958,10 +941,10 @@ The reset endpoint clears complaints, incident command records, and emergency br
 
 Strong future directions:
 
-- Real authority contact registry for wards, departments, escalation emails, and portals.
+- Import official ward-boundary polygons and verified department contacts into the existing versioned routing registries.
 - Twilio or local SMS provider integration for emergency broadcasts.
 - Push notifications for nearby users.
-- Admin-configurable department routing rules.
+- Admin editor and approval workflow for the existing versioned department/ward routing rules.
 - Human-in-the-loop AI correction feedback to improve future classifications.
 - Advanced vector/perceptual-hash clustering for larger production datasets.
 - Geo-fenced incident broadcasts based on real coordinates.

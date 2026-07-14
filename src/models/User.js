@@ -11,12 +11,8 @@ const userSchema = new mongoose.Schema(
     disabledAt: { type: Date, default: null },
     disabledBy: { type: String, default: "" },
     lastLoginAt: { type: Date, default: null },
-    operationalCityIds: [{ type: String, lowercase: true, trim: true }],
     localAlertPreferences: {
       enabled: { type: Boolean, default: false },
-      cityId: { type: String, default: "bengaluru", lowercase: true, trim: true },
-      cityName: { type: String, default: "Bengaluru", trim: true },
-      cityRegistryVersion: { type: String, default: "", trim: true },
       areas: [
         {
           label: { type: String, trim: true },
@@ -33,7 +29,6 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-userSchema.index({ operationalCityIds: 1, role: 1, disabledAt: 1 });
-userSchema.index({ "localAlertPreferences.cityId": 1, "localAlertPreferences.enabled": 1 });
+userSchema.index({ "localAlertPreferences.enabled": 1 });
 
 module.exports = mongoose.model("User", userSchema);

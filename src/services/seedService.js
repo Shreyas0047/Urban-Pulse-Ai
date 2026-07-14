@@ -1,6 +1,4 @@
 const Complaint = require("../models/Complaint");
-const { syncCityRegistry } = require("./cityRegistryService");
-const { syncRoutingRegistry } = require("./routingRegistryService");
 
 const initialComplaints = [
   {
@@ -14,8 +12,6 @@ const initialComplaints = [
     location: "North Gate Road",
     cityId: "bengaluru",
     cityName: "Bengaluru",
-    citySource: "system_default",
-    cityRegistryVersion: "1.0.0",
     assignedAuthority: "Municipality",
     mapLocation: { lat: 12.973, lng: 77.588 },
     description: "Large pothole causing traffic disruption near the main entrance.",
@@ -52,8 +48,6 @@ const initialComplaints = [
     location: "Market Street",
     cityId: "bengaluru",
     cityName: "Bengaluru",
-    citySource: "system_default",
-    cityRegistryVersion: "1.0.0",
     assignedAuthority: "Gram Panchayat",
     mapLocation: { lat: 12.966, lng: 77.603 },
     description: "Dustbins are overflowing and attracting stray animals.",
@@ -90,8 +84,6 @@ const initialComplaints = [
     location: "Community Kitchen",
     cityId: "bengaluru",
     cityName: "Bengaluru",
-    citySource: "system_default",
-    cityRegistryVersion: "1.0.0",
     assignedAuthority: "Municipality",
     mapLocation: { lat: 12.978, lng: 77.612 },
     description: "Gas concentration crossed the safe threshold for 3 consecutive readings.",
@@ -127,8 +119,6 @@ async function seedComplaintsIfEmpty() {
 }
 
 async function seedAll() {
-  await syncCityRegistry();
-  await syncRoutingRegistry();
   await seedComplaintsIfEmpty();
 }
 

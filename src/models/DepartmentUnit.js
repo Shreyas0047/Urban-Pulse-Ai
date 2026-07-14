@@ -15,6 +15,7 @@ const departmentUnitSchema = new mongoose.Schema(
     severityLevels: [{ type: String, trim: true }],
     contactEmail: { type: String, default: "", trim: true, lowercase: true },
     portalUrl: { type: String, default: "", trim: true },
+    escalationDestination: { type: String, default: "BBMP zonal administration", trim: true },
     handoffMode: { type: String, required: true, enum: ["manual_portal", "verified_email", "verified_webhook"], default: "manual_portal" },
     supportsDirectApi: { type: Boolean, required: true, default: false },
     handoffSourceUrl: { type: String, required: true, trim: true },

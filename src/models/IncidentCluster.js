@@ -24,7 +24,11 @@ const incidentClusterSchema = new mongoose.Schema(
     matchReason: { type: String, default: "" },
     firstReportedAt: { type: Date, default: Date.now },
     lastReportedAt: { type: Date, default: Date.now },
-    mergedCount: { type: Number, default: 1 }
+    mergedCount: { type: Number, default: 1 },
+    communityStatus: { type: String, default: "unverified" },
+    communityVerificationCount: { type: Number, default: 0 },
+    communityWide: { type: Boolean, default: false },
+    lastCommunityVerifiedAt: { type: Date, default: null }
   },
   {
     timestamps: true

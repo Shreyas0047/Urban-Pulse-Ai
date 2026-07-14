@@ -31,6 +31,11 @@ function buildAuthorityPayload(complaint) {
     handoffMode: clean(complaint.routing?.handoff?.mode || "manual_portal", 40),
     officialPortalUrl: clean(complaint.routing?.handoff?.portalUrl || complaint.routing?.portalUrl, 500),
     ward: clean(complaint.routing?.ward, 100),
+    wardCode: clean(complaint.routing?.wardCode, 80),
+    wardZone: clean(complaint.routing?.wardZone, 80),
+    wardMatchQuality: clean(complaint.routing?.wardMatchQuality, 40),
+    routingReason: clean(complaint.routing?.routingReason, 500),
+    escalationDestination: clean(complaint.routing?.escalationDestination, 180),
     confidence: Number(complaint.confidence || 0),
     reviewStatus: clean(complaint.humanReview?.status || "unreviewed", 40),
     decisionAuditHead: clean(complaint.decisionAudit?.headHash, 64),
@@ -52,7 +57,7 @@ function authorityDeliveryConfig(complaint, payload = buildAuthorityPayload(comp
   if (payload.handoffMode === "verified_email" && /@/.test(routingEmail)) {
     return { adapter: "email", destination: routingEmail, status: "queued" };
   }
-  if (requestedAdapter === "email" && payload.cityId === "bengaluru" && /@/.test(clean(env.authorityTicketEmail, 180))) {
+  if (requestedAdapter === "email" && /@/.test(clean(env.authorityTicketEmail, 180))) {
     return { adapter: "email", destination: clean(env.authorityTicketEmail, 180), status: "queued" };
   }
   if (requestedAdapter === "webhook" && env.authorityWebhookUrl) {

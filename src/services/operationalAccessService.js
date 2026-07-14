@@ -1,18 +1,14 @@
-const { DEFAULT_CITY_ID } = require("./cityRegistryService");
+const BENGALURU = require("../config/bengaluru");
 
 function resourceCityId(resourceOrCityId) {
   const value = typeof resourceOrCityId === "object" && resourceOrCityId !== null
     ? resourceOrCityId.cityId
     : resourceOrCityId;
-  return String(value || DEFAULT_CITY_ID).trim().toLowerCase();
+  return String(value || BENGALURU.id).trim().toLowerCase();
 }
 
 function assignedOperationalCityIds(auth = {}) {
-  if (auth.role !== "Admin") return [];
-  const values = Array.isArray(auth.operationalCityIds) && auth.operationalCityIds.length
-    ? auth.operationalCityIds
-    : [DEFAULT_CITY_ID];
-  return [...new Set(values.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean))];
+  return auth.role === "Admin" ? [BENGALURU.id] : [];
 }
 
 function hasOperationalCityAccess(auth, resourceOrCityId) {
@@ -21,7 +17,7 @@ function hasOperationalCityAccess(auth, resourceOrCityId) {
 
 function assertOperationalCityAccess(auth, resourceOrCityId) {
   if (!hasOperationalCityAccess(auth, resourceOrCityId)) {
-    const error = new Error("This Admin account is not assigned to the complaint's operations city.");
+    const error = new Error("Administrative access is required for this Bengaluru complaint.");
     error.statusCode = 403;
     error.code = "OPERATIONAL_CITY_ACCESS_DENIED";
     throw error;
@@ -42,10 +38,7 @@ function canAccessComplaint(auth, complaint) {
 }
 
 function operationalCityDataFilter(cityId) {
-  const normalized = resourceCityId(cityId);
-  return normalized === DEFAULT_CITY_ID
-    ? { $or: [{ cityId: normalized }, { cityId: { $exists: false } }] }
-    : { cityId: normalized };
+  return { $or: [{ cityId: BENGALURU.id }, { cityId: { $exists: false } }] };
 }
 
 module.exports = {

@@ -1,9 +1,5 @@
 const mongoose = require("mongoose");
 const env = require("./env");
-const { syncCityRegistry } = require("../services/cityRegistryService");
-const { syncRoutingRegistry } = require("../services/routingRegistryService");
-const { assertEnabledCitiesReady } = require("../services/cityActivationService");
-const { assertEnabledCityRolloutsReady } = require("../services/cityRolloutService");
 
 async function cleanupLegacyUserIndexes() {
   try {
@@ -34,10 +30,6 @@ async function connectDatabase() {
     serverSelectionTimeoutMS: 10000
   });
   await cleanupLegacyUserIndexes();
-  await assertEnabledCitiesReady();
-  await assertEnabledCityRolloutsReady();
-  await syncCityRegistry();
-  await syncRoutingRegistry();
 }
 
 module.exports = {

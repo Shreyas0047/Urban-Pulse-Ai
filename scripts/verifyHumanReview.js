@@ -18,13 +18,13 @@ function complaintFixture() {
     ai: {
       categoryId: "road_damage",
       nlpCategory: "Infrastructure",
-      recommendedTeam: "Roads, Structures and Obstructions",
+      recommendedTeam: "Roads and Infrastructure",
       reviewRequired: true
     },
     routing: {
       authority: "Bruhat Bengaluru Mahanagara Palike",
-      department: "Roads, Structures and Obstructions",
-      unit: "Roads and Obstruction Response",
+      department: "Roads and Infrastructure",
+      unit: "BBMP Roads and Infrastructure Cell",
       alternatives: [{ department: "Help Desk" }]
     },
     alerts: [],
@@ -61,7 +61,7 @@ async function main() {
       outcome: "confirmed",
       categoryId: "road_damage",
       priority: "Medium",
-      department: "Roads, Structures and Obstructions",
+      department: "Roads and Infrastructure",
       reason: "The visible road damage agrees with the AI decision.",
       expectedVersion: 3
     },
@@ -79,7 +79,7 @@ async function main() {
       outcome: "corrected",
       categoryId: "tree_obstruction",
       priority: "Critical",
-      department: "Roads, Structures and Obstructions",
+      department: "Parks and Urban Forestry",
       reason: "The image shows a fallen tree blocking the complete roadway.",
       expectedVersion: 3
     },
@@ -90,7 +90,7 @@ async function main() {
   assert.equal(correctedComplaint.ai.categoryId, "tree_obstruction");
   assert.equal(correctedComplaint.priority, "Critical");
   assert.equal(correctedComplaint.status, "Escalated");
-  assert.equal(correctedComplaint.routing.unitId, "bengaluru-roads-structures-obstructions");
+  assert.equal(correctedComplaint.routing.unitId, "bengaluru-parks-urban-forestry");
   assert.equal(correctedComplaint.routing.alternatives.length, 0);
   assert.equal(correctedComplaint.humanReview.original.categoryId, "road_damage");
   assert.ok(correctedComplaint.humanReview.changedFields.includes("categoryId"));
@@ -101,7 +101,7 @@ async function main() {
       outcome: "corrected",
       categoryId: "tree_obstruction",
       priority: "High",
-      department: "Roads, Structures and Obstructions",
+      department: "Parks and Urban Forestry",
       reason: "Field review confirms obstruction but no immediate life threat.",
       expectedVersion: 3
     },
@@ -131,11 +131,11 @@ async function main() {
   );
 
   assert.throws(
-    () => normalizeReviewPayload({ outcome: "corrected", categoryId: "road_damage", priority: "Medium", department: "Roads, Structures and Obstructions", reason: "No actual fields have changed here.", expectedVersion: 3 }, complaintFixture()),
+    () => normalizeReviewPayload({ outcome: "corrected", categoryId: "road_damage", priority: "Medium", department: "Roads and Infrastructure", reason: "No actual fields have changed here.", expectedVersion: 3 }, complaintFixture()),
     /Change at least one/
   );
   assert.throws(
-    () => normalizeReviewPayload({ outcome: "confirmed", categoryId: "tree_obstruction", priority: "Medium", department: "Roads, Structures and Obstructions", reason: "This attempts to alter a confirmed decision.", expectedVersion: 3 }, complaintFixture()),
+    () => normalizeReviewPayload({ outcome: "confirmed", categoryId: "tree_obstruction", priority: "Medium", department: "Roads and Infrastructure", reason: "This attempts to alter a confirmed decision.", expectedVersion: 3 }, complaintFixture()),
     /must keep the current/
   );
   assert.throws(
@@ -166,7 +166,7 @@ async function main() {
         outcome: "confirmed",
         categoryId: "road_damage",
         priority: "Medium",
-        department: "Roads, Structures and Obstructions",
+        department: "Roads and Infrastructure",
         reason: "The submitted evidence supports the current AI classification.",
         expectedVersion: 3
       },

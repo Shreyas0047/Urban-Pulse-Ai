@@ -7,6 +7,7 @@ global.fetch = async () => {
 
 const Complaint = require("../src/models/Complaint");
 const User = require("../src/models/User");
+const CommunityVerificationEvent = require("../src/models/CommunityVerificationEvent");
 const { submitCommunityProof, submitResolutionEvidence, updateComplaintStatus } = require("../src/controllers/complaintController");
 
 function responseCapture() {
@@ -52,7 +53,7 @@ async function main() {
   await invoke(updateComplaintStatus, {
     params: { id: complaint._id },
     body: { status: "Resolved", note: "Cleanup completed." },
-    auth: { role: "Admin", username: "admin@example.com", userId: "admin-1", operationalCityIds: ["bengaluru"], permissions: ["update_complaint_status", "view_dashboard"] }
+    auth: { role: "Admin", username: "admin@example.com", userId: "admin-1", permissions: ["update_complaint_status", "view_dashboard"] }
   });
   assert.equal(complaint.status, "Resolved");
   assert.equal(complaint.resolution.phase, "awaiting_citizen_verification");
@@ -75,10 +76,11 @@ async function main() {
       }
     })
   });
+  CommunityVerificationEvent.create = async () => ({});
   const community = await invoke(submitCommunityProof, {
     params: { id: complaint._id },
     body: { signal: "corroborates", note: "I can confirm this from the same road." },
-    auth: { username: "nearby@example.com", userId: "nearby-1", permissions: ["submit_complaint"] }
+    auth: { role: "Citizen", username: "nearby@example.com", userId: "nearby-1", permissions: ["submit_complaint"] }
   });
   assert.equal(community.communityProof.summary.corroborates, 1);
 

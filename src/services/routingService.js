@@ -1,10 +1,29 @@
 const DepartmentUnit = require("../models/DepartmentUnit");
-const { ROUTING_REGISTRY_VERSION, routingDocuments, routingUnitsForCity } = require("./routingRegistryService");
+const routingProfile = require("../../shared/bengaluruRouting.json");
+const BENGALURU = require("../config/bengaluru");
+const { resolveBengaluruWard } = require("./bengaluruWardService");
 
 const ACTIVE_STATUSES = ["Queued", "In Progress", "Needs Review", "Escalated"];
-const ALL_ROUTING_UNITS = routingDocuments();
-const ROUTING_UNIT_IDS = ALL_ROUTING_UNITS.map((unit) => unit.unitId);
-const DEFAULT_DEPARTMENT_UNITS = routingUnitsForCity("bengaluru");
+const ROUTING_REGISTRY_VERSION = routingProfile.version;
+const DEFAULT_DEPARTMENT_UNITS = Object.freeze(routingProfile.departments.map((unit) => ({
+  ...unit,
+  unitId: `bengaluru-${unit.key}`,
+  cityId: BENGALURU.id,
+  cityName: BENGALURU.name,
+  routingRegistryVersion: ROUTING_REGISTRY_VERSION,
+  authority: BENGALURU.authority,
+  ward: "Citywide",
+  severityLevels: ["Low", "Medium", "High", "Critical"],
+  contactEmail: "",
+  portalUrl: routingProfile.portalUrl,
+  escalationDestination: unit.escalationDestination || "BBMP zonal administration",
+  handoffMode: "manual_portal",
+  supportsDirectApi: false,
+  handoffSourceUrl: routingProfile.portalUrl,
+  handoffVerifiedAt: new Date(routingProfile.verifiedAt),
+  active: true
+})));
+const ROUTING_UNIT_IDS = DEFAULT_DEPARTMENT_UNITS.map((unit) => unit.unitId);
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
@@ -18,22 +37,8 @@ function canonicalPriority(value) {
   return "Low";
 }
 
-function inferWard(location) {
-  const text = String(location || "").trim();
-  const wardMatch = text.match(/\bward\s*[-#:]?\s*(\d{1,3})\b/i);
-  if (wardMatch) {
-    return `Ward ${wardMatch[1]}`;
-  }
-
-  if (/\b(village|gram|panchayat|rural|taluk|halli)\b/i.test(text)) {
-    return "Rural Panchayat";
-  }
-
-  if (/\b(main road|market|junction|school|hospital|street|layout|colony|bangalore|bengaluru)\b/i.test(text)) {
-    return "Municipal Ward";
-  }
-
-  return "Citywide";
+function inferWard(location, mapLocation) {
+  return resolveBengaluruWard({ location, mapLocation }).wardName;
 }
 
 function isActiveComplaint(complaint) {
@@ -47,16 +52,14 @@ function unitWorkload(unit, activeComplaints) {
   }).length;
 }
 
-async function loadRoutingUnits(cityId, model = DepartmentUnit) {
-  const fallbackUnits = routingUnitsForCity(cityId);
-  if (!fallbackUnits.length) throw new Error(`No routing profile exists for city ${cityId}.`);
+async function loadRoutingUnits(model = DepartmentUnit) {
   const configuredUnits = await model.find({
-    cityId,
+    cityId: BENGALURU.id,
     active: true,
     routingRegistryVersion: ROUTING_REGISTRY_VERSION,
     unitId: { $in: ROUTING_UNIT_IDS }
   }).lean().catch(() => []);
-  return configuredUnits.length === fallbackUnits.length ? configuredUnits : fallbackUnits;
+  return configuredUnits.length === DEFAULT_DEPARTMENT_UNITS.length ? configuredUnits : DEFAULT_DEPARTMENT_UNITS;
 }
 
 function scoreUnit(unit, context) {
@@ -105,18 +108,13 @@ function scoreUnit(unit, context) {
   };
 }
 
-async function routeComplaint({ analysis, city, location, mapLocation, activeComplaints = [], unitModel = DepartmentUnit }) {
-  const cityId = String(city?.slug || city?.cityId || "").trim().toLowerCase();
-  const cityName = String(city?.name || city?.cityName || "").trim();
-  if (!cityId || !cityName) throw new Error("City identity is required for department routing.");
+async function routeComplaint({ analysis, location, mapLocation, activeComplaints = [], unitModel = DepartmentUnit }) {
   const categoryId = analysis.aiMeta?.categoryId || "general";
   const priority = canonicalPriority(analysis.priority?.level);
-  const ward = inferWard(location);
-  const units = await loadRoutingUnits(cityId, unitModel);
-  const active = activeComplaints.filter((complaint) => {
-    const complaintCityId = String(complaint.cityId || "bengaluru").trim().toLowerCase();
-    return complaintCityId === cityId && isActiveComplaint(complaint);
-  });
+  const wardResolution = resolveBengaluruWard({ location, mapLocation });
+  const ward = wardResolution.wardName;
+  const units = await loadRoutingUnits(unitModel);
+  const active = activeComplaints.filter(isActiveComplaint);
   const scoredUnits = units
     .map((unit) => {
       const workload = unitWorkload(unit, active);
@@ -135,26 +133,30 @@ async function routeComplaint({ analysis, city, location, mapLocation, activeCom
     })
     .sort((left, right) => right.score - left.score || left.workload - right.workload);
 
-  const selected = scoredUnits[0] || routingUnitsForCity(cityId)[0];
+  const selected = scoredUnits[0] || DEFAULT_DEPARTMENT_UNITS[0];
   const escalationLevel = priority === "Critical" ? "Emergency" : priority === "High" ? "Expedited" : priority === "Medium" ? "Standard" : "Routine";
   const workloadScore = selected.workloadRatio ?? 0;
   const reasonParts = selected.reasons?.length ? selected.reasons : ["default routing"];
 
   return {
-    cityId,
-    cityName,
-    routingRegistryVersion: ROUTING_REGISTRY_VERSION,
     authority: selected.authority || analysis.assignedAuthority || "Gram Panchayat",
     department: selected.department || analysis.nlp?.team || "Help Desk",
     unit: selected.unitName || selected.department || "Response Unit",
     unitId: selected.unitId || "default-response-unit",
     ward,
+    wardCode: wardResolution.wardCode,
+    wardZone: wardResolution.zone,
+    wardMatchQuality: wardResolution.matchQuality,
+    wardRequiresConfirmation: wardResolution.requiresConfirmation,
+    routingRegistryVersion: ROUTING_REGISTRY_VERSION,
     escalationLevel,
     workloadScore,
     activeCaseLoad: selected.workload || 0,
     maxActiveCases: selected.maxActiveCases || 10,
     contactEmail: selected.contactEmail || "",
     portalUrl: selected.portalUrl || "",
+    escalationDestination: selected.escalationDestination || "BBMP zonal administration",
+    deliveryStatus: "pending_handoff",
     handoff: {
       mode: selected.handoffMode || "manual_portal",
       supportsDirectApi: Boolean(selected.supportsDirectApi),
@@ -162,13 +164,12 @@ async function routeComplaint({ analysis, city, location, mapLocation, activeCom
       verifiedAt: selected.handoffVerifiedAt || null
     },
     mapLocation,
-    routingReason: `${reasonParts.join(", ")}. ${selected.unitName || selected.department} selected for ${analysis.nlp?.issueType || "civic issue"}.`,
+    routingReason: `${reasonParts.join(", ")}. ${selected.unitName || selected.department} selected for ${analysis.nlp?.issueType || "civic issue"}; ward result from ${wardResolution.matchedBy}.`,
     alternatives: scoredUnits.slice(1, 4).map((unit) => ({
       unitId: unit.unitId,
       department: unit.department,
       unit: unit.unitName,
       authority: unit.authority,
-      cityId: unit.cityId,
       score: unit.score,
       activeCaseLoad: unit.workload,
       workloadScore: unit.workloadRatio
@@ -179,6 +180,7 @@ async function routeComplaint({ analysis, city, location, mapLocation, activeCom
 
 module.exports = {
   DEFAULT_DEPARTMENT_UNITS,
+  ROUTING_REGISTRY_VERSION,
   loadRoutingUnits,
   canonicalPriority,
   inferWard,

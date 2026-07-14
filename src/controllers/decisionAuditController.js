@@ -4,7 +4,7 @@ const {
   eventsToCsv,
   verifyDecisionAudit
 } = require("../services/decisionAuditService");
-const { assertOperationalCityAccess, operationalCityDataFilter } = require("../services/operationalAccessService");
+const { assertOperationalCityAccess } = require("../services/operationalAccessService");
 
 function notFound(message) {
   const error = new Error(message);
@@ -31,9 +31,7 @@ async function exportComplaintDecisionAudit(req, res, next) {
 
 async function getCorrectionFeedback(req, res, next) {
   try {
-    const requestedCityId = req.query.cityId || req.auth.operationalCityIds?.[0] || "bengaluru";
-    const cityId = assertOperationalCityAccess(req.auth, requestedCityId);
-    const complaints = await Complaint.find(operationalCityDataFilter(cityId), { _id: 1 }).lean();
+    const complaints = await Complaint.find({}, { _id: 1 }).lean();
     const feedback = await aggregateCorrectionFeedback({ complaintIds: complaints.map((complaint) => complaint._id) });
     if (String(req.query.format || "json").toLowerCase() === "csv") {
       res.setHeader("Content-Type", "text/csv; charset=utf-8");

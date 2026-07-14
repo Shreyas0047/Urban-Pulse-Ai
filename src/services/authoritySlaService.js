@@ -1,5 +1,5 @@
 const AuthorityTicket = require("../models/AuthorityTicket");
-const { registeredCity } = require("./cityActivationService");
+const BENGALURU = require("../config/bengaluru");
 
 const POLICY_VERSION = "authority-sla-v1";
 const SLA_POLICY = Object.freeze({
@@ -159,9 +159,8 @@ function evaluateAuthorityTicketSla(ticket, now = new Date()) {
   };
 }
 
-async function evaluateAuthoritySlas({ cityId = null, ticketModel = AuthorityTicket, now = new Date() } = {}) {
-  const filter = cityId ? { cityId: registeredCity(cityId).slug } : {};
-  const tickets = await ticketModel.find(filter);
+async function evaluateAuthoritySlas({ ticketModel = AuthorityTicket, now = new Date() } = {}) {
+  const tickets = await ticketModel.find({ $or: [{ cityId: BENGALURU.id }, { cityId: { $exists: false } }] });
   let evaluated = 0;
   let updated = 0;
   let escalated = 0;
@@ -188,7 +187,7 @@ function authorityGovernanceSnapshot(tickets = [], city) {
     if (level) counts[`level${level}`] += 1;
   }
   return {
-    city: { id: city.slug, name: city.name },
+    city: { id: BENGALURU.id, name: BENGALURU.name },
     policyVersion: POLICY_VERSION,
     policy: SLA_POLICY,
     counts,
@@ -217,11 +216,10 @@ function authorityGovernanceSnapshot(tickets = [], city) {
   };
 }
 
-async function buildAuthorityGovernance(cityId, { ticketModel = AuthorityTicket, now = new Date() } = {}) {
-  const city = registeredCity(cityId);
-  await evaluateAuthoritySlas({ cityId: city.slug, ticketModel, now });
-  const tickets = await ticketModel.find({ cityId: city.slug }).lean();
-  return authorityGovernanceSnapshot(tickets, city);
+async function buildAuthorityGovernance({ ticketModel = AuthorityTicket, now = new Date() } = {}) {
+  await evaluateAuthoritySlas({ ticketModel, now });
+  const tickets = await ticketModel.find({ $or: [{ cityId: BENGALURU.id }, { cityId: { $exists: false } }] }).lean();
+  return authorityGovernanceSnapshot(tickets, BENGALURU);
 }
 
 module.exports = {

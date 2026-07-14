@@ -8,19 +8,12 @@ const { getLocalAlertPreferences, updateLocalAlertPreferences } = require("../co
 const { deleteUser, updateUser } = require("../controllers/userController");
 const { exportComplaintDecisionAudit, getCorrectionFeedback } = require("../controllers/decisionAuditController");
 const { confirmManualSubmission, reconcileTicket, retryAuthorityTicket, submitAuthorityTicket } = require("../controllers/authorityTicketController");
-const { getCities, getCity, getCityRoutingUnits } = require("../controllers/cityController");
-const { approveActivation, getActivationReadiness, updateActivationEvidence } = require("../controllers/cityActivationController");
-const { getRollout, updateRollout } = require("../controllers/cityRolloutController");
-const { acknowledgeIncident, getOperationalHealth } = require("../controllers/cityOperationalHealthController");
 const { evaluateAuthorityGovernance, getAuthorityGovernance } = require("../controllers/authorityGovernanceController");
 const { authenticate, requirePermission } = require("../middleware/auth");
 
 const router = express.Router();
 
 router.get("/roles", getRoles);
-router.get("/cities", getCities);
-router.get("/cities/:slug/routing-units", getCityRoutingUnits);
-router.get("/cities/:slug", getCity);
 router.post("/auth/token", issueToken);
 router.post("/auth/register/request-otp", requestRegistrationOtp);
 router.post("/auth/register", register);
@@ -41,19 +34,13 @@ router.post("/email-bbmp", requirePermission("submit_complaint"), emailAuthority
 router.post("/inform-close-contacts", requirePermission("submit_complaint"), informCloseContacts);
 router.get("/local-alert-preferences", requirePermission("submit_complaint"), getLocalAlertPreferences);
 router.patch("/local-alert-preferences", requirePermission("submit_complaint"), updateLocalAlertPreferences);
-router.get("/cities/:slug/activation-readiness", requirePermission("update_complaint_status"), getActivationReadiness);
-router.put("/cities/:slug/activation-readiness/evidence", requirePermission("update_complaint_status"), updateActivationEvidence);
-router.post("/cities/:slug/activation-readiness/approve", requirePermission("update_complaint_status"), approveActivation);
-router.get("/cities/:slug/rollout", requirePermission("update_complaint_status"), getRollout);
-router.patch("/cities/:slug/rollout", requirePermission("update_complaint_status"), updateRollout);
-router.get("/cities/:slug/operational-health", requirePermission("update_complaint_status"), getOperationalHealth);
-router.post("/cities/:slug/operational-incidents/:incidentId/acknowledge", requirePermission("update_complaint_status"), acknowledgeIncident);
-router.get("/cities/:slug/authority-governance", requirePermission("update_complaint_status"), getAuthorityGovernance);
-router.post("/cities/:slug/authority-governance/evaluate", requirePermission("update_complaint_status"), evaluateAuthorityGovernance);
+router.get("/authority-governance", requirePermission("update_complaint_status"), getAuthorityGovernance);
+router.post("/authority-governance/evaluate", requirePermission("update_complaint_status"), evaluateAuthorityGovernance);
 router.get("/complaints/:id", requirePermission("submit_complaint"), getComplaint);
 router.post("/complaints/:id/verification", requirePermission("submit_complaint"), verifyComplaintStatus);
 router.post("/complaints/:id/resolution-evidence", requirePermission("submit_complaint"), submitResolutionEvidence);
 router.post("/complaints/:id/community-proof", requirePermission("submit_complaint"), submitCommunityProof);
+router.post("/complaints/:id/community-verification", requirePermission("submit_complaint"), submitCommunityProof);
 router.post("/complaints/:id/human-review", requirePermission("update_complaint_status"), submitHumanReview);
 router.get("/complaints/:id/decision-audit", requirePermission("update_complaint_status"), exportComplaintDecisionAudit);
 router.get("/decision-audit/feedback", requirePermission("update_complaint_status"), getCorrectionFeedback);

@@ -1,0 +1,89 @@
+{
+  "version": "bengaluru-routing-v2",
+  "authority": "Bruhat Bengaluru Mahanagara Palike",
+  "portalUrl": "https://site.bbmp.gov.in/departmentwebsites/bbmpit/mobileapps.html",
+  "verifiedAt": "2026-07-13T00:00:00.000Z",
+  "departments": [
+    {
+      "key": "solid-waste-management",
+      "department": "Solid Waste Management",
+      "unitName": "BBMP Solid Waste Management Cell",
+      "coverageKeywords": ["garbage", "waste", "trash", "litter", "market", "dump"],
+      "handlesCategoryIds": ["garbage"],
+      "escalationDestination": "BBMP zonal Solid Waste Management office",
+      "maxActiveCases": 18
+    },
+    {
+      "key": "roads-infrastructure",
+      "department": "Roads and Infrastructure",
+      "unitName": "BBMP Roads and Infrastructure Cell",
+      "coverageKeywords": ["road", "street", "lane", "junction", "bridge", "pothole", "wall", "building"],
+      "handlesCategoryIds": ["road_damage", "wall_damage"],
+      "escalationDestination": "BBMP zonal Chief Engineer office",
+      "maxActiveCases": 18
+    },
+    {
+      "key": "electrical-street-lighting",
+      "department": "Electrical and Street Lighting",
+      "unitName": "BBMP Electrical and Street Lighting Cell",
+      "coverageKeywords": ["streetlight", "street light", "wire", "transformer", "power", "electrical", "spark"],
+      "handlesCategoryIds": ["utility_fault"],
+      "escalationDestination": "BBMP Electrical division with BESCOM coordination",
+      "maxActiveCases": 12
+    },
+    {
+      "key": "storm-water-drains",
+      "department": "Storm Water Drains and Drainage",
+      "unitName": "BBMP Storm Water Drain Cell",
+      "coverageKeywords": ["drain", "waterlogging", "flood", "stagnant water", "storm water", "culvert"],
+      "handlesCategoryIds": ["water_drainage"],
+      "escalationDestination": "BBMP Storm Water Drain engineering division",
+      "maxActiveCases": 14
+    },
+    {
+      "key": "public-health",
+      "department": "Public Health and Emergency Coordination",
+      "unitName": "BBMP Public Health and Emergency Desk",
+      "coverageKeywords": ["fire", "smoke", "gas", "unsafe", "health", "hospital", "school", "security"],
+      "handlesCategoryIds": ["safety_fire", "security"],
+      "escalationDestination": "BBMP control room and Bengaluru emergency services",
+      "maxActiveCases": 8
+    },
+    {
+      "key": "animal-husbandry",
+      "department": "Animal Husbandry",
+      "unitName": "BBMP Animal Husbandry Cell",
+      "coverageKeywords": ["dog", "animal", "cattle", "monkey", "bite", "stray"],
+      "handlesCategoryIds": ["animal_intrusion"],
+      "escalationDestination": "BBMP Animal Husbandry zonal office",
+      "maxActiveCases": 12
+    },
+    {
+      "key": "parks-urban-forestry",
+      "department": "Parks and Urban Forestry",
+      "unitName": "BBMP Forest and Horticulture Cell",
+      "coverageKeywords": ["tree", "branch", "park", "uprooted", "fallen tree", "horticulture"],
+      "handlesCategoryIds": ["tree_obstruction"],
+      "escalationDestination": "BBMP Forest Cell and zonal Horticulture office",
+      "maxActiveCases": 12
+    },
+    {
+      "key": "water-civic-services",
+      "department": "Water-related Civic Services",
+      "unitName": "Water and Sewerage Coordination Cell",
+      "coverageKeywords": ["water leak", "pipe", "sewage", "sewer", "manhole", "sludge", "bwssb"],
+      "handlesCategoryIds": ["water_leakage", "sewage_overflow"],
+      "escalationDestination": "BWSSB service division with BBMP ward coordination",
+      "maxActiveCases": 14
+    },
+    {
+      "key": "ward-administration",
+      "department": "General Ward Administration",
+      "unitName": "BBMP Ward Administration Desk",
+      "coverageKeywords": ["parking", "vehicle", "encroachment", "footpath", "public space", "ward"],
+      "handlesCategoryIds": ["vehicle_obstruction"],
+      "escalationDestination": "BBMP ward office with Bengaluru Traffic Police coordination",
+      "maxActiveCases": 16
+    }
+  ]
+}

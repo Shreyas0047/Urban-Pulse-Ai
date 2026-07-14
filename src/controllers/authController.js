@@ -6,7 +6,6 @@ const RegistrationOtp = require("../models/RegistrationOtp");
 const PasswordResetOtp = require("../models/PasswordResetOtp");
 const { sendPasswordResetOtpEmail, sendRegistrationOtpEmail } = require("../services/emailService");
 const crypto = require("crypto");
-const { DEFAULT_CITY_ID } = require("../services/cityRegistryService");
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const PASSWORD_MIN_LENGTH = 8;
@@ -182,7 +181,6 @@ function buildAuthResponse(user) {
     userId: String(user._id),
     username: user.username,
     permissions: rolePermissions[user.role],
-    operationalCityIds: user.role === "Admin" && user.operationalCityIds?.length ? user.operationalCityIds : user.role === "Admin" ? [DEFAULT_CITY_ID] : [],
     expiresInSeconds: env.tokenTtlSeconds
   };
 }
@@ -211,7 +209,6 @@ async function issueToken(req, res, next) {
       userId: "",
       username: buildUsernameFromEmail(email),
       permissions: rolePermissions[role],
-      operationalCityIds: role === "Admin" ? [DEFAULT_CITY_ID] : [],
       expiresInSeconds: env.tokenTtlSeconds
     });
   } catch (error) {
@@ -270,8 +267,7 @@ async function register(req, res, next) {
       username,
       email,
       passwordHash: pendingRegistration.passwordHash,
-      role,
-      operationalCityIds: role === "Admin" ? [DEFAULT_CITY_ID] : []
+      role
     });
     await RegistrationOtp.deleteOne({ _id: pendingRegistration._id });
 

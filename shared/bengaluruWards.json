@@ -1,0 +1,32 @@
+{
+  "version": "bengaluru-ward-directory-v1",
+  "updatedAt": "2026-07-14T00:00:00.000Z",
+  "fallback": {
+    "wardCode": "BBMP-CENTRAL-INTAKE",
+    "wardName": "BBMP Central Complaint Intake",
+    "zone": "Central routing",
+    "matchQuality": "fallback",
+    "requiresConfirmation": true
+  },
+  "wards": [
+    { "wardCode": "BBMP-WHITEFIELD", "wardName": "Whitefield ward office", "zone": "Mahadevapura", "aliases": ["whitefield", "hope farm", "itpl", "kadugodi", "brookefield"] },
+    { "wardCode": "BBMP-KR-PURAM", "wardName": "KR Puram ward office", "zone": "Mahadevapura", "aliases": ["kr puram", "k r puram", "krp", "mahadevapura"] },
+    { "wardCode": "BBMP-INDIRANAGAR", "wardName": "Indiranagar ward office", "zone": "East", "aliases": ["indiranagar", "indira nagar", "100 feet road"] },
+    { "wardCode": "BBMP-MARATHAHALLI", "wardName": "Marathahalli ward office", "zone": "Mahadevapura", "aliases": ["marathahalli", "marathalli", "munnekollal"] },
+    { "wardCode": "BBMP-KORAMANGALA", "wardName": "Koramangala ward office", "zone": "South", "aliases": ["koramangala", "sony world", "forum mall"] },
+    { "wardCode": "BBMP-JAYANAGAR", "wardName": "Jayanagar ward office", "zone": "South", "aliases": ["jayanagar", "jaya nagar", "south end circle"] },
+    { "wardCode": "BBMP-YELAHANKA", "wardName": "Yelahanka ward office", "zone": "Yelahanka", "aliases": ["yelahanka", "new town yelahanka"] },
+    { "wardCode": "BBMP-HEBBAL", "wardName": "Hebbal ward office", "zone": "North", "aliases": ["hebbal", "hebbal flyover", "manyata"] },
+    { "wardCode": "BBMP-ELECTRONIC-CITY", "wardName": "Electronic City area intake", "zone": "Bommanahalli", "aliases": ["electronic city", "ecity", "e city", "neeladri"] },
+    { "wardCode": "BBMP-HSR", "wardName": "HSR Layout ward office", "zone": "Bommanahalli", "aliases": ["hsr", "hsr layout", "agaram"] },
+    { "wardCode": "BBMP-BTM", "wardName": "BTM Layout ward office", "zone": "South", "aliases": ["btm", "btm layout", "udupi garden"] },
+    { "wardCode": "BBMP-RAJAJINAGAR", "wardName": "Rajajinagar ward office", "zone": "West", "aliases": ["rajajinagar", "rajaji nagar"] },
+    { "wardCode": "BBMP-MALLESHWARAM", "wardName": "Malleshwaram ward office", "zone": "West", "aliases": ["malleshwaram", "malleswaram"] },
+    { "wardCode": "BBMP-BANASHANKARI", "wardName": "Banashankari ward office", "zone": "South", "aliases": ["banashankari", "bsk", "kadirenahalli"] },
+    { "wardCode": "BBMP-BASAVANAGUDI", "wardName": "Basavanagudi ward office", "zone": "South", "aliases": ["basavanagudi", "gandhi bazaar"] },
+    { "wardCode": "BBMP-JP-NAGAR", "wardName": "JP Nagar ward office", "zone": "South", "aliases": ["jp nagar", "j p nagar", "jaraganahalli"] },
+    { "wardCode": "BBMP-BELLANDUR", "wardName": "Bellandur ward office", "zone": "Mahadevapura", "aliases": ["bellandur", "ecospace", "sarjapur road"] },
+    { "wardCode": "BBMP-SHANTHALA-NAGAR", "wardName": "Shanthala Nagar ward office", "zone": "East", "aliases": ["mg road", "m g road", "trinity", "brigade road"] },
+    { "wardCode": "BBMP-GANDHINAGAR", "wardName": "Gandhinagar ward office", "zone": "West", "aliases": ["majestic", "kempegowda bus station", "kg bus stand"] }
+  ]
+}

@@ -1,10 +1,4 @@
 const form = document.getElementById("complaintForm");
-const reportCitySelect = document.getElementById("reportCity");
-const citySelectionCard = document.getElementById("citySelectionCard");
-const citySelectionTitle = document.getElementById("citySelectionTitle");
-const citySelectionStatus = document.getElementById("citySelectionStatus");
-const cityOfficialChannel = document.getElementById("cityOfficialChannel");
-const refreshCitiesBtn = document.getElementById("refreshCitiesBtn");
 const reportLocationInput = document.getElementById("reportLocation");
 const complaintInputMode = document.getElementById("complaintInputMode");
 const typedComplaintField = document.getElementById("typedComplaintField");
@@ -77,9 +71,6 @@ const complaintsWorkspace = document.getElementById("complaintsWorkspace");
 const adminView = document.getElementById("adminView");
 const adminWorkspace = document.getElementById("adminWorkspace");
 const adminActionCenter = document.getElementById("adminActionCenter");
-const cityActivationPanel = document.getElementById("cityActivationPanel");
-const cityRolloutPanel = document.getElementById("cityRolloutPanel");
-const cityOperationalHealthPanel = document.getElementById("cityOperationalHealthPanel");
 const authorityGovernancePanel = document.getElementById("authorityGovernancePanel");
 const alertsWorkspace = document.getElementById("alertsWorkspace");
 const alertsList = document.getElementById("alertsList");
@@ -97,7 +88,6 @@ const civicIntelligencePanel = document.getElementById("civicIntelligencePanel")
 const communityCasesPanel = document.getElementById("communityCasesPanel");
 const localAlertsForm = document.getElementById("localAlertsForm");
 const localAlertsEnabled = document.getElementById("localAlertsEnabled");
-const localAlertCity = document.getElementById("localAlertCity");
 const localAlertAreasInput = document.getElementById("localAlertAreasInput");
 const localAlertSeverityThreshold = document.getElementById("localAlertSeverityThreshold");
 const localAlertAreasList = document.getElementById("localAlertAreasList");
@@ -111,8 +101,6 @@ const complaintSearchInput = document.getElementById("complaintSearchInput");
 const complaintStatusFilter = document.getElementById("complaintStatusFilter");
 const complaintSortSelect = document.getElementById("complaintSortSelect");
 const clearComplaintFiltersBtn = document.getElementById("clearComplaintFiltersBtn");
-const dashboardCityFilter = document.getElementById("dashboardCityFilter");
-const operationsCityField = document.getElementById("operationsCityField");
 const adminInsights = document.getElementById("adminInsights");
 const aiObservabilityPanel = document.getElementById("aiObservabilityPanel");
 const incidentClusterPanel = document.getElementById("incidentClusterPanel");
@@ -198,7 +186,6 @@ let otpSecondsRemaining = 0;
 let dashboardDataCache = { complaints: [], users: [], digitalTwin: null, riskPredictions: null, incidentCommands: [], civicIntelligence: null, communityCases: [] };
 let draftSaveTimer = null;
 let dashboardReloadTimer = null;
-let cityRegistryState = { ready: false, registryVersion: "", defaultCityId: "", cities: [] };
 
 function emitAuthStateChange() {
   window.dispatchEvent(
@@ -241,7 +228,6 @@ function buildDashboardQueryParams() {
   const alertPriority = alertPriorityFilter?.value || "";
   const userSearch = userSearchInput?.value?.trim();
   const userState = userStateFilter?.value || "";
-  const operationsCityId = dashboardCityFilter?.value || cityRegistryState.defaultCityId;
 
   if (complaintSearch) params.set("complaintSearch", complaintSearch);
   if (complaintStatus) params.set("complaintStatus", complaintStatus);
@@ -250,7 +236,6 @@ function buildDashboardQueryParams() {
   if (alertPriority) params.set("alertPriority", alertPriority);
   if (userSearch) params.set("userSearch", userSearch);
   if (userState) params.set("userState", userState);
-  if (authState?.permissions?.includes("view_dashboard") && operationsCityId) params.set("cityId", operationsCityId);
 
   return params.toString();
 }
@@ -283,7 +268,6 @@ function updateDraftStatus(message, state = "") {
 
 function buildReportDraftPayload() {
   return {
-    cityId: reportCitySelect?.value || "",
     location: reportLocationInput?.value || "",
     complaintInputMode: complaintInputMode?.value || "text",
     typedComplaint: typedComplaintInput?.value || "",
@@ -345,9 +329,6 @@ function restoreReportDraft() {
       return;
     }
 
-    const savedCity = cityRegistryState.cities.find((city) => city.id === draft.cityId && city.reportingEnabled);
-    reportCitySelect.value = savedCity?.id || cityRegistryState.defaultCityId || "";
-    renderSelectedCity();
     reportLocationInput.value = String(draft.location || "");
     complaintInputMode.value = draft.complaintInputMode === "voice" ? "voice" : "text";
     typedComplaintInput.value = String(draft.typedComplaint || "");
@@ -360,99 +341,9 @@ function restoreReportDraft() {
   }
 }
 
-function selectedCity() {
-  return cityRegistryState.cities.find((city) => city.id === reportCitySelect?.value) || null;
-}
-
 function updateComplaintSubmitAvailability() {
   const canSubmit = Boolean(authState?.permissions?.includes("submit_complaint"));
-  const city = selectedCity();
-  const intakeAvailable = city?.reportingEnabled && ["open", "pilot"].includes(city?.rollout?.mode || "open");
-  complaintSubmitBtn.disabled = !canSubmit || !cityRegistryState.ready || !intakeAvailable;
-}
-
-function renderSelectedCity() {
-  const city = selectedCity();
-  const rolloutMode = city?.rollout?.mode || (city?.reportingEnabled ? "open" : "closed");
-  const isAvailable = Boolean(city?.reportingEnabled && ["open", "pilot"].includes(rolloutMode));
-  citySelectionCard.dataset.state = isAvailable ? "available" : cityRegistryState.ready ? "planned" : "loading";
-  citySelectionTitle.textContent = city ? `${city.name}, ${city.state}` : "Select a city";
-  citySelectionStatus.textContent = city
-    ? isAvailable
-      ? `${rolloutMode === "pilot" ? "Pilot reporting is open for eligible users." : "Reporting is open for this jurisdiction."} Default civic authority: ${city.defaultAuthority}.`
-      : rolloutMode === "paused"
-        ? city.rollout?.reason || "Complaint intake is temporarily paused."
-        : "This city is planned but reporting is not open yet."
-    : "Choose an available city before entering complaint details.";
-  const portalUrl = city?.officialChannels?.portalUrl || "";
-  cityOfficialChannel.hidden = !portalUrl;
-  if (portalUrl) cityOfficialChannel.href = portalUrl;
-  updateComplaintSubmitAvailability();
-}
-
-function populateCityScopedControls() {
-  const previousOperationsCity = dashboardCityFilter?.value;
-  const previousAlertCity = localAlertCity?.value;
-  if (dashboardCityFilter) {
-    const allowedCityIds = authState?.operationalCityIds?.length ? authState.operationalCityIds : [cityRegistryState.defaultCityId];
-    const operationsCities = cityRegistryState.cities.filter((city) => allowedCityIds.includes(city.id));
-    dashboardCityFilter.innerHTML = operationsCities
-      .map((city) => `<option value="${escapeHtml(city.id)}">${escapeHtml(city.name)}${city.reportingEnabled ? "" : " · planned"}</option>`)
-      .join("");
-    dashboardCityFilter.value = operationsCities.some((city) => city.id === previousOperationsCity)
-      ? previousOperationsCity
-      : operationsCities[0]?.id || cityRegistryState.defaultCityId;
-  }
-  if (localAlertCity) {
-    const availableCities = cityRegistryState.cities.filter((city) => city.reportingEnabled);
-    localAlertCity.innerHTML = availableCities
-      .map((city) => `<option value="${escapeHtml(city.id)}">${escapeHtml(city.name)}, ${escapeHtml(city.state)}</option>`)
-      .join("");
-    localAlertCity.value = availableCities.some((city) => city.id === previousAlertCity)
-      ? previousAlertCity
-      : cityRegistryState.defaultCityId;
-  }
-  if (dashboardDataCache.users?.length) renderUserManagement(dashboardDataCache.users);
-}
-
-async function initializeCitySelector() {
-  reportCitySelect.disabled = true;
-  refreshCitiesBtn.hidden = true;
-  citySelectionCard.dataset.state = "loading";
-  citySelectionTitle.textContent = "Checking city availability";
-  citySelectionStatus.textContent = "The reporting registry is loading.";
-  try {
-    const data = await apiRequest("/api/cities", { method: "GET" });
-    const cities = Array.isArray(data.cities) ? data.cities : [];
-    if (!cities.length) throw new Error("No city records are currently available.");
-    cityRegistryState = {
-      ready: true,
-      registryVersion: String(data.registryVersion || ""),
-      defaultCityId: String(data.defaultCityId || ""),
-      cities
-    };
-    reportCitySelect.innerHTML = cities.map((city) => {
-      const mode = city.rollout?.mode || (city.reportingEnabled ? "open" : "closed");
-      const available = city.reportingEnabled && ["open", "pilot"].includes(mode);
-      const suffix = mode === "pilot" ? " - Pilot" : mode === "paused" ? " - Paused" : available ? "" : " - Coming soon";
-      return `<option value="${escapeHtml(city.id)}" ${available ? "" : "disabled"}>${escapeHtml(city.name)}, ${escapeHtml(city.state)}${suffix}</option>`;
-    }).join("");
-    const defaultCity = cities.find((city) => city.id === data.defaultCityId && city.reportingEnabled && ["open", "pilot"].includes(city.rollout?.mode || "open")) || cities.find((city) => city.reportingEnabled && ["open", "pilot"].includes(city.rollout?.mode || "open"));
-    reportCitySelect.value = defaultCity?.id || "";
-    reportCitySelect.disabled = !defaultCity;
-    populateCityScopedControls();
-    renderSelectedCity();
-  } catch (error) {
-    cityRegistryState = { ready: false, registryVersion: "", defaultCityId: "", cities: [] };
-    reportCitySelect.innerHTML = '<option value="">City list unavailable</option>';
-    citySelectionCard.dataset.state = "error";
-    citySelectionTitle.textContent = "City availability could not be loaded";
-    citySelectionStatus.textContent = error.message;
-    cityOfficialChannel.hidden = true;
-    refreshCitiesBtn.hidden = false;
-    updateComplaintSubmitAvailability();
-    throw error;
-  }
+  complaintSubmitBtn.disabled = !canSubmit;
 }
 
 function resetLoginAttemptState() {
@@ -1341,8 +1232,6 @@ function applyPermissionState() {
   document.querySelectorAll('.nav-link[href="#mapWorkspace"]').forEach((link) => {
     link.hidden = !hasToken;
   });
-  if (operationsCityField) operationsCityField.hidden = !permissions.includes("view_dashboard");
-
   updateTubelightNav();
 }
 
@@ -2239,7 +2128,7 @@ function renderCommunityCases(cases = []) {
   if (!localAlertPreferences?.enabled) {
     communityCasesPanel.innerHTML = `
       <article class="community-cases-empty">
-        <p class="detail-section-label">Community proof</p>
+        <p class="detail-section-label">Community verification</p>
         <strong>Enable local alerts to help verify nearby incidents.</strong>
         <p>Your saved areas are used for matching. Reporter details and complaint evidence stay private.</p>
       </article>`;
@@ -2249,7 +2138,7 @@ function renderCommunityCases(cases = []) {
   if (!cases.length) {
     communityCasesPanel.innerHTML = `
       <article class="community-cases-empty">
-        <p class="detail-section-label">Community proof</p>
+        <p class="detail-section-label">Community verification</p>
         <strong>No matching open incidents.</strong>
         <p>New incidents at or above your selected severity will appear here.</p>
       </article>`;
@@ -2258,7 +2147,7 @@ function renderCommunityCases(cases = []) {
 
   communityCasesPanel.innerHTML = `
     <div class="community-cases-head">
-      <div><p class="detail-section-label">Community proof</p><strong>Nearby incidents</strong></div>
+      <div><p class="detail-section-label">Community verification</p><strong>Nearby incidents</strong></div>
       <span>${cases.length} matched</span>
     </div>
     <div class="community-cases-grid">
@@ -2267,11 +2156,12 @@ function renderCommunityCases(cases = []) {
           <div class="community-case-meta"><span>${escapeHtml(item.priority)}</span><span>${escapeHtml(item.status)}</span></div>
           <strong>${escapeHtml(item.type)}</strong>
           <p>${escapeHtml(item.area)} · ${escapeHtml(formatDateTime(item.createdAt))}</p>
-          <small>${item.communityProof?.summary?.total || 0} community signal${item.communityProof?.summary?.total === 1 ? "" : "s"}${item.communityProof?.userSignal ? ` · You marked ${escapeHtml(item.communityProof.userSignal)}` : ""}</small>
+          <small>${item.communityProof?.summary?.trustedTotal ?? item.communityProof?.summary?.total ?? 0} verified response${(item.communityProof?.summary?.trustedTotal ?? item.communityProof?.summary?.total) === 1 ? "" : "s"} · ${escapeHtml(String(item.communityProof?.summary?.latestStatus || "unverified").replace(/_/g, " "))}${item.communityProof?.userSignal ? ` · You marked ${escapeHtml(item.communityProof.userSignal.replace(/_/g, " "))}` : ""}</small>
           <div class="verification-actions">
-            <button type="button" class="chip-button nearby-proof-btn" data-signal="corroborates">I see it too</button>
-            <button type="button" class="chip-button nearby-proof-btn" data-signal="cleared">Looks cleared</button>
+            <button type="button" class="chip-button nearby-proof-btn" data-signal="still_present">Still present</button>
             <button type="button" class="chip-button nearby-proof-btn" data-signal="worsening">Getting worse</button>
+            <button type="button" class="chip-button nearby-proof-btn" data-signal="resolved">Resolved</button>
+            <button type="button" class="chip-button nearby-proof-btn" data-signal="duplicate">Duplicate</button>
           </div>
         </article>`).join("")}
     </div>`;
@@ -2282,12 +2172,19 @@ function renderCommunityCases(cases = []) {
       if (!complaintId) return;
       try {
         button.disabled = true;
-        const note = window.prompt("Optional note for the community proof network:") || "";
-        const data = await apiRequest(`/api/complaints/${complaintId}/community-proof`, {
+        const note = window.prompt("Optional note about what you can currently observe:") || "";
+        const duplicateComplaintId = button.dataset.signal === "duplicate"
+          ? (window.prompt("Enter the complaint ID this may duplicate:") || "").trim()
+          : "";
+        if (button.dataset.signal === "duplicate" && !duplicateComplaintId) {
+          button.disabled = false;
+          return;
+        }
+        const data = await apiRequest(`/api/complaints/${complaintId}/community-verification`, {
           method: "POST",
-          body: JSON.stringify({ signal: button.dataset.signal, note })
+          body: JSON.stringify({ signal: button.dataset.signal, note, duplicateComplaintId })
         });
-        setDashboardMessage(data.message || "Community proof recorded.", "success");
+        setDashboardMessage(data.message || "Community verification recorded.", "success");
         await loadDashboard();
       } catch (error) {
         setDashboardMessage(error.message, "error");
@@ -2431,8 +2328,7 @@ function buildSubmittedReport(payload, result) {
     submittedAt: new Date().toISOString(),
     reporter: authState?.username || "Citizen",
     role: authState?.role || "Citizen",
-    city: result.city || { id: "bengaluru", name: "Bengaluru" },
-    rollout: result.rollout || null,
+    city: { id: "bengaluru", name: "Bengaluru" },
     location: payload.location || "Unknown",
     textComplaint: payload.textComplaint || "No complaint text provided.",
     aiDescription: finalAiDescription,
@@ -2449,6 +2345,7 @@ function buildSubmittedReport(payload, result) {
     incidentCluster: result.incidentCluster || null,
     followUp: result.followUp || null,
     verification: result.verification || null,
+    communityProof: result.communityVerification || result.communityProof || null,
     decisionAudit: result.decisionAudit || null,
     weather: result.weather || result.explainability?.weather || null,
     civicEvidence: result.civicEvidence || result.explainability?.civicEvidence || null,
@@ -2559,7 +2456,7 @@ function renderConfidenceBreakdown(confidenceBreakdown = {}) {
     .join("");
 }
 
-function renderRoutingSummary(complaint) {
+function renderRoutingSummary(complaint, authorityTicket = null) {
   const routing = complaint.routing || {};
   if (!routing.unit && !routing.department) {
     return "Current authority assignment for this complaint.";
@@ -2570,9 +2467,12 @@ function renderRoutingSummary(complaint) {
     : "workload not recorded";
   return [
     `${routing.department || "Response department"} · ${routing.unit || "Response unit"}`,
-    `${routing.ward || "Ward not inferred"} · ${routing.escalationLevel || "Routine"} · ${workload}`,
+    `${routing.ward || "Ward not identified"}${routing.wardCode ? ` (${routing.wardCode})` : ""} · ${routing.wardZone || "zone pending"}`,
+    `Ward match: ${String(routing.wardMatchQuality || "legacy").replace(/_/g, " ")}${routing.wardRequiresConfirmation ? " · confirmation recommended" : ""}`,
+    `${routing.escalationLevel || "Routine"} · ${workload}`,
     `Handoff: ${routing.handoff?.mode === "manual_portal" ? "official portal, manual submission" : routing.handoff?.mode || "not configured"}`,
-    complaint.rollout?.mode ? `Intake: ${complaint.rollout.mode}${complaint.rollout.pilotPercentage ? ` (${complaint.rollout.pilotPercentage}% pilot)` : ""}` : "",
+    `Delivery: ${String(authorityTicket?.status || routing.deliveryStatus || "pending_handoff").replace(/_/g, " ")}`,
+    `Escalation: ${routing.escalationDestination || "BBMP zonal administration"}`,
     routing.routingReason || ""
   ]
     .filter(Boolean)
@@ -2966,7 +2866,6 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
   const threat = getThreatAssessment(complaint);
   const resolutionOpen = ["awaiting_citizen_verification", "needs_admin_review"].includes(complaint.resolution?.phase);
   const canSubmitResolutionEvidence = !authState?.permissions?.includes("view_dashboard");
-  const canSubmitCommunityProof = !authState?.permissions?.includes("view_dashboard");
   const canSubmitCitizenVerification = !authState?.permissions?.includes("view_dashboard");
   const dna = intelligence.dna || { strands: [] };
   const timeMachine = intelligence.timeMachine || [];
@@ -3033,7 +2932,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
         <section class="detail-support-card">
           <p class="detail-section-label">Routing</p>
           <strong>${escapeHtml(complaint.routing?.unit || complaint.assignedAuthority || "Gram Panchayat")}</strong>
-          <p>${renderRoutingSummary(complaint)}</p>
+          <p>${renderRoutingSummary(complaint, authorityTicket)}</p>
           ${routingPortal ? `<a class="detail-inline-link" href="${escapeHtml(routingPortal)}" target="_blank" rel="noopener noreferrer">Open official complaint portal</a>` : ""}
         </section>
         <section class="detail-support-card">
@@ -3117,14 +3016,11 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
           <small>${escapeHtml(scenario?.disclaimer || "Scenario information is a planning aid, not a prediction.")}</small>
         </section>
         <section class="detail-support-card community-proof-card">
-          <p class="detail-section-label">Community proof network</p>
-          <strong>${complaint.communityProof?.summary?.total || 0} nearby signals</strong>
-          <p>Nearby users with a matching saved alert area can corroborate, clear, or escalate this live incident.</p>
-          ${canSubmitCommunityProof ? `<div class="verification-actions" data-community-complaint-id="${escapeHtml(complaint._id)}">
-            <button type="button" class="chip-button community-proof-btn" data-signal="corroborates">I see it too</button>
-            <button type="button" class="chip-button community-proof-btn" data-signal="cleared">Looks cleared</button>
-            <button type="button" class="chip-button community-proof-btn" data-signal="worsening">Getting worse</button>
-          </div>` : "<p class=\"helper-text\">Community proof is collected from citizens with matching local-alert areas.</p>"}
+          <p class="detail-section-label">Community verification</p>
+          <strong>${escapeHtml(String(complaint.communityProof?.summary?.latestStatus || "unverified").replace(/_/g, " "))}</strong>
+          <p>${complaint.communityProof?.summary?.trustedTotal ?? complaint.communityProof?.summary?.total ?? 0} nearby responses · ${complaint.communityProof?.summary?.stillPresent || complaint.communityProof?.summary?.corroborates || 0} still present · ${complaint.communityProof?.summary?.worsening || 0} worsening · ${complaint.communityProof?.summary?.resolved || complaint.communityProof?.summary?.cleared || 0} resolved · ${complaint.communityProof?.summary?.duplicate || 0} duplicate</p>
+          <p>Effective confidence: ${Math.round(Number((complaint.communityProof?.summary?.trustedTotal || 0) > 0 ? complaint.communityProof.summary.effectiveConfidence : complaint.confidence || 0))}% · Effective urgency: ${escapeHtml((complaint.communityProof?.summary?.trustedTotal || 0) > 0 ? complaint.communityProof.summary.effectivePriority : complaint.priority || "Medium")}${complaint.communityProof?.summary?.communityWide ? " · Community-wide incident" : ""}</p>
+          <p class="helper-text">Verifier identities and reporter details remain private. Conflicting reports are flagged instead of automatically changing case status.</p>
         </section>
         <section class="detail-support-card">
           <p class="detail-section-label">Threat assessment</p>
@@ -3376,23 +3272,6 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
       }
     });
   });
-  complaintDetailBody.querySelectorAll(".community-proof-btn").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const complaintId = button.closest("[data-community-complaint-id]")?.dataset.communityComplaintId;
-      if (!complaintId) return;
-      try {
-        button.disabled = true;
-        const note = window.prompt("Optional note for the community proof network:") || "";
-        const data = await apiRequest(`/api/complaints/${complaintId}/community-proof`, { method: "POST", body: JSON.stringify({ signal: button.dataset.signal, note }) });
-        setDashboardMessage(data.message || "Community proof recorded.", "success");
-        await openComplaintDetail(complaintId);
-        await loadDashboard();
-      } catch (error) {
-        setDashboardMessage(error.message, "error");
-        button.disabled = false;
-      }
-    });
-  });
 }
 
 async function openComplaintDetail(complaintId) {
@@ -3549,12 +3428,16 @@ async function generatePdfReport(report, options = {}) {
   drawRow("Reported By", report.reporter);
   drawRow("User Role", report.role);
   drawRow("City", report.city?.name || "Bengaluru");
-  drawRow("Intake Rollout", report.rollout?.mode ? `${report.rollout.mode}${report.rollout.pilotPercentage ? ` · ${report.rollout.pilotPercentage}% pilot` : ""}` : "Open");
   drawRow("Routed Authority", report.assignedAuthority);
   drawRow("Assigned Unit", report.routing?.unit || report.routing?.department || "Not recorded");
+  drawRow("Department", report.routing?.department || "Not recorded");
   drawRow("Handoff Mode", report.routing?.handoff?.mode === "manual_portal" ? "Official portal (manual submission)" : report.routing?.handoff?.mode || "Not configured");
   drawRow("Official Portal", report.routing?.handoff?.portalUrl || report.routing?.portalUrl || "Not recorded");
-  drawRow("Ward / Coverage", report.routing?.ward || "Not recorded");
+  drawRow("Ward / Coverage", `${report.routing?.ward || "Not recorded"}${report.routing?.wardCode ? ` (${report.routing.wardCode})` : ""}`);
+  drawRow("Ward Match", `${String(report.routing?.wardMatchQuality || "not recorded").replaceAll("_", " ")}${report.routing?.wardRequiresConfirmation ? " (confirmation recommended)" : ""}`);
+  drawRow("Routing Reason", report.routing?.routingReason || "Not recorded");
+  drawRow("Delivery Status", String(report.routing?.deliveryStatus || "pending handoff").replaceAll("_", " "));
+  drawRow("Escalation Destination", report.routing?.escalationDestination || "BBMP zonal administration");
   drawRow("Complaint Status", report.status);
 
   drawSectionTitle("2. Complaint Particulars");
@@ -3743,6 +3626,7 @@ function renderComplaints(complaints) {
           </div>
           <p>${escapeHtml(complaint.location)}</p>
           <p class="helper-text">Unit: ${escapeHtml(complaint.routing?.unit || complaint.routing?.department || complaint.ai?.recommendedTeam || "Response team")} · ${complaint.broadcast?.triggered ? `Broadcast ${escapeHtml(complaint.broadcast.status || "created")}` : "No broadcast"}</p>
+          <p class="helper-text">Ward: ${escapeHtml(complaint.routing?.ward || "Pending identification")} · Delivery: ${escapeHtml(String(complaint.routing?.deliveryStatus || "pending_handoff").replace(/_/g, " "))} · Community: ${escapeHtml(String(complaint.communityProof?.summary?.latestStatus || "unverified").replace(/_/g, " "))}</p>
           <div class="issue-meta">
             ${severityBadge(complaint.priority)}
             ${authorityBadge(complaint.assignedAuthority)}
@@ -3809,8 +3693,9 @@ function renderAdminTable(complaints) {
             <span>${escapeHtml(complaint.type)}</span>
           </div>
           <div>
-            <strong>${escapeHtml(complaint.assignedAuthority || "Gram Panchayat")}</strong>
-            <span>${escapeHtml(complaint.status)}</span>
+            <strong>${escapeHtml(complaint.routing?.department || complaint.assignedAuthority || "BBMP")}</strong>
+            <span>${escapeHtml(complaint.routing?.ward || "Ward pending")} · ${escapeHtml(complaint.status)} · ${escapeHtml(String(complaint.routing?.deliveryStatus || "pending_handoff").replace(/_/g, " "))}</span>
+            <span>Community: ${escapeHtml(String(complaint.communityProof?.summary?.latestStatus || "unverified").replace(/_/g, " "))}</span>
           </div>
           <button type="button" class="chip-button view-complaint-btn" data-complaint-id="${complaint._id}">Details</button>
         </div>
@@ -3896,15 +3781,12 @@ function renderUserManagement(users = []) {
             <strong>${escapeHtml(user.username)}</strong>
             <span>${escapeHtml(user.email || "No email recorded")}</span>
             <span>${user.disabledAt ? `Disabled by ${escapeHtml(user.disabledBy || "admin")}` : "Active account"}</span>
-            <span>${user.role === "Admin" ? `Operations: ${escapeHtml((user.operationalCityIds || ["bengaluru"]).map((cityId) => cityRegistryState.cities.find((city) => city.id === cityId)?.name || cityId).join(", "))}` : "No operational dashboard access"}</span>
+            <span>${user.role === "Admin" ? "Bengaluru operations access" : "No operational dashboard access"}</span>
           </div>
           <div class="user-admin-actions">
             <select class="user-role-select" data-user-id="${user._id}">
               <option value="Citizen" ${user.role === "Citizen" ? "selected" : ""}>Citizen</option>
               <option value="Admin" ${user.role === "Admin" ? "selected" : ""}>Admin</option>
-            </select>
-            <select class="user-city-select" data-user-id="${user._id}" aria-label="Operations city for ${escapeHtml(user.username)}" ${user.role === "Admin" ? "" : "disabled"}>
-              ${cityRegistryState.cities.map((city) => `<option value="${escapeHtml(city.id)}" ${(user.operationalCityIds || ["bengaluru"])[0] === city.id ? "selected" : ""}>${escapeHtml(city.name)}</option>`).join("")}
             </select>
             <button
               type="button"
@@ -3941,13 +3823,12 @@ function renderUserManagement(users = []) {
     button.addEventListener("click", async () => {
       const userId = button.dataset.userId;
       const select = userManagementList.querySelector(`.user-role-select[data-user-id="${userId}"]`);
-      const citySelect = userManagementList.querySelector(`.user-city-select[data-user-id="${userId}"]`);
 
       try {
         button.disabled = true;
         const result = await apiRequest(`/api/users/${userId}`, {
           method: "PATCH",
-          body: JSON.stringify({ role: select.value, operationalCityIds: select.value === "Admin" ? [citySelect.value] : [] })
+          body: JSON.stringify({ role: select.value })
         });
         setDashboardMessage(result.message, "success");
         await loadDashboard();
@@ -4023,11 +3904,9 @@ function renderLocalAlertPreferences(preferences = null) {
   const enabled = Boolean(preferences?.enabled);
   const areas = Array.isArray(preferences?.areas) ? preferences.areas : [];
   const threshold = preferences?.severityThreshold || "High";
-  const cityId = preferences?.cityId || cityRegistryState.defaultCityId || "bengaluru";
 
   localAlertsEnabled.checked = enabled;
   localAlertSeverityThreshold.value = threshold;
-  if (localAlertCity && [...localAlertCity.options].some((option) => option.value === cityId)) localAlertCity.value = cityId;
   localAlertAreasInput.value = areas.map((area) => area.label || area.normalized || "").filter(Boolean).join(", ");
 
   if (!authState?.token) {
@@ -4036,7 +3915,6 @@ function renderLocalAlertPreferences(preferences = null) {
     saveLocalAlertsBtn.disabled = true;
     localAlertsEnabled.disabled = true;
     localAlertAreasInput.disabled = true;
-    localAlertCity.disabled = true;
     localAlertSeverityThreshold.disabled = true;
     return;
   }
@@ -4044,7 +3922,6 @@ function renderLocalAlertPreferences(preferences = null) {
   saveLocalAlertsBtn.disabled = false;
   localAlertsEnabled.disabled = false;
   localAlertAreasInput.disabled = false;
-  localAlertCity.disabled = false;
   localAlertSeverityThreshold.disabled = false;
 
   if (!areas.length) {
@@ -4066,253 +3943,6 @@ function renderLocalAlertPreferences(preferences = null) {
     .join("");
 }
 
-function renderCityActivationReadiness(readiness) {
-  if (!cityActivationPanel || !readiness) return;
-  const evidence = readiness.evidence || {};
-  const status = String(readiness.status || "blocked").replace(/_/g, " ");
-  const checks = Array.isArray(readiness.checks) ? readiness.checks : [];
-  cityActivationPanel.innerHTML = `
-    <div class="city-activation-head">
-      <div><p class="eyebrow">City activation gate</p><h3>${escapeHtml(readiness.city?.name || "City")} readiness</h3></div>
-      <span class="city-activation-status" data-status="${escapeHtml(readiness.status || "blocked")}">${escapeHtml(status)}</span>
-    </div>
-    <p class="helper-text">Readiness approval does not enable reporting. Activation still requires a reviewed registry change and deployment.</p>
-    <div class="city-readiness-checks">
-      ${checks.map((item) => `<article data-passed="${item.passed ? "true" : "false"}"><span>${item.passed ? "Pass" : "Blocked"}</span><strong>${escapeHtml(item.label)}</strong><p>${escapeHtml(item.detail)}</p></article>`).join("")}
-    </div>
-    <form class="city-activation-evidence-form">
-      <label class="toggle-row"><input type="checkbox" class="activation-portal-test" ${evidence.portalSubmissionTestedAt ? "checked" : ""}><span>Portal submission tested in staging</span></label>
-      <label class="toggle-row"><input type="checkbox" class="activation-dashboard-test" ${evidence.dashboardIsolationTestedAt ? "checked" : ""}><span>Dashboard isolation tested</span></label>
-      <label class="toggle-row"><input type="checkbox" class="activation-alert-test" ${evidence.alertIsolationTestedAt ? "checked" : ""}><span>Alert isolation tested</span></label>
-      <label>Reconciliation owner<input class="activation-owner" type="text" maxlength="120" required value="${escapeHtml(evidence.reconciliationOwner || "")}" placeholder="Responsible operations team"></label>
-      <label class="activation-note-field">Operational evidence note<textarea class="activation-note" minlength="20" maxlength="1000" required placeholder="Describe the test case, result, and evidence location.">${escapeHtml(evidence.note || "")}</textarea></label>
-      <div class="city-activation-actions">
-        <button type="submit" class="secondary-button activation-evidence-save">Save evidence</button>
-        <button type="button" class="primary-button activation-approve" ${readiness.status === "ready" ? "" : "disabled"}>Approve readiness</button>
-      </div>
-    </form>`;
-
-  const form = cityActivationPanel.querySelector(".city-activation-evidence-form");
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const button = form.querySelector(".activation-evidence-save");
-    try {
-      button.disabled = true;
-      const data = await apiRequest(`/api/cities/${readiness.city.id}/activation-readiness/evidence`, {
-        method: "PUT",
-        body: JSON.stringify({
-          portalSubmissionTested: form.querySelector(".activation-portal-test").checked,
-          dashboardIsolationTested: form.querySelector(".activation-dashboard-test").checked,
-          alertIsolationTested: form.querySelector(".activation-alert-test").checked,
-          reconciliationOwner: form.querySelector(".activation-owner").value.trim(),
-          note: form.querySelector(".activation-note").value.trim()
-        })
-      });
-      setDashboardMessage(data.message, data.readiness?.status === "ready" ? "success" : "info");
-      renderCityActivationReadiness(data.readiness);
-    } catch (error) {
-      setDashboardMessage(error.message, "error");
-      button.disabled = false;
-    }
-  });
-  form.querySelector(".activation-approve").addEventListener("click", async (event) => {
-    try {
-      event.currentTarget.disabled = true;
-      const data = await apiRequest(`/api/cities/${readiness.city.id}/activation-readiness/approve`, { method: "POST", body: "{}" });
-      setDashboardMessage(data.message, "success");
-      renderCityActivationReadiness(data.readiness);
-    } catch (error) {
-      setDashboardMessage(error.message, "error");
-      event.currentTarget.disabled = false;
-    }
-  });
-}
-
-async function loadCityActivationReadiness(operationsScope) {
-  if (!cityActivationPanel) return;
-  if (!authState?.permissions?.includes("update_complaint_status") || !operationsScope?.id) {
-    cityActivationPanel.innerHTML = "";
-    cityActivationPanel.hidden = true;
-    return;
-  }
-  cityActivationPanel.hidden = false;
-  cityActivationPanel.innerHTML = `<p class="helper-text">Checking ${escapeHtml(operationsScope.name || "city")} activation readiness...</p>`;
-  try {
-    const data = await apiRequest(`/api/cities/${operationsScope.id}/activation-readiness`, { method: "GET" });
-    renderCityActivationReadiness(data.readiness);
-  } catch (error) {
-    cityActivationPanel.innerHTML = `<p class="decision-audit-warning">${escapeHtml(error.message)}</p>`;
-  }
-}
-
-function renderCityRollout(rollout) {
-  if (!cityRolloutPanel || !rollout) return;
-  const history = Array.isArray(rollout.history) ? rollout.history : [];
-  cityRolloutPanel.innerHTML = `
-    <div class="city-activation-head">
-      <div><p class="eyebrow">Controlled rollout</p><h3>${escapeHtml(rollout.cityName || "City")} intake</h3></div>
-      <span class="city-activation-status" data-status="${escapeHtml(rollout.mode)}">${escapeHtml(rollout.mode)}</span>
-    </div>
-    <p class="helper-text">${rollout.todayUsed || 0} intake reservation(s) today${rollout.dailyComplaintLimit ? ` of ${rollout.dailyComplaintLimit}` : " · no daily cap"}. Pilot access uses a stable user cohort.</p>
-    ${rollout.pilotStartedAt ? `<p class="helper-text">Pilot observation started ${escapeHtml(formatDateTime(rollout.pilotStartedAt))}; at least 24 hours are required before open rollout.</p>` : ""}
-    ${rollout.configurationStale ? `<p class="decision-audit-warning">The rollout configuration is stale. Intake remains blocked until readiness is reviewed again.</p>` : ""}
-    <form class="city-rollout-form">
-      <label>Mode<select class="rollout-mode"><option value="closed" ${rollout.mode === "closed" ? "selected" : ""}>Closed</option><option value="pilot" ${rollout.mode === "pilot" ? "selected" : ""}>Pilot</option><option value="open" ${rollout.mode === "open" ? "selected" : ""}>Open</option><option value="paused" ${rollout.mode === "paused" ? "selected" : ""}>Paused</option></select></label>
-      <label>Pilot percentage<input class="rollout-percentage" type="number" min="1" max="100" value="${escapeHtml(rollout.pilotPercentage || 10)}"></label>
-      <label>Daily intake limit <span>(0 = unlimited)</span><input class="rollout-daily-limit" type="number" min="0" max="100000" value="${escapeHtml(rollout.dailyComplaintLimit || 0)}"></label>
-      <label class="rollout-reason-field">Change reason<textarea class="rollout-reason" minlength="10" maxlength="500" required placeholder="Explain the rollout decision or incident response."></textarea></label>
-      <div class="city-activation-actions">
-        <button type="submit" class="primary-button rollout-save">Apply rollout change</button>
-        <button type="button" class="danger-button rollout-pause" ${rollout.mode === "paused" ? "disabled" : ""}>Pause intake now</button>
-      </div>
-    </form>
-    <div class="rollout-history">
-      ${history.map((entry) => `<article><strong>${escapeHtml(entry.fromMode)} &rarr; ${escapeHtml(entry.toMode)}</strong><span>${escapeHtml(formatDateTime(entry.changedAt))}</span><p>${escapeHtml(entry.reason)}</p></article>`).join("") || `<p class="helper-text">No persisted rollout changes yet.</p>`}
-    </div>`;
-
-  const form = cityRolloutPanel.querySelector(".city-rollout-form");
-  const submitChange = async (mode) => {
-    const reason = form.querySelector(".rollout-reason").value.trim();
-    if (reason.length < 10) throw new Error("Enter a rollout reason of at least 10 characters.");
-    const data = await apiRequest(`/api/cities/${rollout.cityId}/rollout`, {
-      method: "PATCH",
-      body: JSON.stringify({
-        mode,
-        pilotPercentage: Number(form.querySelector(".rollout-percentage").value),
-        dailyComplaintLimit: Number(form.querySelector(".rollout-daily-limit").value),
-        reason
-      })
-    });
-    setDashboardMessage(data.message, mode === "paused" ? "info" : "success");
-    await Promise.all([
-      loadCityRollout({ id: rollout.cityId, name: rollout.cityName }),
-      loadCityOperationalHealth({ id: rollout.cityId, name: rollout.cityName })
-    ]);
-    await initializeCitySelector().catch(() => {});
-  };
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const button = form.querySelector(".rollout-save");
-    try {
-      button.disabled = true;
-      await submitChange(form.querySelector(".rollout-mode").value);
-    } catch (error) {
-      setDashboardMessage(error.message, "error");
-      button.disabled = false;
-    }
-  });
-  form.querySelector(".rollout-pause").addEventListener("click", async (event) => {
-    try {
-      event.currentTarget.disabled = true;
-      await submitChange("paused");
-    } catch (error) {
-      setDashboardMessage(error.message, "error");
-      event.currentTarget.disabled = false;
-    }
-  });
-}
-
-async function loadCityRollout(operationsScope) {
-  if (!cityRolloutPanel) return;
-  if (!authState?.permissions?.includes("update_complaint_status") || !operationsScope?.id) {
-    cityRolloutPanel.innerHTML = "";
-    cityRolloutPanel.hidden = true;
-    return;
-  }
-  cityRolloutPanel.hidden = false;
-  cityRolloutPanel.innerHTML = `<p class="helper-text">Loading ${escapeHtml(operationsScope.name || "city")} rollout controls...</p>`;
-  try {
-    const data = await apiRequest(`/api/cities/${operationsScope.id}/rollout`, { method: "GET" });
-    renderCityRollout(data.rollout);
-  } catch (error) {
-    cityRolloutPanel.innerHTML = `<p class="decision-audit-warning">${escapeHtml(error.message)}</p>`;
-  }
-}
-
-function operationalRate(value) {
-  return `${Math.round(Number(value || 0) * 100)}%`;
-}
-
-function renderCityOperationalHealth(health) {
-  if (!cityOperationalHealthPanel || !health) return;
-  const evaluations = Array.isArray(health.evaluations) ? health.evaluations : [];
-  const incidents = Array.isArray(health.incidents) ? health.incidents : [];
-  const activeIncidents = incidents.filter((incident) => incident.status !== "resolved");
-  const labels = {
-    complaint_failure_rate: "Complaint processing failures",
-    ai_degradation_rate: "AI degraded or fallback results",
-    authority_failure_rate: "Authority delivery failures",
-    broadcast_failure_rate: "Broadcast delivery failures"
-  };
-  cityOperationalHealthPanel.innerHTML = `
-    <div class="city-activation-head">
-      <div><p class="eyebrow">Operational safeguards</p><h3>${escapeHtml(health.city?.name || "City")} service health</h3></div>
-      <span class="city-activation-status" data-status="${escapeHtml(health.status || "healthy")}">${escapeHtml(String(health.status || "healthy").replace(/_/g, " "))}</span>
-    </div>
-    <p class="helper-text">Rolling ${escapeHtml(health.windowMinutes || 15)} minute measurements. A city pauses only when both its minimum sample and failure threshold are reached.</p>
-    <div class="city-operational-metrics">
-      ${evaluations.map((item) => `
-        <article data-breached="${item.breached ? "true" : "false"}">
-          <span>${escapeHtml(item.sampleSize)} / ${escapeHtml(item.minimumSamples)} samples</span>
-          <strong>${escapeHtml(labels[item.trigger] || item.trigger)}</strong>
-          <p>${escapeHtml(operationalRate(item.observedRate))} observed · ${escapeHtml(operationalRate(item.threshold))} limit</p>
-        </article>`).join("")}
-    </div>
-    <div class="city-operational-incidents">
-      ${activeIncidents.map((incident) => `
-        <article class="operational-incident" data-status="${escapeHtml(incident.status)}">
-          <div><strong>${escapeHtml(labels[incident.trigger] || incident.trigger)}</strong><span>${escapeHtml(incident.status)}</span></div>
-          <p>${escapeHtml(incident.reason)}</p>
-          <small>Opened ${escapeHtml(formatDateTime(incident.openedAt))}</small>
-          ${incident.status === "open" ? `
-            <form class="operational-incident-ack" data-incident-id="${escapeHtml(incident.id)}">
-              <label>Investigation note<textarea minlength="10" maxlength="500" required placeholder="Record what was checked and the recovery decision."></textarea></label>
-              <button type="submit" class="primary-button">Acknowledge incident</button>
-            </form>` : `<p class="helper-text">Acknowledged: ${escapeHtml(incident.acknowledgementNote || "Recovery review pending.")}</p>`}
-        </article>`).join("") || `<p class="helper-text">No active operational incidents.</p>`}
-    </div>`;
-
-  cityOperationalHealthPanel.querySelectorAll(".operational-incident-ack").forEach((form) => {
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const button = form.querySelector("button");
-      const note = form.querySelector("textarea").value.trim();
-      try {
-        button.disabled = true;
-        const data = await apiRequest(`/api/cities/${health.city.id}/operational-incidents/${form.dataset.incidentId}/acknowledge`, {
-          method: "POST",
-          body: JSON.stringify({ note })
-        });
-        setDashboardMessage(data.message, "success");
-        await Promise.all([
-          loadCityOperationalHealth(health.city),
-          loadCityRollout(health.city)
-        ]);
-      } catch (error) {
-        setDashboardMessage(error.message, "error");
-        button.disabled = false;
-      }
-    });
-  });
-}
-
-async function loadCityOperationalHealth(operationsScope) {
-  if (!cityOperationalHealthPanel) return;
-  if (!authState?.permissions?.includes("update_complaint_status") || !operationsScope?.id) {
-    cityOperationalHealthPanel.innerHTML = "";
-    cityOperationalHealthPanel.hidden = true;
-    return;
-  }
-  cityOperationalHealthPanel.hidden = false;
-  cityOperationalHealthPanel.innerHTML = `<p class="helper-text">Loading ${escapeHtml(operationsScope.name || "city")} service health...</p>`;
-  try {
-    const data = await apiRequest(`/api/cities/${operationsScope.id}/operational-health`, { method: "GET" });
-    renderCityOperationalHealth(data.operationalHealth);
-  } catch (error) {
-    cityOperationalHealthPanel.innerHTML = `<p class="decision-audit-warning">${escapeHtml(error.message)}</p>`;
-  }
-}
-
 function authorityStageLabel(stage) {
   return ({ handoff: "Authority handoff", acknowledgement: "Authority acknowledgement", resolution: "Authority resolution" })[stage] || "Authority response";
 }
@@ -4322,7 +3952,7 @@ function renderAuthorityGovernance(governance) {
   const counts = governance.counts || {};
   const tickets = Array.isArray(governance.tickets) ? governance.tickets : [];
   authorityGovernancePanel.innerHTML = `
-    <div class="city-activation-head">
+    <div class="authority-governance-head">
       <div><p class="eyebrow">Authority response governance</p><h3>${escapeHtml(governance.city?.name || "City")} response deadlines</h3></div>
       <button type="button" class="secondary-button authority-sla-evaluate">Evaluate now</button>
     </div>
@@ -4347,7 +3977,7 @@ function renderAuthorityGovernance(governance) {
   authorityGovernancePanel.querySelector(".authority-sla-evaluate")?.addEventListener("click", async (event) => {
     try {
       event.currentTarget.disabled = true;
-      const data = await apiRequest(`/api/cities/${governance.city.id}/authority-governance/evaluate`, { method: "POST", body: "{}" });
+      const data = await apiRequest("/api/authority-governance/evaluate", { method: "POST", body: "{}" });
       setDashboardMessage(data.message, "success");
       renderAuthorityGovernance(data.authorityGovernance);
     } catch (error) {
@@ -4360,17 +3990,17 @@ function renderAuthorityGovernance(governance) {
   });
 }
 
-async function loadAuthorityGovernance(operationsScope) {
+async function loadAuthorityGovernance() {
   if (!authorityGovernancePanel) return;
-  if (!authState?.permissions?.includes("update_complaint_status") || !operationsScope?.id) {
+  if (!authState?.permissions?.includes("update_complaint_status")) {
     authorityGovernancePanel.innerHTML = "";
     authorityGovernancePanel.hidden = true;
     return;
   }
   authorityGovernancePanel.hidden = false;
-  authorityGovernancePanel.innerHTML = `<p class="helper-text">Loading ${escapeHtml(operationsScope.name || "city")} authority deadlines...</p>`;
+  authorityGovernancePanel.innerHTML = '<p class="helper-text">Loading Bengaluru authority deadlines...</p>';
   try {
-    const data = await apiRequest(`/api/cities/${operationsScope.id}/authority-governance`, { method: "GET" });
+    const data = await apiRequest("/api/authority-governance", { method: "GET" });
     renderAuthorityGovernance(data.authorityGovernance);
   } catch (error) {
     authorityGovernancePanel.innerHTML = `<p class="decision-audit-warning">${escapeHtml(error.message)}</p>`;
@@ -4416,8 +4046,6 @@ async function saveLocalAlertPreferences(event) {
       method: "PATCH",
       body: JSON.stringify({
         enabled: localAlertsEnabled.checked,
-        cityId: localAlertCity.value,
-        cityRegistryVersion: cityRegistryState.registryVersion,
         severityThreshold: localAlertSeverityThreshold.value,
         areas: parseLocalAlertAreasInput()
       })
@@ -5027,7 +4655,6 @@ function setupDashboardFilters() {
   complaintSearchInput?.addEventListener("input", reload);
   complaintStatusFilter?.addEventListener("change", reload);
   complaintSortSelect?.addEventListener("change", reload);
-  dashboardCityFilter?.addEventListener("change", reload);
   clearComplaintFiltersBtn?.addEventListener("click", () => {
     complaintSearchInput.value = "";
     complaintStatusFilter.value = "";
@@ -5055,17 +4682,15 @@ function setupDashboardFilters() {
 }
 
 function setupDraftAutosave() {
-  [reportCitySelect, reportLocationInput, complaintInputMode, typedComplaintInput, voiceTranscriptInput].forEach((element) => {
+  [reportLocationInput, complaintInputMode, typedComplaintInput, voiceTranscriptInput].forEach((element) => {
     element?.addEventListener("input", scheduleDraftSave);
     element?.addEventListener("change", scheduleDraftSave);
   });
 
   clearDraftBtn?.addEventListener("click", () => {
-    resetComposer({ preserveCity: false });
+    resetComposer();
   });
 
-  reportCitySelect?.addEventListener("change", renderSelectedCity);
-  refreshCitiesBtn?.addEventListener("click", () => initializeCitySelector().then(restoreReportDraft).catch(() => {}));
 }
 
 async function loadDashboard() {
@@ -5080,9 +4705,6 @@ async function loadDashboard() {
   const query = buildDashboardQueryParams();
   const path = query ? `/api/dashboard?${query}` : "/api/dashboard";
   const data = await apiRequest(path, { method: "GET" });
-  if (data.operationsScope && dashboardCityFilter && dashboardCityFilter.value !== data.operationsScope.id) {
-    dashboardCityFilter.value = data.operationsScope.id;
-  }
   dashboardDataCache = {
     complaints: data.complaints || [],
     users: data.manageableUsers || [],
@@ -5111,28 +4733,17 @@ async function loadDashboard() {
   await loadLocalAlertPreferences();
 
   if (data.auth) {
-    authState = { ...authState, role: data.auth.role, username: data.auth.username, permissions: data.auth.permissions, operationalCityIds: data.auth.operationalCityIds || [] };
-    if (cityRegistryState.ready) populateCityScopedControls();
+    authState = { ...authState, role: data.auth.role, username: data.auth.username, permissions: data.auth.permissions };
     saveAuthState();
     applyPermissionState();
   }
   await Promise.all([
-    loadCityActivationReadiness(data.operationsScope),
-    loadCityRollout(data.operationsScope),
-    loadCityOperationalHealth(data.operationsScope),
-    loadAuthorityGovernance(data.operationsScope)
+    loadAuthorityGovernance()
   ]);
 }
 
-function resetComposer({ clearDraft = true, preserveCity = true } = {}) {
-  const retainedCityId = preserveCity && selectedCity()?.reportingEnabled
-    ? reportCitySelect.value
-    : cityRegistryState.defaultCityId;
+function resetComposer({ clearDraft = true } = {}) {
   form.reset();
-  if (reportCitySelect && cityRegistryState.ready) {
-    reportCitySelect.value = retainedCityId || cityRegistryState.defaultCityId;
-    renderSelectedCity();
-  }
   uploadPreview.hidden = true;
   imagePreview.removeAttribute("src");
   imageName.textContent = "No image selected";
@@ -5587,12 +5198,6 @@ form.addEventListener("submit", async (event) => {
 
     const formData = new FormData(event.target);
     const payload = Object.fromEntries(formData.entries());
-    const city = selectedCity();
-    if (!cityRegistryState.ready || !city?.reportingEnabled || !["open", "pilot"].includes(city?.rollout?.mode || "open")) {
-      throw new Error("Choose an available city before submitting the complaint.");
-    }
-    payload.cityId = city.id;
-    payload.cityRegistryVersion = cityRegistryState.registryVersion;
     const imageFile = imageFileInput.files[0];
     const complaintPayload = getComplaintTextPayload();
 
@@ -5666,14 +5271,8 @@ applyPermissionState();
 setPdfButtonState(false);
 setupDraftAutosave();
 setupDashboardFilters();
-initializeCitySelector()
-  .then(() => {
-    resetComposer({ clearDraft: false, preserveCity: false });
-    restoreReportDraft();
-  })
-  .catch(() => {
-    updateDraftStatus("Draft will restore after city availability is loaded.", "error");
-  });
+resetComposer({ clearDraft: false });
+restoreReportDraft();
 if (!authState?.token) {
   openAuthOverlay("login");
 }

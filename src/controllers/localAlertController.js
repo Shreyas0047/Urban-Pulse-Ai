@@ -1,6 +1,5 @@
 const User = require("../models/User");
 const { normalizeArea } = require("../utils/localAlerts");
-const { DEFAULT_CITY_ID, DEFAULT_CITY_NAME, REGISTRY_VERSION, resolveReportingCity } = require("../services/cityRegistryService");
 
 const MAX_AREAS = 6;
 const MAX_AREA_LENGTH = 80;
@@ -17,9 +16,6 @@ function serializePreferences(user) {
 
   return {
     enabled: Boolean(preferences.enabled),
-    cityId: preferences.cityId || DEFAULT_CITY_ID,
-    cityName: preferences.cityName || DEFAULT_CITY_NAME,
-    cityRegistryVersion: preferences.cityRegistryVersion || REGISTRY_VERSION,
     severityThreshold: preferences.severityThreshold || "High",
     areas: (preferences.areas || []).map((area) => ({
       label: area.label || "",
@@ -92,10 +88,6 @@ async function updateLocalAlertPreferences(req, res, next) {
       throw createHttpError("User not found.", 404);
     }
 
-    const city = await resolveReportingCity({
-      cityId: req.body.cityId,
-      registryVersion: req.body.cityRegistryVersion
-    });
     const severityThreshold = String(req.body.severityThreshold || "High").trim();
     if (!ALLOWED_THRESHOLDS.has(severityThreshold)) {
       throw createHttpError("Invalid local alert severity threshold.", 400);
@@ -104,9 +96,6 @@ async function updateLocalAlertPreferences(req, res, next) {
     const areas = normalizeAreas(req.body.areas || []);
     user.localAlertPreferences = {
       enabled: Boolean(req.body.enabled) && areas.length > 0,
-      cityId: city.slug,
-      cityName: city.name,
-      cityRegistryVersion: city.registryVersion,
       severityThreshold,
       areas,
       updatedAt: new Date()
@@ -116,7 +105,7 @@ async function updateLocalAlertPreferences(req, res, next) {
 
     res.json({
       message: user.localAlertPreferences.enabled
-        ? `Local alert areas saved for ${city.name}.`
+        ? "Local alert areas saved for Bengaluru."
         : "Local area alerts are disabled.",
       preferences: serializePreferences(user)
     });

@@ -3,19 +3,27 @@ const mongoose = require("mongoose");
 const IncidentCommand = require("../models/IncidentCommand");
 const User = require("../models/User");
 const AuthorityTicket = require("../models/AuthorityTicket");
+const CommunityVerificationEvent = require("../models/CommunityVerificationEvent");
+const IncidentCluster = require("../models/IncidentCluster");
+const crypto = require("crypto");
 const { transcribeAudio, compareResolutionEvidence } = require("../services/aiClient");
 const { createComplaintFromPayload, createHttpError } = require("../services/complaintService");
 const { buildFollowUpSchedule, refreshComplaintFollowUp } = require("../services/followUpService");
 const { buildComplaintIntelligence } = require("../services/civicIntelligenceService");
 const { areaMatchesLocation } = require("../utils/localAlerts");
+const {
+  normalizeSignal,
+  eligibleSavedArea,
+  applyCommunityVerification,
+  publicCommunityVerification,
+  summarizeCommunityVerification
+} = require("../services/communityVerificationService");
 const { applyHumanReview, getReviewOptions, normalizeReviewPayload } = require("../services/humanReviewService");
 const { appendDecisionEvent, decisionSnapshot, recordAiBaseline, verifyDecisionAudit } = require("../services/decisionAuditService");
-const { recordOperationalEventSafely } = require("../services/cityOperationalHealthService");
 const { assertOperationalCityAccess, canAccessComplaint, ownsComplaint } = require("../services/operationalAccessService");
 
 const ALLOWED_STATUSES = ["Queued", "Needs Review", "In Progress", "Resolved", "Escalated"];
 const ALLOWED_VERIFICATION_VOTES = new Set(["still_there", "resolved", "got_worse"]);
-const ALLOWED_COMMUNITY_SIGNALS = new Set(["corroborates", "cleared", "worsening"]);
 const MAX_VERIFICATION_NOTE_LENGTH = 280;
 const MAX_RESOLUTION_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_RESOLUTION_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -82,56 +90,9 @@ function normalizeResolutionImage(payload) {
   return { imageBase64, imageMimeType };
 }
 
-function summarizeCommunityProof(signals = []) {
-  const summary = { total: signals.length, corroborates: 0, cleared: 0, worsening: 0, lastSignalAt: null };
-  signals.forEach((entry) => {
-    if (summary[entry.signal] !== undefined) summary[entry.signal] += 1;
-    if (entry.createdAt && (!summary.lastSignalAt || new Date(entry.createdAt) > new Date(summary.lastSignalAt))) {
-      summary.lastSignalAt = entry.createdAt;
-    }
-  });
-  return summary;
-}
-
-async function canSubmitCommunityProof(auth, complaint) {
-  if (ownsComplaint(auth, complaint)) return true;
-  if (!auth.userId) return false;
-  const user = await User.findById(auth.userId, { localAlertPreferences: 1 }).lean();
-  const preferences = user?.localAlertPreferences || {};
-  if (!preferences.enabled) return false;
-  const locationParts = [complaint.location, complaint.areaIntelligence?.likelyArea, complaint.routing?.ward].filter(Boolean);
-  return (preferences.areas || []).some((area) => areaMatchesLocation(area.normalized || area.label, locationParts));
-}
-
 async function analyzeAndCreateComplaint(req, res, next) {
-  const startedAt = Date.now();
   try {
     const { analysis, complaint } = await createComplaintFromPayload(req.auth, req.body);
-
-    const degraded = Boolean(analysis.aiMeta?.fallbackUsed || analysis.aiMeta?.visionFallbackUsed || analysis.cv?.fallbackUsed);
-    await recordOperationalEventSafely({
-      cityId: complaint.cityId,
-      domain: "complaint_processing",
-      outcome: degraded ? "degraded" : "success",
-      eventType: degraded ? "complaint_created_degraded" : "complaint_created",
-      complaintId: complaint._id,
-      latencyMs: Date.now() - startedAt,
-      metadata: {
-        aiFallbackUsed: Boolean(analysis.aiMeta?.fallbackUsed),
-        visionFallbackUsed: Boolean(analysis.aiMeta?.visionFallbackUsed || analysis.cv?.fallbackUsed)
-      }
-    });
-    if (analysis.broadcast?.triggered) {
-      const broadcastStatus = String(analysis.broadcast.status || "created");
-      await recordOperationalEventSafely({
-        cityId: complaint.cityId,
-        domain: "broadcast_delivery",
-        outcome: broadcastStatus === "sent" ? "success" : broadcastStatus === "failed" ? "failure" : "degraded",
-        eventType: `broadcast_${broadcastStatus}`,
-        complaintId: complaint._id,
-        metadata: { providerStatus: broadcastStatus, recipientCount: analysis.broadcast.recipientCount }
-      });
-    }
 
     res.json({
       nlp: analysis.nlp,
@@ -141,19 +102,14 @@ async function analyzeAndCreateComplaint(req, res, next) {
       confidence: analysis.confidence,
       status: analysis.status,
       assignedAuthority: analysis.assignedAuthority,
-      city: {
-        id: complaint.cityId,
-        name: complaint.cityName,
-        source: complaint.citySource,
-        registryVersion: complaint.cityRegistryVersion
-      },
       routing: analysis.routing,
-      rollout: analysis.rollout,
       broadcast: analysis.broadcast,
       incidentCommand: analysis.incidentCommand,
       incidentCluster: analysis.incidentCluster || complaint.incidentCluster,
       followUp: complaint.followUp,
       verification: complaint.verification,
+      communityVerification: publicCommunityVerification(complaint.communityProof, req.auth, complaint._id),
+      communityProof: publicCommunityVerification(complaint.communityProof, req.auth, complaint._id),
       decisionAudit: complaint.decisionAudit,
       mapLocation: analysis.mapLocation,
       areaIntelligence: analysis.areaIntelligence,
@@ -171,15 +127,6 @@ async function analyzeAndCreateComplaint(req, res, next) {
       complaintId: complaint._id
     });
   } catch (error) {
-    if (Number(error.statusCode || 500) >= 500 && !String(error.code || "").startsWith("CITY_")) {
-      await recordOperationalEventSafely({
-        cityId: req.body?.cityId,
-        domain: "complaint_processing",
-        outcome: "failure",
-        eventType: "complaint_processing_failed",
-        latencyMs: Date.now() - startedAt
-      });
-    }
     next(error);
   }
 }
@@ -194,6 +141,11 @@ async function getComplaint(req, res, next) {
     if (!canAccessComplaint(req.auth, complaint)) {
       throw createHttpError("Permission denied", 403);
     }
+
+    const communitySignals = complaint.communityProof?.signals || [];
+    complaint.communityProof = {
+      summary: summarizeCommunityVerification(communitySignals, complaint)
+    };
 
     const canReview = req.auth.permissions.includes("update_complaint_status");
     const decisionAudit = canReview
@@ -543,29 +495,92 @@ async function submitResolutionEvidence(req, res, next) {
 
 async function submitCommunityProof(req, res, next) {
   try {
-    const complaint = await Complaint.findById(req.params.id);
+    const complaintQuery = Complaint.findById(req.params.id);
+    const complaint = typeof complaintQuery?.select === "function"
+      ? await complaintQuery.select("+communityProof.signals.actorHash +communityProof.signals.areaKeyHash")
+      : await complaintQuery;
     if (!complaint) throw createHttpError("Complaint not found", 404);
-    if (!(await canSubmitCommunityProof(req.auth, complaint))) {
-      throw createHttpError("Community proof is available only for your saved local-alert areas.", 403);
+    if (req.auth.role !== "Citizen") {
+      throw createHttpError("Community verification is available to nearby citizens only.", 403);
+    }
+    if (ownsComplaint(req.auth, complaint)) {
+      throw createHttpError("Reporters cannot verify their own complaint. Use the complaint follow-up flow instead.", 403);
     }
     if (complaint.status === "Resolved") {
       throw createHttpError("This incident is already resolved. Use the resolution confirmation flow instead.", 400);
     }
 
-    const signal = String(req.body.signal || "").trim();
+    const signal = normalizeSignal(req.body.signal);
     const note = String(req.body.note || "").replace(/\s+/g, " ").trim();
-    if (!ALLOWED_COMMUNITY_SIGNALS.has(signal)) throw createHttpError("Choose a valid community proof signal.", 400);
+    if (!signal) throw createHttpError("Choose a valid community verification status.", 400);
     if (note.length > MAX_VERIFICATION_NOTE_LENGTH) throw createHttpError(`Community note must be ${MAX_VERIFICATION_NOTE_LENGTH} characters or fewer.`, 400);
 
-    const userKey = String(req.auth.userId || "");
-    const existing = (complaint.communityProof?.signals || []).filter((entry) => String(entry.userId || "") !== userKey);
-    const signals = [...existing, { userId: userKey, signal, note, createdAt: new Date() }].slice(-24);
-    complaint.communityProof = { summary: summarizeCommunityProof(signals), signals };
-    const audit = `Community proof: ${signal}${note ? ` - ${note}` : ""}`;
-    complaint.statusHistory = [...(complaint.statusHistory || []), { status: complaint.status, changedBy: "community-proof", changedAt: new Date(), note: audit }];
-    if (signal === "worsening") complaint.alerts = [...(complaint.alerts || []), audit];
+    const user = await User.findById(req.auth.userId, { localAlertPreferences: 1 }).lean();
+    const preferences = user?.localAlertPreferences || {};
+    if (!eligibleSavedArea(preferences, complaint)) {
+      throw createHttpError("Community verification is available only for incidents in your saved local-alert areas.", 403);
+    }
+
+    let duplicateComplaintId = null;
+    if (signal === "duplicate") {
+      const candidateId = String(req.body.duplicateComplaintId || "").trim();
+      if (!mongoose.isValidObjectId(candidateId) || candidateId === String(complaint._id)) {
+        throw createHttpError("Choose a different valid complaint as the possible duplicate.", 400);
+      }
+      const candidate = await Complaint.findById(candidateId, { location: 1, type: 1, "ai.categoryId": 1, "routing.wardCode": 1 }).lean();
+      if (!candidate) throw createHttpError("The possible duplicate complaint was not found.", 404);
+      const sameCategory = String(candidate.ai?.categoryId || candidate.type) === String(complaint.ai?.categoryId || complaint.type);
+      const sameArea = candidate.routing?.wardCode && candidate.routing.wardCode === complaint.routing?.wardCode
+        ? true
+        : areaMatchesLocation(candidate.location, [complaint.location, complaint.areaIntelligence?.likelyArea].filter(Boolean));
+      if (!sameCategory || !sameArea) {
+        throw createHttpError("A duplicate must describe the same issue category in the same affected area.", 400);
+      }
+      duplicateComplaintId = candidate._id;
+    }
+
+    const result = applyCommunityVerification({
+      signals: (complaint.communityProof?.signals || []).map((entry) => entry.toObject ? entry.toObject({ depopulate: true }) : entry),
+      auth: { ...req.auth, preferences },
+      complaint,
+      signal,
+      note,
+      duplicateComplaintId
+    });
+    complaint.communityProof = { summary: result.summary, signals: result.signals };
+    const audit = `Community verification: ${signal.replace(/_/g, " ")}`;
+    if (result.outcome !== "idempotent") {
+      complaint.statusHistory = [...(complaint.statusHistory || []), { status: complaint.status, changedBy: "community-verification", changedAt: new Date(), note: audit }];
+      if (signal === "worsening" || result.summary.communityWide) complaint.alerts = [...(complaint.alerts || []), audit];
+    }
     await complaint.save();
-    res.json({ message: "Community proof recorded.", communityProof: complaint.communityProof });
+
+    if (complaint.incidentCluster?.clusterId) {
+      await IncidentCluster.findByIdAndUpdate(complaint.incidentCluster.clusterId, {
+        communityStatus: result.summary.latestStatus,
+        communityVerificationCount: result.summary.trustedTotal,
+        communityWide: result.summary.communityWide,
+        lastCommunityVerifiedAt: result.summary.lastVerifiedAt
+      }).catch((error) => console.error("Community cluster update failed:", error.message));
+    }
+    await CommunityVerificationEvent.create({
+      eventId: crypto.randomUUID(),
+      complaintId: complaint._id,
+      actorHash: result.actorHash,
+      areaKeyHash: result.areaKeyHash || result.signals.find((entry) => entry.actorHash === result.actorHash)?.areaKeyHash,
+      signal,
+      priorSignal: result.priorSignal,
+      duplicateComplaintId,
+      outcome: result.outcome,
+      requestId: String(req.headers?.["x-request-id"] || "").slice(0, 120),
+      summary: result.summary
+    }).catch((error) => console.error("Community verification audit write failed:", error.message));
+
+    res.json({
+      message: result.outcome === "idempotent" ? "This community status was already recorded." : "Community verification recorded.",
+      communityVerification: publicCommunityVerification(complaint.communityProof, req.auth, complaint._id),
+      communityProof: publicCommunityVerification(complaint.communityProof, req.auth, complaint._id)
+    });
   } catch (error) {
     next(error);
   }

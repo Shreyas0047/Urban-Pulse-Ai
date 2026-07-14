@@ -91,9 +91,9 @@ function buildTrustedEmailReport(report, complaint) {
 function authorityEmailDestination(complaint) {
   const routedEmail = normalizeText(complaint.routing?.contactEmail, 180).toLowerCase();
   if (complaint.routing?.handoff?.mode === "verified_email" && EMAIL_PATTERN.test(routedEmail)) return routedEmail;
-  if (String(complaint.cityId || "bengaluru") === "bengaluru" && EMAIL_PATTERN.test(env.bbmpEmailTo)) return env.bbmpEmailTo;
-  const error = createHttpError("Email delivery is not verified for this city. Use the official complaint portal shown in the routing details.", 409);
-  error.code = "CITY_AUTHORITY_EMAIL_UNAVAILABLE";
+  if (EMAIL_PATTERN.test(env.bbmpEmailTo)) return env.bbmpEmailTo;
+  const error = createHttpError("BBMP email delivery is not configured. Use the official complaint portal shown in the routing details.", 409);
+  error.code = "BBMP_EMAIL_UNAVAILABLE";
   throw error;
 }
 

@@ -1,6 +1,6 @@
 const aiCategories = require("../../shared/aiCategories.json");
 const { buildFollowUpSchedule } = require("./followUpService");
-const { ROUTING_REGISTRY_VERSION, routingUnitsForCity } = require("./routingRegistryService");
+const { DEFAULT_DEPARTMENT_UNITS, ROUTING_REGISTRY_VERSION } = require("./routingService");
 
 const REVIEW_OUTCOMES = new Set(["confirmed", "corrected", "insufficient_evidence"]);
 const PRIORITIES = new Set(["Low", "Medium", "High", "Critical"]);
@@ -19,8 +19,8 @@ function normalizeText(value, maxLength = Infinity) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
-function getReviewOptions(cityId = "bengaluru") {
-  const routingUnits = routingUnitsForCity(cityId);
+function getReviewOptions() {
+  const routingUnits = DEFAULT_DEPARTMENT_UNITS;
   const unitByCategory = new Map();
   routingUnits.forEach((unit) => unit.handlesCategoryIds.forEach((categoryId) => unitByCategory.set(categoryId, unit)));
   return {
@@ -101,10 +101,10 @@ function normalizeReviewPayload(payload, complaint) {
   if (!PRIORITIES.has(priority)) {
     throw createReviewError("Choose a valid severity.");
   }
-  const cityId = String(complaint.cityId || "bengaluru").trim().toLowerCase();
-  const allowedUnits = routingUnitsForCity(cityId).filter((unit) => unit.handlesCategoryIds.includes(categoryId));
+  const cityId = "bengaluru";
+  const allowedUnits = DEFAULT_DEPARTMENT_UNITS.filter((unit) => unit.handlesCategoryIds.includes(categoryId));
   const selectedUnit = allowedUnits.find((unit) => unit.unitId === unitId || unit.department === department);
-  if (!selectedUnit) throw createReviewError("Choose the registered department that owns this category in the complaint city.");
+  if (!selectedUnit) throw createReviewError("Choose the registered department that owns this Bengaluru category.");
 
   const proposed = {
     categoryId,
@@ -117,6 +117,7 @@ function normalizeReviewPayload(payload, complaint) {
     portalUrl: selectedUnit.portalUrl,
     handoffMode: selectedUnit.handoffMode,
     handoffVerifiedAt: selectedUnit.handoffVerifiedAt,
+    escalationDestination: selectedUnit.escalationDestination,
     routingRegistryVersion: selectedUnit.routingRegistryVersion,
     cityId,
     category
@@ -184,6 +185,8 @@ function applyHumanReview(complaint, normalizedReview, auth, reviewedAt = new Da
         portalUrl: normalizedReview.portalUrl,
         verifiedAt: normalizedReview.handoffVerifiedAt
       },
+      escalationDestination: normalizedReview.escalationDestination || complaint.routing?.escalationDestination || "BBMP zonal administration",
+      deliveryStatus: "pending_handoff",
       escalationLevel: escalationLevel(normalizedReview.priority),
       workloadScore: 0,
       activeCaseLoad: 0,

@@ -13,25 +13,6 @@ const complaintSchema = new mongoose.Schema(
     location: { type: String, required: true },
     cityId: { type: String, required: true, default: "bengaluru", lowercase: true, trim: true, index: true },
     cityName: { type: String, required: true, default: "Bengaluru", trim: true },
-    citySource: {
-      type: String,
-      required: true,
-      enum: ["system_default", "user_selected", "legacy_migration", "admin_corrected"],
-      default: "system_default"
-    },
-    cityRegistryVersion: { type: String, required: true, default: "1.0.0", trim: true },
-    cityAssignedAt: { type: Date, required: true, default: Date.now },
-    rollout: {
-      mode: { type: String, enum: ["pilot", "open"], default: "open" },
-      pilotPercentage: { type: Number, default: null },
-      cohortBucket: { type: Number, default: null },
-      rolloutStateId: { type: mongoose.Schema.Types.ObjectId, ref: "CityRolloutState", default: null },
-      dailyReservation: {
-        utcDate: { type: String, default: "" },
-        used: { type: Number, default: null },
-        limit: { type: Number, default: 0 }
-      }
-    },
     assignedAuthority: { type: String, default: "Gram Panchayat" },
     routing: {
       cityId: String,
@@ -42,7 +23,13 @@ const complaintSchema = new mongoose.Schema(
       unit: String,
       unitId: String,
       ward: String,
+      wardCode: String,
+      wardZone: String,
+      wardMatchQuality: String,
+      wardRequiresConfirmation: Boolean,
       escalationLevel: String,
+      escalationDestination: String,
+      deliveryStatus: String,
       workloadScore: Number,
       activeCaseLoad: Number,
       maxActiveCases: Number,
@@ -61,7 +48,6 @@ const complaintSchema = new mongoose.Schema(
           department: String,
           unit: String,
           authority: String,
-          cityId: String,
           score: Number,
           activeCaseLoad: Number,
           workloadScore: Number
@@ -227,14 +213,34 @@ const complaintSchema = new mongoose.Schema(
         corroborates: { type: Number, default: 0 },
         cleared: { type: Number, default: 0 },
         worsening: { type: Number, default: 0 },
-        lastSignalAt: { type: Date, default: null }
+        stillPresent: { type: Number, default: 0 },
+        resolved: { type: Number, default: 0 },
+        duplicate: { type: Number, default: 0 },
+        trustedTotal: { type: Number, default: 0 },
+        suspiciousCount: { type: Number, default: 0 },
+        latestStatus: { type: String, default: "unverified" },
+        conflictScore: { type: Number, default: 0 },
+        confidenceAdjustment: { type: Number, default: 0 },
+        effectiveConfidence: { type: Number, default: 0 },
+        urgencyAdjustment: { type: Number, default: 0 },
+        effectivePriority: { type: String, default: "" },
+        communityWide: { type: Boolean, default: false },
+        lastSignalAt: { type: Date, default: null },
+        lastVerifiedAt: { type: Date, default: null }
       },
       signals: [
         {
+          actorHash: { type: String, default: "", select: false },
           userId: { type: String, default: "" },
-          signal: { type: String, enum: ["corroborates", "cleared", "worsening"] },
+          signal: { type: String, enum: ["corroborates", "cleared", "still_present", "resolved", "worsening", "duplicate"] },
           note: { type: String, default: "" },
-          createdAt: { type: Date, default: Date.now }
+          duplicateComplaintId: { type: mongoose.Schema.Types.ObjectId, ref: "Complaint", default: null },
+          areaKeyHash: { type: String, default: "", select: false },
+          eligibility: { type: String, default: "saved_area" },
+          suspicious: { type: Boolean, default: false },
+          revisionCount: { type: Number, default: 0 },
+          createdAt: { type: Date, default: Date.now },
+          updatedAt: { type: Date, default: Date.now }
         }
       ]
     },

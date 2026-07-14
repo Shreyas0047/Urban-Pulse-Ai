@@ -10,8 +10,7 @@ const { canonicalPriority, routeComplaint } = require("./routingService");
 const { fetchWeatherSnapshot } = require("./weatherService");
 const { recordAiBaseline } = require("./decisionAuditService");
 const { extractAreaIntelligence } = require("../utils/localAlerts");
-const { resolveReportingCity } = require("./cityRegistryService");
-const { assertCityIntakeAllowed } = require("./cityRolloutService");
+const BENGALURU = require("../config/bengaluru");
 
 const LOW_CONFIDENCE_THRESHOLD = 0.52;
 const GEOCODE_TIMEOUT_MS = 3500;
@@ -309,7 +308,7 @@ function logAiDecision({ auth, city, location, analysis, confidenceScore, review
 }
 
 async function createComplaintFromPayload(auth, payload) {
-  const city = await resolveReportingCity({ cityId: payload.cityId, registryVersion: payload.cityRegistryVersion });
+  const city = { ...BENGALURU, slug: BENGALURU.id };
   const location = normalizeLimitedText(payload.location, "Location", MAX_LOCATION_LENGTH);
   const textComplaint = normalizeLimitedText(payload.textComplaint, "Complaint description", MAX_COMPLAINT_TEXT_LENGTH);
   const imageHint = normalizeLimitedText(payload.imageHint, "Image summary", MAX_IMAGE_HINT_LENGTH);
@@ -324,13 +323,11 @@ async function createComplaintFromPayload(auth, payload) {
     throw createHttpError("Add a complaint description, voice transcript, or upload an image before submitting.", 400);
   }
 
-  const rollout = await assertCityIntakeAllowed(city, auth);
-
   const locationContext = `${location}, ${city.name}, ${city.state}, India`;
   const geocoded = await geocodeLocation(locationContext, city.center);
   const mapLocation = { lat: geocoded.lat, lng: geocoded.lng };
   if (geocoded.source === "nominatim" && !isWithinCityEnvelope(city, mapLocation)) {
-    const error = createHttpError(`The location appears to be outside ${city.name}. Check the selected city or make the location more specific.`, 400);
+    const error = createHttpError(`The location appears to be outside ${city.name}. Make the Bengaluru location more specific.`, 400);
     error.code = "LOCATION_CITY_MISMATCH";
     throw error;
   }
@@ -460,10 +457,6 @@ async function createComplaintFromPayload(auth, payload) {
     location,
     cityId: city.slug,
     cityName: city.name,
-    citySource: "user_selected",
-    cityRegistryVersion: city.registryVersion,
-    cityAssignedAt: new Date(),
-    rollout,
     assignedAuthority: routing.authority,
     routing,
     mapLocation,
@@ -635,7 +628,6 @@ async function createComplaintFromPayload(auth, payload) {
         triggered: false
       };
   analysis.incidentCommand = incidentSummary;
-  analysis.rollout = rollout;
   analysis.explainability = {
     explanation,
     confidenceLabel: getConfidenceLabel(confidenceScore),

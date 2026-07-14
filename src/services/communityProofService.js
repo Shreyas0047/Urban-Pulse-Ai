@@ -1,4 +1,5 @@
 const { areaMatchesLocation, meetsSeverityThreshold } = require("../utils/localAlerts");
+const { actorHash, normalizeSignal, summarizeCommunityVerification } = require("./communityVerificationService");
 
 function complaintLocationParts(complaint) {
   return [
@@ -24,12 +25,11 @@ function buildCommunityCases(complaints, preferences, currentUserId, currentUser
 
   const userId = String(currentUserId || "");
   const username = String(currentUsername || "");
+  const currentActorHash = userId ? actorHash({ userId }, "pending") : "";
   const threshold = preferences.severityThreshold || "High";
-  const cityId = String(preferences.cityId || "bengaluru").trim().toLowerCase();
 
   return (complaints || [])
     .filter((complaint) => {
-      if (String(complaint.cityId || "bengaluru").trim().toLowerCase() !== cityId) return false;
       const isOwner =
         (userId && String(complaint.reporterUserId || "") === userId) ||
         (username && String(complaint.reporterUsername || "") === username);
@@ -45,25 +45,23 @@ function buildCommunityCases(complaints, preferences, currentUserId, currentUser
     .slice(0, 12)
     .map((complaint) => {
       const signals = complaint.communityProof?.signals || [];
-      const ownSignal = signals.find((entry) => userId && String(entry.userId || "") === userId);
+      const complaintActorHash = userId ? actorHash({ userId }, complaint._id) : currentActorHash;
+      const ownSignal = signals.find((entry) =>
+        (complaintActorHash && entry.actorHash === complaintActorHash) ||
+        (userId && String(entry.userId || "") === userId)
+      );
+      const summary = summarizeCommunityVerification(signals, complaint);
       return {
         id: String(complaint._id || ""),
-        cityId,
-        cityName: String(complaint.cityName || preferences.cityName || "Bengaluru"),
+        cityName: "Bengaluru",
         type: String(complaint.type || "Civic issue"),
         priority: String(complaint.priority || "Medium"),
         status: String(complaint.status || "Queued"),
         area: publicAreaLabel(complaint),
         createdAt: complaint.createdAt || null,
         communityProof: {
-          summary: complaint.communityProof?.summary || {
-            total: 0,
-            corroborates: 0,
-            cleared: 0,
-            worsening: 0,
-            lastSignalAt: null
-          },
-          userSignal: ownSignal?.signal || ""
+          summary,
+          userSignal: normalizeSignal(ownSignal?.signal)
         }
       };
     });

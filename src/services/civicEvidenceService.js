@@ -14,11 +14,6 @@ const OFFICIAL_DOMAIN_HINTS = [
   "bengaluru",
   "bangalore",
   "nammabengaluru",
-  "mcgm.gov",
-  "portal.mcgm",
-  "mcdonline.nic.in",
-  "chennaicorporation.gov.in",
-  "ghmc.gov.in",
   ".gov.in",
   ".nic.in"
 ];

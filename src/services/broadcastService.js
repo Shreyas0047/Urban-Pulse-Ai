@@ -78,10 +78,8 @@ function buildLocationParts({ complaint, routing, areaIntelligence }) {
   ].filter(Boolean);
 }
 
-function localAlertMatch(user, locationParts, priority, cityId = "bengaluru") {
+function localAlertMatch(user, locationParts, priority) {
   const preferences = user.localAlertPreferences || {};
-  const preferenceCityId = String(preferences.cityId || "bengaluru").trim().toLowerCase();
-  if (preferenceCityId !== String(cityId || "bengaluru").trim().toLowerCase()) return null;
   if (!preferences.enabled || !meetsSeverityThreshold(priority, preferences.severityThreshold || "High")) {
     return null;
   }
@@ -101,12 +99,8 @@ async function resolveRecipients({ complaint, routing, recentAreaComplaints, tri
   const { usernames, userIds } = nearbyReporterKeys(recentAreaComplaints);
   const priority = canonicalPriority(complaint.priority);
   const locationParts = buildLocationParts({ complaint, routing, areaIntelligence });
-  const cityId = String(complaint.cityId || "bengaluru").trim().toLowerCase();
-  const adminCityScope = cityId === "bengaluru"
-    ? { $or: [{ operationalCityIds: cityId }, { operationalCityIds: { $exists: false } }, { operationalCityIds: { $size: 0 } }] }
-    : { operationalCityIds: cityId };
   const filters = [
-    { role: "Admin", disabledAt: null, ...adminCityScope }
+    { role: "Admin", disabledAt: null }
   ];
 
   if (usernames.size) {
@@ -131,7 +125,7 @@ async function resolveRecipients({ complaint, routing, recentAreaComplaints, tri
   return users
     .filter((user) => user.email && String(user._id) !== String(triggeredByUserId || ""))
     .map((user) => {
-      const matchedArea = localAlertMatch(user, locationParts, priority, cityId);
+      const matchedArea = localAlertMatch(user, locationParts, priority);
       const isPriorReporter =
         usernames.has(String(user.username || "").trim()) ||
         userIds.has(String(user._id || "").trim());

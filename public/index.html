@@ -445,22 +445,6 @@
                   <button type="button" id="clearDraftBtn" class="chip-button">Clear Draft</button>
                 </div>
                 <form id="complaintForm" class="report-form">
-                  <label class="city-field">
-                    <span class="field-label">City</span>
-                    <select id="reportCity" name="cityId" required disabled aria-describedby="citySelectionStatus">
-                      <option value="">Loading city availability...</option>
-                    </select>
-                  </label>
-                  <div id="citySelectionCard" class="city-selection-card" data-state="loading" aria-live="polite">
-                    <span class="city-state-dot" aria-hidden="true"></span>
-                    <div>
-                      <strong id="citySelectionTitle">Checking city availability</strong>
-                      <p id="citySelectionStatus">The reporting registry is loading.</p>
-                    </div>
-                    <a id="cityOfficialChannel" href="#" target="_blank" rel="noopener noreferrer" hidden>Official channel</a>
-                    <button type="button" id="refreshCitiesBtn" class="chip-button" hidden>Retry</button>
-                  </div>
-
                   <label class="location-field">
                     <span class="field-label">Location</span>
                     <div class="location-input-row">
@@ -571,10 +555,6 @@
                 <p class="eyebrow">Admin</p>
                 <h2>Manage complaint status, alerts, and user access.</h2>
               </div>
-              <label id="operationsCityField" class="operations-city-field">
-                <span>Operations city</span>
-                <select id="dashboardCityFilter" aria-label="Operations city"></select>
-              </label>
             </div>
 
             <div class="ops-grid">
@@ -586,9 +566,6 @@
                 </div>
               </div>
               <div id="adminActionCenter" class="admin-action-center"></div>
-              <section id="cityActivationPanel" class="city-activation-panel" aria-live="polite"></section>
-              <section id="cityRolloutPanel" class="city-rollout-panel" aria-live="polite"></section>
-              <section id="cityOperationalHealthPanel" class="city-operational-health-panel" aria-live="polite"></section>
               <section id="authorityGovernancePanel" class="authority-governance-panel" aria-live="polite"></section>
               <div id="adminInsights" class="insight-grid"></div>
               <div class="section-head compact ops-subhead">
@@ -755,7 +732,6 @@
                   <span>Send me local alert emails</span>
                 </label>
                 <div class="list-toolbar">
-                  <select id="localAlertCity" aria-label="Local alert city"></select>
                   <input type="text" id="localAlertAreasInput" placeholder="Whitefield, Indiranagar, KR Puram" maxlength="480" />
                   <select id="localAlertSeverityThreshold">
                     <option value="High">High and Critical</option>

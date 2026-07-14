@@ -1,21 +1,9 @@
 const { buildAuthorityGovernance } = require("../services/authoritySlaService");
-const { registeredCity } = require("../services/cityActivationService");
-
-function requireAssignedCity(req) {
-  const city = registeredCity(req.params.slug);
-  const allowedCityIds = req.auth.operationalCityIds?.length ? req.auth.operationalCityIds : ["bengaluru"];
-  if (!allowedCityIds.includes(city.slug)) {
-    const error = new Error("This Admin account is not assigned to the selected operations city.");
-    error.statusCode = 403;
-    throw error;
-  }
-  return city;
-}
+const BENGALURU = require("../config/bengaluru");
 
 async function getAuthorityGovernance(req, res, next) {
   try {
-    const city = requireAssignedCity(req);
-    const governance = await buildAuthorityGovernance(city.slug);
+    const governance = await buildAuthorityGovernance();
     res.json({ authorityGovernance: governance });
   } catch (error) {
     next(error);
@@ -24,10 +12,9 @@ async function getAuthorityGovernance(req, res, next) {
 
 async function evaluateAuthorityGovernance(req, res, next) {
   try {
-    const city = requireAssignedCity(req);
-    const governance = await buildAuthorityGovernance(city.slug);
+    const governance = await buildAuthorityGovernance();
     res.json({
-      message: `${city.name} authority SLA evaluation completed.`,
+      message: `${BENGALURU.name} authority SLA evaluation completed.`,
       authorityGovernance: governance
     });
   } catch (error) {
