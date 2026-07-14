@@ -14,11 +14,16 @@ function pointInPolygon(point, polygon) {
   const y = Number(point.lat);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
   let inside = false;
+  const coordinate = (entry) => Array.isArray(entry)
+    ? { lng: Number(entry[0]), lat: Number(entry[1]) }
+    : { lng: Number(entry?.lng), lat: Number(entry?.lat) };
   for (let current = 0, previous = polygon.length - 1; current < polygon.length; previous = current++) {
-    const xi = Number(polygon[current]?.lng);
-    const yi = Number(polygon[current]?.lat);
-    const xj = Number(polygon[previous]?.lng);
-    const yj = Number(polygon[previous]?.lat);
+    const currentCoordinate = coordinate(polygon[current]);
+    const previousCoordinate = coordinate(polygon[previous]);
+    const xi = currentCoordinate.lng;
+    const yi = currentCoordinate.lat;
+    const xj = previousCoordinate.lng;
+    const yj = previousCoordinate.lat;
     if (![xi, yi, xj, yj].every(Number.isFinite)) continue;
     const crosses = yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi || Number.EPSILON) + xi;
     if (crosses) inside = !inside;

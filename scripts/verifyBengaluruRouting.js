@@ -1,7 +1,7 @@
 const assert = require("assert");
 const categories = require("../shared/aiCategories.json");
 const profile = require("../shared/bengaluruRouting.json");
-const { resolveBengaluruWard, validateWardDirectory } = require("../src/services/bengaluruWardService");
+const { pointInPolygon, resolveBengaluruWard, validateWardDirectory } = require("../src/services/bengaluruWardService");
 const { DEFAULT_DEPARTMENT_UNITS, routeComplaint } = require("../src/services/routingService");
 
 async function main() {
@@ -21,6 +21,10 @@ async function main() {
   const fallback = resolveBengaluruWard({ location: "Bengaluru" });
   assert.equal(fallback.wardCode, "BBMP-CENTRAL-INTAKE");
   assert.equal(fallback.requiresConfirmation, true);
+  assert(pointInPolygon(
+    { lat: 12.97, lng: 77.64 },
+    [[77.63, 12.96], [77.65, 12.96], [77.65, 12.98], [77.63, 12.98]]
+  ));
 
   for (const category of categories) {
     const route = await routeComplaint({
@@ -35,6 +39,14 @@ async function main() {
     assert(route.escalationDestination);
     assert.equal(route.deliveryStatus, "pending_handoff");
   }
+
+  const generalRoute = await routeComplaint({
+    analysis: { aiMeta: { categoryId: "general" }, priority: { level: "Low" }, nlp: { issueType: "Uncertain civic issue" } },
+    location: "Bengaluru",
+    activeComplaints: [],
+    unitModel: { find: () => ({ lean: async () => [] }) }
+  });
+  assert.equal(generalRoute.department, "General Ward Administration");
 
   assert(DEFAULT_DEPARTMENT_UNITS.every((unit) => unit.escalationDestination && unit.handoffSourceUrl));
   console.log(JSON.stringify({ passed: true, departments: profile.departments.length, categories: categories.length, wardStrategies: ["explicit", "area_alias", "fallback"] }, null, 2));

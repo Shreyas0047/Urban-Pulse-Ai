@@ -124,14 +124,16 @@ function applyCommunityVerification({ signals = [], auth, complaint, signal, not
   if (existing && normalizeSignal(existing.signal) === normalizedSignal && String(existing.duplicateComplaintId || "") === String(duplicateComplaintId || "")) {
     return { signals, summary: summarizeCommunityVerification(signals, complaint), outcome: "idempotent", priorSignal: normalizedSignal, actorHash: hash, areaKeyHash: existing.areaKeyHash };
   }
+  const existingUpdatedAt = existing ? new Date(existing.updatedAt || existing.createdAt || 0) : null;
+  const revisionWindowActive = Boolean(existingUpdatedAt && existingUpdatedAt >= new Date(now.getTime() - REVISION_WINDOW_MS));
   if (existing) {
-    const updatedAt = new Date(existing.updatedAt || existing.createdAt || 0);
+    const updatedAt = existingUpdatedAt;
     if (now - updatedAt < COOLDOWN_MS) {
       const error = new Error("Please wait five minutes before changing this verification.");
       error.statusCode = 429;
       throw error;
     }
-    if (updatedAt >= new Date(now.getTime() - REVISION_WINDOW_MS) && Number(existing.revisionCount || 0) >= MAX_REVISIONS_PER_WINDOW) {
+    if (revisionWindowActive && Number(existing.revisionCount || 0) >= MAX_REVISIONS_PER_WINDOW) {
       const error = new Error("Verification revision limit reached for this incident today.");
       error.statusCode = 429;
       throw error;
@@ -147,7 +149,7 @@ function applyCommunityVerification({ signals = [], auth, complaint, signal, not
     areaKeyHash: areaKeyHash(matchedArea?.normalized || matchedArea?.label || complaint.routing?.wardCode || complaint.location),
     eligibility: "saved_area",
     suspicious: false,
-    revisionCount: existing ? Number(existing.revisionCount || 0) + 1 : 0,
+    revisionCount: existing ? (revisionWindowActive ? Number(existing.revisionCount || 0) + 1 : 1) : 0,
     createdAt: existing?.createdAt || now,
     updatedAt: now
   };

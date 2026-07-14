@@ -40,6 +40,13 @@ function main() {
   const idempotent = add(signals, "nearby-1", "still_present", new Date(start.getTime() + 1000));
   assert.equal(idempotent.outcome, "idempotent");
   assert.throws(() => add(signals, "nearby-1", "resolved", new Date(start.getTime() + COOLDOWN_MS - 1)), /wait five minutes/);
+  const oldRevision = {
+    ...signals[0],
+    revisionCount: 4,
+    updatedAt: new Date(start.getTime() - (25 * 60 * 60 * 1000))
+  };
+  const resetRevision = add([oldRevision], "nearby-1", "resolved", start);
+  assert.equal(resetRevision.signals[0].revisionCount, 1);
   signals = add(signals, "nearby-2", "worsening", new Date(start.getTime() + 1000)).signals;
   signals = add(signals, "nearby-3", "still_present", new Date(start.getTime() + 2000)).signals;
   const communityWide = summarizeCommunityVerification(signals, complaint);

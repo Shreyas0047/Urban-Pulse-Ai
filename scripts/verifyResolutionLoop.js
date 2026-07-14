@@ -68,6 +68,15 @@ async function main() {
   assert.equal(complaint.statusHistory.at(-1).status, "In Progress");
   assert.equal(complaint.resolution.citizenEvidence.length, 1);
 
+  await assert.rejects(
+    () => invoke(submitCommunityProof, {
+      params: { id: complaint._id },
+      body: { signal: "still_present" },
+      auth: { role: "Citizen", username: "citizen@example.com", userId: "citizen-1", permissions: ["submit_complaint"] }
+    }),
+    /Reporters cannot verify their own complaint/
+  );
+
   User.findById = () => ({
     lean: async () => ({
       localAlertPreferences: {

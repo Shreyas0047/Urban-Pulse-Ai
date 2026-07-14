@@ -81,7 +81,7 @@
       "department": "General Ward Administration",
       "unitName": "BBMP Ward Administration Desk",
       "coverageKeywords": ["parking", "vehicle", "encroachment", "footpath", "public space", "ward"],
-      "handlesCategoryIds": ["vehicle_obstruction"],
+      "handlesCategoryIds": ["vehicle_obstruction", "general"],
       "escalationDestination": "BBMP ward office with Bengaluru Traffic Police coordination",
       "maxActiveCases": 16
     }
