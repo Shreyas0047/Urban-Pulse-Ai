@@ -703,6 +703,7 @@ function renderPostSubmitSummary(report) {
     ["City", report.city?.name || "Bengaluru"],
     ["Severity", report.priority || "Low"],
     ["Issue", report.issueType || "Complaint"],
+    ...(report.aiDescription && report.aiDescription !== report.issueType ? [["Visual finding", report.aiDescription]] : []),
     ["Location", report.location || "Unknown"]
   ]
     .map(
@@ -1732,25 +1733,10 @@ function describeImageFromFeatures(features) {
       candidates: []
     };
   }
-
-  const candidates = rankImageIncidentCandidates(features);
-  const top = candidates[0];
-  const runnerUp = candidates[1];
-  const isConfident = top && top.confidence >= 0.32;
-  const isCloseCall = top && runnerUp && top.confidence - runnerUp.confidence < 0.08;
-
-  if (!top || !isConfident) {
-    return {
-      description: "AI image guess: uncertain civic issue. Add a short complaint note if this looks wrong.",
-      accuracy: top ? top.confidence : 0,
-      candidates
-    };
-  }
-
   return {
-    description: `AI image guess: ${top.label}${isCloseCall ? ` (also possible: ${runnerUp.label})` : ""}.`,
-    accuracy: top.confidence,
-    candidates
+    description: "Image ready for server vision analysis.",
+    accuracy: 0,
+    candidates: []
   };
 }
 
@@ -2311,8 +2297,12 @@ function renderAnalysis(result) {
   const broadcastText = result.broadcast?.triggered ? ` Emergency broadcast ${result.broadcast.status}.` : "";
   const weatherText = result.weather?.note ? ` Weather context: ${result.weather.note}` : "";
   const threatText = result.threatAssessment?.threatLevel ? ` Threat level: ${result.threatAssessment.threatLevel}.` : "";
+  const visualFinding = result.cv?.detected;
+  const detectedIssue = visualFinding && !["No image uploaded", "Image uploaded; incident unclear"].includes(visualFinding)
+    ? visualFinding
+    : result.nlp?.issueType || "Civic issue requiring review";
   setDashboardMessage(
-    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}.${routeText} Detected issue: ${result.nlp?.issueType || result.cv.detected}.${threatText}${reviewText}${broadcastText}${weatherText}`,
+    `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}.${routeText} Detected issue: ${detectedIssue}.${threatText}${reviewText}${broadcastText}${weatherText}`,
     result.explainability?.reviewRequired ? "info" : "success"
   );
 }
@@ -2909,6 +2899,7 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
         <section class="detail-section">
           <p class="detail-section-label">AI decision</p>
           <p>${escapeHtml(complaint.ai?.explanation || complaint.ai?.cvReason || "No AI explanation recorded.")}</p>
+          ${complaint.ai?.cvDetection && complaint.ai.cvDetection !== "No image uploaded" ? `<p><strong>Visual finding:</strong> ${escapeHtml(complaint.ai.cvDetection)}</p>` : ""}
           <p class="helper-text">Recommended team: ${escapeHtml(complaint.ai?.recommendedTeam || "Help Desk")} · AI engine: ${escapeHtml(complaint.ai?.engine || "unknown")} · Fallback: ${complaint.ai?.fallbackUsed ? "yes" : "no"} · Geocoding: ${escapeHtml(complaint.ai?.geocodingSource || "unknown")}</p>
         </section>
 
@@ -4928,9 +4919,7 @@ function setupImageUpload() {
       currentImageFeatures = await extractImageFeatures(file);
       currentImageInsight = describeImageFromFeatures(currentImageFeatures);
       aiImageDescription.value = currentImageInsight.description;
-      aiAccuracyStatus.textContent = currentImageInsight.accuracy
-        ? `Image-only confidence: ${Math.round(currentImageInsight.accuracy * 100)}%. Submit to create the complaint with this visual evidence.`
-        : "Image uploaded, but the incident is unclear. Add a short note if possible.";
+      aiAccuracyStatus.textContent = "Image prepared successfully. Submit the report to run the server vision model.";
       scheduleDraftSave();
     } catch (error) {
       currentImageFeatures = null;
@@ -4950,12 +4939,7 @@ showAiAccuracyBtn.addEventListener("click", () => {
     return;
   }
 
-  const candidates = currentImageInsight.candidates || [];
-  const candidateText = candidates
-    .slice(0, 3)
-    .map((candidate) => `${candidate.label} (${Math.round(candidate.confidence * 100)}%)`)
-    .join(" | ");
-  aiAccuracyStatus.textContent = candidateText || "No reliable image-only candidates found.";
+  aiAccuracyStatus.textContent = "The browser only validates and prepares the image. Incident classification runs on the server when you submit.";
 });
 
 showLoginBtn.addEventListener("click", () => openAuthOverlay("login"));
@@ -5210,7 +5194,8 @@ form.addEventListener("submit", async (event) => {
       payload.imageBase64 = imageAiPayload.base64;
       payload.imageMimeType = imageAiPayload.mimeType;
     }
-    payload.imageHint = aiImageDescription.value.trim();
+    // Browser pixel statistics are transport metadata, never trusted semantic evidence.
+    payload.imageHint = "";
     showTypedLocationOnMap();
 
     const result = await apiRequest("/api/analyze-complaint", {

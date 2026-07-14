@@ -14,6 +14,7 @@
     "verify:bengaluru-scope": "node scripts/verifyBengaluruScope.js",
     "verify:bengaluru-routing": "node scripts/verifyBengaluruRouting.js",
     "verify:community-verification": "node scripts/verifyCommunityVerification.js",
+    "verify:image-reasoning": "node scripts/verifyImageReasoning.js",
     "verify:smtp": "node scripts/verifySmtp.js",
     "verify:resolution": "node scripts/verifyResolutionLoop.js",
     "verify:civic-intelligence": "node scripts/verifyCivicIntelligence.js",

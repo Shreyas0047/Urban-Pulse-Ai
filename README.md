@@ -538,6 +538,7 @@ The first CLIP model run may take longer because the model may need to download 
 | `npm run verify:bengaluru-scope` | Verify server-owned Bengaluru intake, BBMP routing, and absence of multi-city UI/API paths |
 | `npm run verify:bengaluru-routing` | Verify all 12 categories have one department owner and test ward resolution strategies |
 | `npm run verify:community-verification` | Verify privacy, eligibility, conflict handling, idempotency, cooldowns, and community-wide detection |
+| `npm run verify:image-reasoning` | Verify image-only electrical, tree, and abstention behavior in the Express fallback |
 | `npm run verify:accessibility` | Run deterministic static accessibility contracts |
 | `npm run verify:resilience` | Verify rate limits, correlation IDs, and security headers |
 | `npm run verify:load` | Run concurrent local HTTP and payload-boundary checks |

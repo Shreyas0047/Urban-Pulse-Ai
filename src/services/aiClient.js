@@ -47,9 +47,9 @@ const ISSUE_PROFILES = [
     ],
     imageSignal(features) {
       return clamp01(
-        features.redHeatRatio * 1.2 +
-          features.smokeLikeRatio * 1.05 +
-          features.hotspotRatio * 0.9 +
+        features.redHeatRatio * 0.58 +
+          features.smokeLikeRatio * 0.92 +
+          features.hotspotRatio * 0.28 +
           features.darkRatio * 0.12 +
           features.neutralRatio * 0.08
       );
@@ -96,11 +96,11 @@ const ISSUE_PROFILES = [
     ],
     imageSignal(features) {
       return clamp01(
-        features.edgeDensity * 0.92 +
-          features.contrast * 0.72 +
-          features.darkRatio * 0.32 +
-          (1 - features.averageBrightness) * 0.22 +
-          features.neutralRatio * 0.12
+        features.edgeDensity * 0.55 +
+          features.contrast * 0.4 +
+          features.darkRatio * 0.1 +
+          (1 - features.averageBrightness) * 0.08 +
+          features.neutralRatio * 0.06
       );
     },
     basePriority: 0.58
@@ -238,11 +238,10 @@ const ISSUE_PROFILES = [
     ],
     imageSignal(features) {
       return clamp01(
-        features.neutralRatio * 0.34 +
-          features.darkRatio * 0.3 +
-          features.contrast * 0.18 +
-          (1 - features.blueRatio) * 0.18 +
-          (1 - features.averageBrightness) * 0.12
+        features.neutralRatio * 0.18 +
+          features.darkRatio * 0.14 +
+          features.blueRatio * 0.12 +
+          features.contrast * 0.08
       );
     },
     basePriority: 0.61
@@ -390,7 +389,7 @@ const ISSUE_PROFILES = [
     category: "Infrastructure",
     issueType: "Utility Fault",
     team: "Electrical Team",
-    cvLabel: "Utility or public asset fault",
+    cvLabel: "Electrical short circuit, exposed wiring, or utility fault",
     textTerms: [
       ["streetlight", 1.0],
       ["street light", 1.0],
@@ -434,7 +433,12 @@ const ISSUE_PROFILES = [
       ["electric", 0.44]
     ],
     imageSignal(features) {
-      return clamp01(features.edgeDensity * 0.22 + features.hotspotRatio * 0.24 + features.averageBrightness * 0.12 + (1 - features.greenRatio) * 0.08);
+      return clamp01(
+        features.hotspotRatio * 0.74 +
+          features.edgeDensity * 0.24 +
+          features.redHeatRatio * 0.22 -
+          features.smokeLikeRatio * 0.2
+      );
     },
     basePriority: 0.48
   },
@@ -659,6 +663,20 @@ function scoreVisualProfiles(imageFeatures, imageLabel) {
   );
 
   return scoredProfiles.map((profile) => {
+    const electricalArcingStrength = clamp01(
+      imageFeatures.hotspotRatio * 0.74 +
+        imageFeatures.edgeDensity * 0.24 +
+        imageFeatures.redHeatRatio * 0.22 -
+        imageFeatures.smokeLikeRatio * 0.2
+    );
+
+    if (["road_damage", "wall_damage"].includes(profile.id) && electricalArcingStrength > 0.48) {
+      return {
+        ...profile,
+        visualScore: clamp01(profile.visualScore - 0.55)
+      };
+    }
+
     if (profile.id === "tree_obstruction" && vegetationStrength > 0.2) {
       return {
         ...profile,
@@ -680,10 +698,17 @@ function scoreVisualProfiles(imageFeatures, imageLabel) {
       };
     }
 
-    if (profile.id === "sewage_overflow" && dirtyWaterStrength > 0.22) {
+    if (profile.id === "sewage_overflow" && dirtyWaterStrength > 0.22 && hasAnyTerm(imageLabel, ["sewage", "manhole", "sludge", "drain overflow"])) {
       return {
         ...profile,
-        visualScore: clamp01(profile.visualScore + 0.14 + dirtyWaterStrength * 0.16)
+        visualScore: clamp01(profile.visualScore + 0.12 + dirtyWaterStrength * 0.12)
+      };
+    }
+
+    if (profile.id === "sewage_overflow" && !hasAnyTerm(imageLabel, ["sewage", "manhole", "sludge", "drain overflow"])) {
+      return {
+        ...profile,
+        visualScore: Math.min(0.42, profile.visualScore)
       };
     }
 
@@ -701,14 +726,14 @@ function scoreVisualProfiles(imageFeatures, imageLabel) {
       };
     }
 
-    if (profile.id === "wall_damage" && structuralStrength > 0.24) {
+    if (profile.id === "wall_damage" && structuralStrength > 0.24 && hasAnyTerm(imageLabel, ["wall", "crack", "ceiling", "plaster", "structural"])) {
       return {
         ...profile,
         visualScore: clamp01(profile.visualScore + 0.1 + structuralStrength * 0.14)
       };
     }
 
-    if (profile.id === "water_leakage" && waterLeakStrength > 0.18) {
+    if (profile.id === "water_leakage" && waterLeakStrength > 0.3 && (imageFeatures.blueRatio > 0.24 || hasAnyTerm(imageLabel, ["leak", "pipe", "burst", "seepage"]))) {
       return {
         ...profile,
         visualScore: clamp01(profile.visualScore + 0.12 + waterLeakStrength * 0.14)
@@ -729,7 +754,7 @@ function scoreVisualProfiles(imageFeatures, imageLabel) {
       };
     }
 
-    if (profile.id === "vehicle_obstruction" && imageFeatures.neutralRatio > 0.16 && imageFeatures.greenRatio < 0.2) {
+    if (profile.id === "vehicle_obstruction" && imageFeatures.neutralRatio > 0.16 && imageFeatures.greenRatio < 0.2 && hasAnyTerm(imageLabel, ["vehicle", "car", "truck", "parking"])) {
       return {
         ...profile,
         visualScore: clamp01(profile.visualScore + 0.06)
@@ -773,7 +798,11 @@ function buildNlpResult(payload) {
 function buildCvResult(payload) {
   const imageLabel = normalizeText([payload.textComplaint, payload.voiceTranscript].filter(Boolean).join(" "));
   const scoredProfiles = scoreVisualProfiles(payload.imageFeatures, imageLabel);
-  const top = pickTopProfile(scoredProfiles, "visualScore", 0.16);
+  const sortedProfiles = [...scoredProfiles].sort((left, right) => right.visualScore - left.visualScore);
+  const visualMargin = (sortedProfiles[0]?.visualScore || 0) - (sortedProfiles[1]?.visualScore || 0);
+  const visualThreshold = imageLabel ? 0.52 : 0.58;
+  const reliableVisualDecision = Boolean(sortedProfiles[0]?.visualScore >= visualThreshold && visualMargin >= 0.08);
+  const top = reliableVisualDecision ? sortedProfiles[0] : createGeneralProfile();
 
   if (!payload.imageFeatures) {
     return {
@@ -806,7 +835,7 @@ function buildCvResult(payload) {
     profile: top,
     profiles: scoredProfiles,
     result: {
-      detected: top.cvLabel,
+      detected: reliableVisualDecision ? top.cvLabel : "Image uploaded; incident unclear",
       score: Number(top.visualScore.toFixed(2)),
       reason: reasons[top.id] || "Visual signals were matched against issue patterns.",
       candidates: scoredProfiles
@@ -826,7 +855,9 @@ function buildCvResult(payload) {
       confidenceBreakdown: {
         featureTop: Number(top.visualScore.toFixed(2)),
         clipTop: 0,
-        fusedTop: Number(top.visualScore.toFixed(2))
+        fusedTop: Number(top.visualScore.toFixed(2)),
+        candidateMargin: Number(Math.max(0, visualMargin).toFixed(2)),
+        reliableVisualDecision
       }
     }
   };
@@ -892,8 +923,12 @@ function fuseIssueDecision(nlpBundle, cvBundle, payload) {
     };
   }).sort((left, right) => right.fusedScore - left.fusedScore);
 
-  const minimumFusedScore = hasImage && !hasText ? 0.14 : 0.22;
-  return scoredProfiles[0] && scoredProfiles[0].fusedScore >= minimumFusedScore ? scoredProfiles[0] : createGeneralProfile();
+  const minimumFusedScore = hasImage && !hasText ? 0.58 : 0.22;
+  const fusedMargin = (scoredProfiles[0]?.fusedScore || 0) - (scoredProfiles[1]?.fusedScore || 0);
+  const reliableImageOnly = !hasImage || hasText || fusedMargin >= 0.08;
+  return scoredProfiles[0] && scoredProfiles[0].fusedScore >= minimumFusedScore && reliableImageOnly
+    ? scoredProfiles[0]
+    : createGeneralProfile();
 }
 
 function predictPriority(payload, issueProfile, nlp, cv) {

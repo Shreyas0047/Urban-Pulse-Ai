@@ -45,14 +45,65 @@ def sanitize_feature_payload(image_features):
     return sanitized
 
 
+VISUAL_CONCEPTS = {
+    "safety_fire": [
+        ("Active fire or visible flames", "a real civic incident photo with active fire and visible flames"),
+        ("Heavy smoke or burning hazard", "a real urban incident photo with heavy smoke from something burning"),
+        ("Transformer fire or explosion", "a real photo of an electrical transformer on fire or exploding"),
+    ],
+    "utility_fault": [
+        ("Electrical short circuit or arcing", "a real close photo of an electrical short circuit with bright sparks and electric arcing"),
+        ("Exposed or fallen live wire", "a real civic hazard photo of exposed fallen or hanging electrical wires"),
+        ("Damaged transformer or electrical equipment", "a real photo of damaged transformer electrical equipment without an active fire"),
+        ("Broken street light", "a real street photo of a broken damaged street light pole"),
+    ],
+    "road_damage": [
+        ("Pothole or collapsed road surface", "a real street photo of a deep pothole or collapsed damaged road surface"),
+        ("Cracked or broken roadway", "a real close photo of severe cracks and breakage in asphalt road"),
+    ],
+    "tree_obstruction": [
+        ("Fallen tree blocking the road", "a real civic incident photo of a fallen uprooted tree blocking a road"),
+        ("Large broken branch obstructing access", "a real street photo of a large broken tree branch obstructing traffic"),
+    ],
+    "garbage": [
+        ("Overflowing garbage or waste pile", "a real civic complaint photo of an overflowing garbage bin and visible trash pile"),
+        ("Illegal waste dumping", "a real street photo of illegally dumped solid waste and litter"),
+    ],
+    "sewage_overflow": [
+        ("Open manhole hazard", "a real road hazard photo with a clearly open uncovered sewer manhole"),
+        ("Visible sewage overflow", "a real civic incident photo of sewage sludge overflowing from a sewer drain"),
+    ],
+    "water_drainage": [
+        ("Road waterlogging or flooding", "a real street photo of deep standing flood water and road waterlogging"),
+        ("Blocked storm-water drain", "a real civic complaint photo of a visibly blocked overflowing storm-water drain"),
+    ],
+    "water_leakage": [
+        ("Burst water pipe", "a real street photo of a burst water pipe spraying clean water"),
+        ("Continuous public water leak", "a real civic complaint photo of continuous water leakage from a public pipe"),
+    ],
+    "wall_damage": [
+        ("Dangerous structural wall crack", "a real building photo with a large dangerous structural crack in a wall"),
+        ("Collapsed wall or ceiling", "a real civic hazard photo of a partially collapsed wall or ceiling"),
+    ],
+    "security": [
+        ("Damaged security gate or forced entry", "a real security incident photo of a broken gate lock or forced entry damage"),
+    ],
+    "animal_intrusion": [
+        ("Stray animal obstructing a public area", "a real street photo of stray dogs cattle or animals obstructing a public area"),
+    ],
+    "vehicle_obstruction": [
+        ("Vehicle illegally blocking access", "a real street photo of a vehicle illegally blocking a gate road or emergency access"),
+    ],
+}
+
+
 def build_category_prompts(category):
-    aliases = category.get("aliases", [])[:5]
-    return [
-        f"a civic complaint photo showing {category['label']}",
-        f"an urban community issue: {category['label']}",
-        f"evidence photo for {category['group']} problem",
-        *[f"a photo of {alias}" for alias in aliases],
+    concepts = VISUAL_CONCEPTS.get(category["id"], [])
+    generic = [
+        (category["label"], f"a real civic complaint photo clearly showing {category['label']}"),
+        *[(category["label"], f"a real photo clearly showing {alias}") for alias in category.get("aliases", [])[:4]],
     ]
+    return [{"label": label, "prompt": prompt} for label, prompt in [*concepts, *generic]]
 
 
 CATEGORY_PROMPTS = {
@@ -72,7 +123,7 @@ def category_prompt_vectors(category_id):
         return None
 
     try:
-        return np.array(model.encode(prompts, normalize_embeddings=True), dtype=float)
+        return np.array(model.encode([item["prompt"] for item in prompts], normalize_embeddings=True), dtype=float)
     except Exception:
         return None
 
@@ -115,17 +166,29 @@ def feature_signal_candidates(image_features, image_hint):
         + (1 - safe_feature(features, "averageSaturation")) * 0.18
         - safe_feature(features, "greenRatio") * 0.42
     )
+    electrical_arcing_strength = clamp01(
+        safe_feature(features, "hotspotRatio") * 0.74
+        + safe_feature(features, "edgeDensity") * 0.24
+        + safe_feature(features, "redHeatRatio") * 0.22
+        - safe_feature(features, "smokeLikeRatio") * 0.2
+    )
+    visible_sewage_strength = clamp01(
+        safe_feature(features, "neutralRatio") * 0.18
+        + safe_feature(features, "darkRatio") * 0.14
+        + safe_feature(features, "blueRatio") * 0.12
+        + safe_feature(features, "contrast") * 0.08
+    )
     signals = [
-        ("fire or smoke hazard", "safety_fire", clamp01(safe_feature(features, "redHeatRatio") * 1.05 + safe_feature(features, "smokeLikeRatio") * 0.88 + safe_feature(features, "hotspotRatio") * 0.76)),
+        ("active fire or heavy smoke hazard", "safety_fire", clamp01(safe_feature(features, "redHeatRatio") * 0.55 + safe_feature(features, "smokeLikeRatio") * 0.9 + safe_feature(features, "hotspotRatio") * 0.25)),
         ("road damage", "road_damage", clamp01(safe_feature(features, "edgeDensity") * 0.72 + safe_feature(features, "contrast") * 0.54 + safe_feature(features, "darkRatio") * 0.2 - safe_feature(features, "greenRatio") * 0.1)),
         ("tree obstruction", "tree_obstruction", clamp01(vegetation_strength + safe_feature(features, "contrast") * 0.12)),
         ("garbage overflow", "garbage", clamp01(safe_feature(features, "edgeDensity") * 0.34 + safe_feature(features, "contrast") * 0.26 + safe_feature(features, "averageSaturation") * 0.2 - safe_feature(features, "greenRatio") * 0.16)),
-        ("sewage or manhole overflow", "sewage_overflow", clamp01(safe_feature(features, "neutralRatio") * 0.34 + safe_feature(features, "darkRatio") * 0.3 + (1 - safe_feature(features, "blueRatio")) * 0.12)),
+        ("possible sewage or manhole overflow", "sewage_overflow", visible_sewage_strength),
         ("waterlogging", "water_drainage", clamp01(pooled_water_strength)),
         ("water leakage", "water_leakage", clamp01(safe_feature(features, "blueRatio") * 0.36 + safe_feature(features, "neutralRatio") * 0.18 + safe_feature(features, "averageBrightness") * 0.12)),
         ("wall or structural damage", "wall_damage", clamp01(safe_feature(features, "edgeDensity") * 0.46 + safe_feature(features, "contrast") * 0.3 + safe_feature(features, "neutralRatio") * 0.2)),
         ("security concern", "security", clamp01(safe_feature(features, "darkRatio") * 0.34 + safe_feature(features, "contrast") * 0.18)),
-        ("utility fault", "utility_fault", clamp01(safe_feature(features, "hotspotRatio") * 0.38 + safe_feature(features, "edgeDensity") * 0.22 + safe_feature(features, "redHeatRatio") * 0.18)),
+        ("electrical short circuit or arcing hazard", "utility_fault", electrical_arcing_strength),
         ("animal intrusion", "animal_intrusion", clamp01(safe_feature(features, "edgeDensity") * 0.24 + safe_feature(features, "contrast") * 0.2 + safe_feature(features, "greenRatio") * 0.14)),
         ("vehicle obstruction", "vehicle_obstruction", clamp01(safe_feature(features, "neutralRatio") * 0.24 + safe_feature(features, "edgeDensity") * 0.26 + safe_feature(features, "contrast") * 0.2)),
     ]
@@ -146,6 +209,8 @@ def feature_signal_candidates(image_features, image_hint):
     candidates = []
 
     for label, category_id, score in signals:
+        if category_id in {"road_damage", "wall_damage"} and electrical_arcing_strength > 0.48:
+            score = clamp01(score - 0.3)
         if any(term in normalized_hint for term in hint_boosts.get(category_id, [])):
             score = max(score, 0.44)
         if category_id == "tree_obstruction" and vegetation_strength > 0.28:
@@ -191,10 +256,13 @@ def clip_candidates(image):
             prompt_vectors = category_prompt_vectors(category["id"])
             if prompt_vectors is None:
                 continue
-            score = max(cosine_similarity(image_vector, prompt_vector) for prompt_vector in prompt_vectors)
+            scores = [cosine_similarity(image_vector, prompt_vector) for prompt_vector in prompt_vectors]
+            best_index = max(range(len(scores)), key=scores.__getitem__)
+            score = scores[best_index]
+            concept = CATEGORY_PROMPTS[category["id"]][best_index]
             candidates.append(
                 {
-                    "label": category["label"],
+                    "label": concept["label"],
                     "category_id": category["id"],
                     "category_label": category["label"],
                     "confidence": round(clamp01((score + 1) / 2), 3),
@@ -265,18 +333,22 @@ def clip_candidates_multi_pass(image):
         for candidate in pass_candidates:
             category_id = candidate.get("category_id")
             if category_id in category_scores:
-                category_scores[category_id].append(float(candidate.get("confidence") or 0))
+                category_scores[category_id].append(
+                    (float(candidate.get("confidence") or 0), candidate.get("label") or candidate.get("category_label"))
+                )
 
     aggregate_candidates = []
     for category in COMPLAINT_CATEGORIES:
-        scores = category_scores.get(category["id"], [])
-        if not scores:
+        scored_labels = category_scores.get(category["id"], [])
+        if not scored_labels:
             continue
 
+        scores = [item[0] for item in scored_labels]
+        best_label = max(scored_labels, key=lambda item: item[0])[1]
         score = max(scores) * 0.62 + (sum(scores) / len(scores)) * 0.38
         aggregate_candidates.append(
             {
-                "label": category["label"],
+                "label": best_label or category["label"],
                 "category_id": category["id"],
                 "category_label": category["label"],
                 "confidence": round(clamp01(score), 3),
@@ -335,8 +407,16 @@ def detect_objects_from_features(
     clip_items, pass_diagnostics = clip_candidates_multi_pass(image)
     candidates = merge_candidates(clip_items, feature_items) if clip_items else feature_items
     has_text_context = bool(normalize_text(image_hint))
-    threshold = VISION_CONFIDENCE_THRESHOLD if clip_items else (0.28 if not has_text_context else 0.34)
-    detections = [item for item in candidates if item["confidence"] >= threshold]
+    top_score = float(candidates[0]["confidence"]) if candidates else 0
+    runner_score = float(candidates[1]["confidence"]) if len(candidates) > 1 else 0
+    candidate_margin = max(0.0, top_score - runner_score)
+    if clip_items:
+        threshold = max(VISION_CONFIDENCE_THRESHOLD, 0.54)
+        reliable_top = top_score >= threshold and candidate_margin >= 0.012
+    else:
+        threshold = 0.58 if not has_text_context else 0.52
+        reliable_top = top_score >= threshold and candidate_margin >= 0.08
+    detections = [item for item in candidates if item["confidence"] >= threshold] if reliable_top else []
     top_detection = detections[0] if detections else None
     fallback_used = not bool(clip_items)
     threat_assessment = build_threat_assessment(
@@ -369,6 +449,8 @@ def detect_objects_from_features(
             "clipTop": clip_items[0]["confidence"] if clip_items else 0,
             "featureTop": feature_items[0]["confidence"] if feature_items else 0,
             "fusedTop": top_detection["confidence"] if top_detection else 0,
+            "candidateMargin": round(candidate_margin, 3),
+            "reliableVisualDecision": reliable_top,
             "threatRisk": threat_assessment.get("riskScore", 0),
             "threatConfidence": threat_assessment.get("confidence", 0),
         },
