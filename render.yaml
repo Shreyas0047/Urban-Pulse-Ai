@@ -11,6 +11,18 @@ services:
         value: 3.11.11
       - key: VISION_MODEL_NAME
         value: sentence-transformers/clip-ViT-B-32
+      # Free instances have 512 MB RAM, which cannot safely load Florence-2.
+      # Upgrade this service to Standard (2 GB+) before setting this to true.
+      - key: FLORENCE_ENABLED
+        value: "false"
+      - key: FLORENCE_MODEL_NAME
+        value: microsoft/Florence-2-base-ft
+      - key: FLORENCE_MODEL_REVISION
+        value: 58c9f97c2a8448696851e2cc95eb1b6919493fe4
+      - key: FLORENCE_WARMUP
+        value: "false"
+      - key: VISION_CLIP_FALLBACK_ENABLED
+        value: "false"
       - key: VISION_CONFIDENCE_THRESHOLD
         value: "0.24"
       - key: VISION_MAX_IMAGE_BYTES
@@ -40,7 +52,7 @@ services:
       - key: AI_SERVICE_TOKEN
         sync: false
       - key: AI_SERVICE_TIMEOUT_MS
-        value: "30000"
+        value: "110000"
       - key: DEEPGRAM_API_KEY
         sync: false
       - key: DEEPGRAM_MODEL

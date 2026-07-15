@@ -1,4 +1,5 @@
 import hmac
+import logging
 import os
 
 from flask import Flask, jsonify, request
@@ -7,6 +8,8 @@ from flask_cors import CORS
 from category_catalog import COMPLAINT_CATEGORIES
 from chat_logic import classify_chat_intent
 from model_runtime import runtime_status
+from florence_runtime import florence_runtime
+from ai_config import FLORENCE_ENABLED, FLORENCE_WARMUP
 from pipeline import run_hybrid_pipeline
 from resolution_analysis import compare_resolution_evidence
 
@@ -200,6 +203,7 @@ def normalize_complaint_transcript(transcript):
     return normalized, summary
 
 app = Flask(__name__)
+logging.basicConfig(level=os.getenv("AI_LOG_LEVEL", "INFO").upper())
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("AI_MAX_REQUEST_BYTES", str(4 * 1024 * 1024)))
 CORS(app)
 
@@ -229,12 +233,13 @@ def health():
         {
             "status": "ok",
             "service": "urban-pulse-ai-service",
-            "engine": "ai-service-decision-engine-v4",
+            "engine": "ai-service-decision-engine-v5",
             "categoryCount": len(COMPLAINT_CATEGORIES),
             "models": runtime_status(),
             "capabilities": {
                 "semanticTextClassification": True,
                 "imageClassification": True,
+                "sceneUnderstanding": FLORENCE_ENABLED,
                 "confidenceCalibration": True,
                 "textImageConflictDetection": True,
                 "structuredExplainability": True,
@@ -243,6 +248,20 @@ def health():
             },
         }
     )
+
+
+@app.get("/ready")
+def readiness():
+    models = runtime_status()
+    scene = models.get("sceneUnderstanding", {})
+    if not scene.get("enabled") or scene.get("ready"):
+        status = "ready"
+    elif scene.get("state") == "loading":
+        status = "warming_up"
+    else:
+        status = "degraded"
+    # HTTP stays healthy because deterministic safety paths remain available in degraded mode.
+    return jsonify({"status": status, "sceneUnderstandingReady": bool(scene.get("ready")), "models": models})
 
 
 @app.post("/analyze")
@@ -304,6 +323,10 @@ def chat():
 
     result = classify_chat_intent(message, payload.get("history") or [])
     return jsonify(result)
+
+
+if FLORENCE_WARMUP:
+    florence_runtime.request_load(background=True)
 
 
 if __name__ == "__main__":

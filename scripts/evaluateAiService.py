@@ -287,7 +287,7 @@ def main():
         "evaluated": len(results),
         "passed": len(results) - len(failures),
         "failed": len(failures),
-        "engine": "ai-service-decision-engine-v4",
+        "engine": "ai-service-decision-engine-v5",
         "failures": failures,
         "results": results,
     }

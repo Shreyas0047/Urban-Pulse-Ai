@@ -53,10 +53,12 @@ def merge_multi_modal_categories(text_categories, vision_result):
         else:
             category = CATEGORY_BY_ID.get(category_id) or next((item for item in COMPLAINT_CATEGORIES if item["id"] == category_id), None)
             if category:
+                source = str(detection.get("source") or "")
+                image_only_confidence = detection_confidence * (0.9 if source == "florence-observation" else max(0.42, VISION_IMAGE_WEIGHT))
                 merged[category_id] = {
                     "id": category["id"],
                     "label": category["label"],
-                    "confidence": round(max(0.18, detection_confidence * max(0.42, VISION_IMAGE_WEIGHT)), 3),
+                    "confidence": round(max(0.18, image_only_confidence), 3),
                     "matched_keywords": [],
                 }
 

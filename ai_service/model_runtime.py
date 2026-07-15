@@ -3,6 +3,7 @@ from functools import lru_cache
 import numpy as np
 
 from ai_config import EMBEDDING_MODEL_NAME, VISION_MODEL_NAME
+from florence_runtime import florence_runtime
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -37,6 +38,7 @@ def runtime_status():
         "visionModel": VISION_MODEL_NAME,
         "embeddingModelCached": get_embedding_model.cache_info().currsize > 0,
         "visionModelCached": get_vision_model.cache_info().currsize > 0,
+        "sceneUnderstanding": florence_runtime.status_payload(),
     }
 
 

@@ -1,12 +1,27 @@
 import base64
+import hashlib
 import io
+import json
+import logging
+import warnings
 from functools import lru_cache
 
 import numpy as np
 
-from ai_config import VISION_CONFIDENCE_THRESHOLD, VISION_MAX_IMAGE_BYTES, VISION_MODEL_NAME
+from ai_config import (
+    FLORENCE_ENABLED,
+    FLORENCE_MODEL_NAME,
+    VISION_CLIP_FALLBACK_ENABLED,
+    VISION_CLIP_SECONDARY_ENABLED,
+    VISION_CONFIDENCE_THRESHOLD,
+    VISION_MAX_IMAGE_BYTES,
+    VISION_MAX_IMAGE_PIXELS,
+    VISION_MODEL_NAME,
+)
 from category_catalog import COMPLAINT_CATEGORIES, CATEGORY_BY_ID
+from florence_runtime import florence_runtime
 from model_runtime import cosine_similarity, get_vision_model
+from scene_observations import build_scene_observations, observation_candidates
 from text_processing import normalize_text
 from threat_intelligence import build_threat_assessment
 
@@ -14,6 +29,10 @@ try:
     from PIL import Image
 except ImportError:  # pragma: no cover
     Image = None
+
+LOGGER = logging.getLogger("urban_pulse.vision")
+if Image is not None:
+    Image.MAX_IMAGE_PIXELS = VISION_MAX_IMAGE_PIXELS
 
 
 def clamp01(value):
@@ -128,9 +147,9 @@ def category_prompt_vectors(category_id):
         return None
 
 
-def decode_image(image_base64):
+def decode_image_payload(image_base64, image_mime_type=""):
     if not image_base64 or Image is None:
-        return None
+        return None, "", "No image payload was provided."
 
     payload = str(image_base64).strip()
     if "," in payload:
@@ -139,16 +158,34 @@ def decode_image(image_base64):
     try:
         raw = base64.b64decode(payload, validate=True)
     except Exception:
-        return None
+        return None, "", "The image payload is not valid base64."
 
     if not raw or len(raw) > VISION_MAX_IMAGE_BYTES:
-        return None
+        return None, "", "The image is empty or exceeds the configured upload limit."
 
     try:
-        image = Image.open(io.BytesIO(raw))
-        return image.convert("RGB")
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            probe = Image.open(io.BytesIO(raw))
+            image_format = str(probe.format or "").upper()
+            if image_format not in {"JPEG", "PNG", "WEBP"}:
+                return None, "", "Only JPEG, PNG, and WebP images are supported."
+            expected = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}.get(str(image_mime_type or "").lower())
+            if expected and image_format != expected:
+                return None, "", "The declared image type does not match the uploaded file."
+            probe.verify()
+            image = Image.open(io.BytesIO(raw)).convert("RGB")
+            image.load()
+        return image, hashlib.sha256(raw).hexdigest(), ""
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        return None, "", "The image dimensions exceed the safe pixel limit."
     except Exception:
-        return None
+        return None, "", "The uploaded file is malformed or is not a supported image."
+
+
+def decode_image(image_base64):
+    image, _image_hash, _reason = decode_image_payload(image_base64)
+    return image
 
 
 def feature_signal_candidates(image_features, image_hint):
@@ -392,6 +429,17 @@ def merge_candidates(clip_items, feature_items):
     return candidates
 
 
+def merge_scene_candidates(scene_items, clip_items, feature_items):
+    """Keep Florence observations primary; secondary signals may only reinforce them."""
+    by_category = {item["category_id"]: dict(item) for item in scene_items}
+    for secondary in [*clip_items, *feature_items]:
+        existing = by_category.get(secondary.get("category_id"))
+        if existing:
+            existing["confidence"] = round(clamp01(existing["confidence"] + min(0.04, secondary["confidence"] * 0.05)), 3)
+            existing["supportingSource"] = secondary.get("source", "secondary")
+    return sorted(by_category.values(), key=lambda item: item["confidence"], reverse=True)
+
+
 def detect_objects_from_features(
     image_features,
     image_hint,
@@ -403,14 +451,51 @@ def detect_objects_from_features(
 ):
     sanitized_features = sanitize_feature_payload(image_features)
     feature_items = feature_signal_candidates(sanitized_features, image_hint)
-    image = decode_image(image_base64)
-    clip_items, pass_diagnostics = clip_candidates_multi_pass(image)
-    candidates = merge_candidates(clip_items, feature_items) if clip_items else feature_items
+    image, image_hash, image_error = decode_image_payload(image_base64, image_mime_type)
+    raw_scene = {"status": "not_provided", "reason": image_error}
+    observations = None
+    scene_items = []
+    if image is not None and FLORENCE_ENABLED:
+        raw_scene = florence_runtime.analyze(image, image_hash)
+        raw_scene["model"] = FLORENCE_MODEL_NAME
+        observations = build_scene_observations(raw_scene, image, sanitized_features, image_hint)
+        scene_items = observation_candidates(observations)
+        LOGGER.info(
+            json.dumps(
+                {
+                    "event": "vision_observation_decision",
+                    "sceneStatus": observations.get("status"),
+                    "issueCount": len(observations.get("detectedIssues", [])),
+                    "evidenceScore": observations.get("evidenceScore", 0),
+                    "consistency": observations.get("textImageConsistency", {}).get("status"),
+                    "reviewRecommended": observations.get("humanReviewRecommended", False),
+                    "cacheHit": observations.get("cacheHit", False),
+                },
+                sort_keys=True,
+            )
+        )
+
+    scene_completed = raw_scene.get("status") in {"available", "timeout"}
+
+    use_clip = bool(
+        image is not None
+        and (VISION_CLIP_SECONDARY_ENABLED or (VISION_CLIP_FALLBACK_ENABLED and not scene_completed))
+    )
+    clip_items, pass_diagnostics = clip_candidates_multi_pass(image) if use_clip else ([], {"passes": [], "aggregate": {}})
+    if scene_items:
+        candidates = merge_scene_candidates(scene_items, clip_items, feature_items)
+    elif scene_completed:
+        candidates = []
+    else:
+        candidates = merge_candidates(clip_items, feature_items) if clip_items else feature_items
     has_text_context = bool(normalize_text(image_hint))
     top_score = float(candidates[0]["confidence"]) if candidates else 0
     runner_score = float(candidates[1]["confidence"]) if len(candidates) > 1 else 0
     candidate_margin = max(0.0, top_score - runner_score)
-    if clip_items:
+    if scene_items:
+        threshold = 0.56
+        reliable_top = top_score >= threshold
+    elif clip_items:
         threshold = max(VISION_CONFIDENCE_THRESHOLD, 0.54)
         reliable_top = top_score >= threshold and candidate_margin >= 0.012
     else:
@@ -418,13 +503,32 @@ def detect_objects_from_features(
         reliable_top = top_score >= threshold and candidate_margin >= 0.08
     detections = [item for item in candidates if item["confidence"] >= threshold] if reliable_top else []
     top_detection = detections[0] if detections else None
-    fallback_used = not bool(clip_items)
+    fallback_used = not bool(scene_items)
+    if image is not None and fallback_used:
+        LOGGER.info(
+            json.dumps(
+                {
+                    "event": "vision_fallback_activated",
+                    "sceneStatus": raw_scene.get("status", "not_provided"),
+                    "clipEnabled": use_clip,
+                    "reason": str(raw_scene.get("reason") or "No supported visual issue observed.")[:180],
+                },
+                sort_keys=True,
+            )
+        )
+    observation_text = " ".join(
+        [
+            str(image_hint or ""),
+            str((observations or {}).get("description") or ""),
+            " ".join(item.get("issue", "") for item in (observations or {}).get("detectedIssues", [])),
+        ]
+    ).strip()
     threat_assessment = build_threat_assessment(
         image=image,
         image_base64=image_base64,
         image_mime_type=image_mime_type,
         image_features=sanitized_features,
-        image_hint=image_hint,
+        image_hint=observation_text,
         candidates=candidates,
         top_detection=top_detection,
         pass_diagnostics=pass_diagnostics,
@@ -438,19 +542,25 @@ def detect_objects_from_features(
         "detections": detections[:6],
         "top_detection": top_detection,
         "candidates": candidates[:5],
-        "model": VISION_MODEL_NAME if clip_items else "feature-signals",
-        "provider": "local-clip" if clip_items else "feature-fallback",
+        "model": FLORENCE_MODEL_NAME if scene_completed else (VISION_MODEL_NAME if clip_items else "feature-signals"),
+        "provider": "local-florence-2" if scene_completed else ("local-clip" if clip_items else "feature-fallback"),
         "fallbackUsed": fallback_used,
         "imageAccepted": image is not None,
         "imageMimeType": image_mime_type or "",
         "passDiagnostics": pass_diagnostics,
+        "observations": observations,
+        "sceneStatus": raw_scene.get("status", "not_provided"),
+        "sceneReason": raw_scene.get("reason") or image_error,
+        "imageHash": image_hash,
         "threatAssessment": threat_assessment,
         "confidenceBreakdown": {
             "clipTop": clip_items[0]["confidence"] if clip_items else 0,
+            "sceneTop": scene_items[0]["confidence"] if scene_items else 0,
             "featureTop": feature_items[0]["confidence"] if feature_items else 0,
             "fusedTop": top_detection["confidence"] if top_detection else 0,
             "candidateMargin": round(candidate_margin, 3),
             "reliableVisualDecision": reliable_top,
+            "textImageConsistency": (observations or {}).get("textImageConsistency", {}).get("status", "not_available"),
             "threatRisk": threat_assessment.get("riskScore", 0),
             "threatConfidence": threat_assessment.get("confidence", 0),
         },

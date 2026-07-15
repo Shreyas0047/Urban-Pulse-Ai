@@ -6,6 +6,7 @@ const checks = [
   ["bengaluru-routing", "node", ["scripts/verifyBengaluruRouting.js"]],
   ["community-verification", "node", ["scripts/verifyCommunityVerification.js"]],
   ["image-reasoning", "node", ["scripts/verifyImageReasoning.js"]],
+  ["scene-understanding", "python3", ["-m", "unittest", "ai_service/test_scene_understanding.py"]],
   ["ai-service-auth", "python3", ["scripts/verifyAiServiceAuth.py"]],
   ["human-review", "node", ["scripts/verifyHumanReview.js"]],
   ["decision-audit", "node", ["scripts/verifyDecisionAudit.js"]],

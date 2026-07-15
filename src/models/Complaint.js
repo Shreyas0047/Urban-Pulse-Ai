@@ -311,6 +311,7 @@ const complaintSchema = new mongoose.Schema(
         }
       ],
       confidenceBreakdown: mongoose.Schema.Types.Mixed,
+      visualObservations: mongoose.Schema.Types.Mixed,
       evaluationVersion: String,
       threatAssessment: mongoose.Schema.Types.Mixed,
       threatLevel: { type: String, default: "" },

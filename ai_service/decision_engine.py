@@ -115,6 +115,19 @@ def calibrate_confidence(base_confidence, text_prediction, image_prediction, con
         if image_prediction and top_margin < 0.08:
             confidence -= 0.06
 
+    observations = (vision_result or {}).get("observations") or {}
+    consistency = (observations.get("textImageConsistency") or {}).get("status")
+    if consistency == "supports":
+        confidence += 0.05
+    elif consistency == "partially_supports":
+        confidence -= 0.02
+    elif consistency in {"contradicts", "unrelated"}:
+        confidence -= 0.2
+    elif consistency == "too_unclear":
+        confidence -= 0.14
+    if observations.get("imageQuality", {}).get("status") == "limited":
+        confidence -= 0.08
+
     return round(clamp01(confidence), 3), round(top_margin, 3)
 
 
@@ -171,6 +184,10 @@ def build_structured_decision(
         and image_prediction["confidence"] >= 0.34
         and not _are_compatible(text_id, image_id)
     )
+    observations = (vision_result or {}).get("observations") or {}
+    consistency = observations.get("textImageConsistency") or {}
+    if consistency.get("status") == "contradicts":
+        conflict_detected = True
 
     calibrated_confidence, vision_margin = calibrate_confidence(
         base_confidence,
@@ -184,6 +201,7 @@ def build_structured_decision(
         (not text_prediction and not image_prediction)
         or (text_prediction and not image_prediction and weak_text_prediction(text_prediction))
         or (image_prediction and not text_prediction and weak_image_prediction(image_prediction, vision_result, vision_margin))
+        or ((vision_result or {}).get("imageAccepted") and observations.get("humanReviewRecommended") and not image_prediction and not text_prediction)
     )
     if insufficient_evidence:
         calibrated_confidence = min(calibrated_confidence, 0.33)
@@ -192,7 +210,8 @@ def build_structured_decision(
     threat_gate = threat_assessment.get("safetyGate") or {}
     threat_status = threat_assessment.get("status")
     threat_review_required = threat_gate.get("abstained") or threat_gate.get("action") in {"needs_review", "request_more_evidence"}
-    review_required = insufficient_evidence or conflict_detected or calibrated_confidence < MEDIUM_CONFIDENCE or bool(threat_review_required)
+    scene_review_required = bool(observations.get("humanReviewRecommended"))
+    review_required = insufficient_evidence or conflict_detected or calibrated_confidence < MEDIUM_CONFIDENCE or bool(threat_review_required) or scene_review_required
 
     evidence_used = []
     if text_prediction:
@@ -215,6 +234,10 @@ def build_structured_decision(
         visual_signals.append(f"vision candidate margin {vision_margin:.2f}")
     if (vision_result or {}).get("fallbackUsed"):
         visual_signals.append("vision fallback used")
+    if observations.get("description"):
+        visual_signals.append(f"scene: {observations['description'][:180]}")
+    if consistency.get("status") and consistency.get("status") != "not_provided":
+        visual_signals.append(f"text-image consistency: {consistency['status'].replace('_', ' ')}")
     if threat_assessment.get("threatLevel"):
         visual_signals.append(
             f"threat {threat_assessment.get('threatLevel')} ({float(threat_assessment.get('riskScore') or 0):.2f})"
@@ -226,6 +249,8 @@ def build_structured_decision(
         decision_sentence = "Evidence is insufficient for a precise automatic category, so manual review is required."
     elif conflict_detected:
         decision_sentence += " Text and image evidence disagree, so admin review is required."
+    elif scene_review_required:
+        decision_sentence += " Visual evidence is limited or ambiguous, so confirmation is required."
     elif threat_review_required:
         decision_sentence += " Threat evidence needs confirmation before automatic closure."
     elif image_prediction and not text_prediction:
@@ -270,6 +295,9 @@ def build_structured_decision(
             "lowConfidence": calibrated_confidence < MEDIUM_CONFIDENCE,
             "visionFallbackUsed": bool((vision_result or {}).get("fallbackUsed", True)),
             "visionCandidateMargin": vision_margin,
+            "sceneUnderstandingStatus": (vision_result or {}).get("sceneStatus", "not_available"),
+            "textImageConsistency": consistency.get("status", "not_available"),
+            "sceneReviewRecommended": scene_review_required,
             "threatStatus": threat_status or "not_available",
             "threatReviewRequired": bool(threat_review_required),
         },

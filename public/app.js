@@ -2298,6 +2298,7 @@ function renderAnalysis(result) {
   const weatherText = result.weather?.note ? ` Weather context: ${result.weather.note}` : "";
   const threatText = result.threatAssessment?.threatLevel ? ` Threat level: ${result.threatAssessment.threatLevel}.` : "";
   const visualFinding = result.cv?.detected;
+  const observations = result.cv?.observations || {};
   const detectedIssue = visualFinding && !["No image uploaded", "Image uploaded; incident unclear"].includes(visualFinding)
     ? visualFinding
     : result.nlp?.issueType || "Civic issue requiring review";
@@ -2305,6 +2306,11 @@ function renderAnalysis(result) {
     `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}.${routeText} Detected issue: ${detectedIssue}.${threatText}${reviewText}${broadcastText}${weatherText}`,
     result.explainability?.reviewRequired ? "info" : "success"
   );
+  if (observations.description) {
+    aiAccuracyStatus.textContent = observations.humanReviewRecommended
+      ? `Scene analyzed, but confirmation is recommended: ${observations.description}`
+      : `Scene analyzed: ${observations.description}`;
+  }
 }
 
 function buildSubmittedReport(payload, result) {
@@ -2341,6 +2347,7 @@ function buildSubmittedReport(payload, result) {
     civicEvidence: result.civicEvidence || result.explainability?.civicEvidence || null,
     areaIntelligence: result.areaIntelligence || result.explainability?.areaIntelligence || null,
     threatAssessment: result.threatAssessment || result.explainability?.threatAssessment || result.cv?.threatAssessment || null,
+    visualObservations: result.cv?.observations || result.explainability?.visualObservations || null,
     status: result.status || "Queued",
     detection: result.cv?.detected || "No image analysis available",
     cvReason: result.cv?.reason || "Local AI matched the uploaded issue against known civic patterns.",
@@ -2401,6 +2408,30 @@ function renderVisionCandidates(candidates = []) {
       `
     )
     .join("");
+}
+
+function renderVisualObservations(observations) {
+  if (!observations?.description) {
+    return `<div class="table-row empty-state"><span>No structured scene observation was recorded.</span></div>`;
+  }
+  const issues = (observations.detectedIssues || []).map((item) => item.issue || item.categoryLabel).filter(Boolean);
+  const hazards = (observations.hazards || []).filter(Boolean);
+  const infrastructure = (observations.affectedInfrastructure || []).filter(Boolean);
+  const consistency = String(observations.textImageConsistency?.status || "not available").replaceAll("_", " ");
+  const quality = String(observations.imageQuality?.status || "not available").replaceAll("_", " ");
+  return `
+    <div class="scene-observation-summary">
+      <p>${escapeHtml(observations.description)}</p>
+      <div class="detail-diagnostic-grid">
+        <article class="detail-summary-card"><span>Visible issues</span><strong>${escapeHtml(issues.join(" · ") || "Not determined")}</strong></article>
+        <article class="detail-summary-card"><span>Affected infrastructure</span><strong>${escapeHtml(infrastructure.join(" · ") || "Not determined")}</strong></article>
+        <article class="detail-summary-card"><span>Hazards</span><strong>${escapeHtml(hazards.join(" · ") || "None confirmed")}</strong></article>
+        <article class="detail-summary-card"><span>Image and text</span><strong>${escapeHtml(consistency)}</strong></article>
+        <article class="detail-summary-card"><span>Image quality</span><strong>${escapeHtml(quality)}</strong></article>
+        <article class="detail-summary-card"><span>Review</span><strong>${observations.humanReviewRecommended ? "Recommended" : "Not required by vision"}</strong></article>
+      </div>
+      ${observations.uncertainty?.reason ? `<p class="helper-text">${escapeHtml(observations.uncertainty.reason)}</p>` : ""}
+    </div>`;
 }
 
 function renderAlertsHistory(alerts = []) {
@@ -2913,6 +2944,11 @@ function renderComplaintDetail(complaint, intelligence = {}, reviewOptions = nul
         <section class="detail-section">
           <p class="detail-section-label">Vision candidates</p>
           <div class="table-list">${renderVisionCandidates(complaint.ai?.visionCandidates || [])}</div>
+        </section>
+
+        <section class="detail-section">
+          <p class="detail-section-label">Scene understanding</p>
+          ${renderVisualObservations(complaint.ai?.visualObservations)}
         </section>
       </section>
 
@@ -3449,6 +3485,13 @@ async function generatePdfReport(report, options = {}) {
   drawRow("AI Engine", report.aiMeta?.engine || "Not recorded");
   drawRow("AI Provider", report.aiMeta?.provider || "Not recorded");
   drawRow("Vision Engine", report.aiMeta?.visionEngine || "Not recorded");
+  if (report.visualObservations?.description) {
+    drawRow("Scene Description", report.visualObservations.description);
+    drawRow("Visible Issues", (report.visualObservations.detectedIssues || []).map((item) => item.issue || item.categoryLabel).filter(Boolean).join("; ") || "Not determined");
+    drawRow("Visible Hazards", (report.visualObservations.hazards || []).join("; ") || "None confirmed");
+    drawRow("Image / Text", String(report.visualObservations.textImageConsistency?.status || "not available").replaceAll("_", " "));
+    drawRow("Visual Review", report.visualObservations.humanReviewRecommended ? "Human review recommended" : "No visual review requested");
+  }
   drawRow(
     "Decision Audit",
     report.decisionAudit?.headHash
@@ -5173,6 +5216,7 @@ authForm.addEventListener("submit", async (event) => {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  let analysisStageTimer = null;
 
   try {
     complaintSubmitBtn.disabled = true;
@@ -5198,6 +5242,16 @@ form.addEventListener("submit", async (event) => {
     payload.imageHint = "";
     showTypedLocationOnMap();
 
+    const analysisStages = imageAiPayload
+      ? ["Uploading image evidence...", "AI service may be waking up...", "Analyzing the visible scene...", "Checking civic hazards...", "Comparing the image with the complaint..."]
+      : ["Analyzing complaint text...", "Checking civic hazards...", "Preparing the routing decision..."];
+    let stageIndex = 0;
+    aiAccuracyStatus.textContent = analysisStages[stageIndex];
+    analysisStageTimer = window.setInterval(() => {
+      stageIndex = Math.min(stageIndex + 1, analysisStages.length - 1);
+      aiAccuracyStatus.textContent = analysisStages[stageIndex];
+    }, 3500);
+
     const result = await apiRequest("/api/analyze-complaint", {
       method: "POST",
       body: JSON.stringify(payload)
@@ -5210,8 +5264,10 @@ form.addEventListener("submit", async (event) => {
     openPostSubmitOverlay(lastSubmittedReport);
     await loadDashboard();
   } catch (error) {
+    aiAccuracyStatus.textContent = `Analysis could not complete: ${error.message}`;
     setDashboardMessage(error.message, "error");
   } finally {
+    if (analysisStageTimer) window.clearInterval(analysisStageTimer);
     updateComplaintSubmitAvailability();
   }
 });

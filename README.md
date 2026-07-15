@@ -12,7 +12,7 @@
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white" />
   <img alt="Flask" src="https://img.shields.io/badge/Flask-AI_Service-000000?style=for-the-badge&logo=flask&logoColor=white" />
   <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb&logoColor=white" />
-  <img alt="Vision" src="https://img.shields.io/badge/Vision-CLIP_Ready-5B5FC7?style=for-the-badge" />
+  <img alt="Vision" src="https://img.shields.io/badge/Vision-Florence--2-5B5FC7?style=for-the-badge" />
   <img alt="License" src="https://img.shields.io/badge/License-MIT-111827?style=for-the-badge" />
 </p>
 
@@ -49,7 +49,7 @@ The project is built around a simple idea: civic complaint systems should not st
 ## Highlights
 
 - AI complaint intake with text, image, voice, and location evidence.
-- Image-first incident guessing, including image-only complaint handling.
+- Self-hosted Florence-2 scene understanding with image-only complaints, multi-issue observations, uncertainty, and human-review gates.
 - Structured threat assessment with risk score, hazards, safety gate, duplicate signal, and image integrity snapshot.
 - Versioned Bengaluru ward and department routing based on location, category, severity, and active workload.
 - Privacy-safe community verification for still-present, worsening, resolved, and duplicate reports.
@@ -86,7 +86,7 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | Authentication | Email/password login, role selection, email OTP registration, forgot-password OTP reset | Integrated |
 | Citizen reporting | Text complaint, voice transcript, image upload, location, map preview | Integrated |
 | Bengaluru operations | BBMP-aligned routing, authority handoff, response deadlines, and local-area intelligence | Integrated |
-| Image analysis | Browser-side image features, resized image upload, Flask vision analysis, local fallback | Integrated |
+| Image analysis | Florence-2 detailed scene observations, multi-issue extraction, text-image consistency, uncertainty, cache, and local fallback | Integrated |
 | Threat intelligence | Threat level, risk score, hazards, relationships, confidence, safety gate, duplicate signal | Integrated |
 | Smart routing | Nine configurable BBMP-aligned departments with explicit, boundary-ready, area-alias, and safe fallback ward resolution | Integrated |
 | Weather context | Weatherstack current conditions for weather-sensitive complaints | Integrated |
@@ -126,7 +126,10 @@ flowchart LR
     Express --> Flask[Flask AI Service]
     Flask --> Catalog[Shared Category Catalog]
     Flask --> TextAI[Semantic Text Classifier]
-    Flask --> VisionAI[CLIP Vision Model]
+    Flask --> VisionAI[Florence-2 Scene Understanding]
+    VisionAI --> Observation[Structured Visual Observations]
+    Observation --> ThreatAI
+    Flask -. optional .-> CLIP[CLIP Secondary/Fallback]
     Flask --> VisionFallback[Feature Fallback]
     Flask --> ThreatAI[Threat Intelligence]
     Express --> Deepgram[Deepgram STT]
@@ -152,7 +155,8 @@ sequenceDiagram
     FE->>API: POST /api/analyze-complaint
     API->>API: Validate auth, image size, MIME type, and location
     API->>AI: Analyze complaint
-    AI->>AI: Classify text, vision, context, severity, and threat
+    AI->>AI: Describe scene and normalize visible issues
+    AI->>AI: Compare text/image and evaluate context, severity, and threat
     AI-->>API: Category, confidence, threatAssessment, explanation
     API->>API: Calibrate confidence and geocode location
     API->>EXT: Weatherstack and Zenserp when configured and quota allows
@@ -168,7 +172,7 @@ Urban Pulse AI uses a hybrid AI pipeline with two execution paths.
 
 | Path | When It Runs | Purpose |
 | --- | --- | --- |
-| Flask AI service | Preferred path when `AI_SERVICE_URL` is reachable | Semantic text classification, optional CLIP vision, feature fallback, structured decision engine, threat assessment |
+| Flask AI service | Preferred path when `AI_SERVICE_URL` is reachable | Semantic text classification, Florence-2 observations, optional CLIP fallback, structured decision engine, threat assessment |
 | Express fallback | When Flask AI is unavailable or times out | Deterministic keyword/feature fusion so complaint submission continues |
 
 The AI output includes:
@@ -178,6 +182,7 @@ The AI output includes:
 - `priority` with level and score.
 - `nlp` classification details.
 - `cv` visual detection details.
+- `cv.observations` with scene description, multiple visible issues, infrastructure, hazards, image quality, uncertainty, and text-image consistency.
 - `decision` with text prediction, image prediction, conflict flag, reasoning, and quality signals.
 - `threatAssessment` with structured risk intelligence.
 - `aiMeta` with provider, engine, model, fallback state, category ID, vision provider, evaluation version, and image fingerprint.
@@ -200,6 +205,24 @@ Current category coverage includes:
 - Water leakage / pipe burst
 - Stray animal / animal menace
 - Vehicle obstruction / illegal parking
+
+### Scene Understanding
+
+The original CLIP-only path compared an image embedding with a fixed list of civic prompts. That is useful for coarse similarity, but it cannot reliably explain an arbitrary scene and can force unrelated labels. The primary visual layer is now `microsoft/Florence-2-base-ft`, running locally in the Flask service with no external vision API.
+
+The visual flow is deliberately observation-first:
+
+1. Validate the base64 payload, MIME signature, decoded format, byte limit, and pixel limit.
+2. Resize the image within the configured maximum dimension.
+3. Generate a detailed Florence-2 caption and optionally run Florence object detection.
+4. Normalize supported visible evidence into multiple civic issues, affected infrastructure, hazards, quality limitations, and an evidence score.
+5. Compare those observations with complaint text as `supports`, `partially_supports`, `contradicts`, `unrelated`, or `too_unclear`.
+6. Pass observations to the existing Urban Pulse threat and decision engines. Florence never directly owns final category, priority, department, routing, broadcast, or closure.
+7. Reduce confidence or request review when evidence is weak, conflicting, unrelated, low quality, timed out, or unavailable.
+
+Identical image inference is reused through a bounded in-memory SHA-256 cache. CPU inference is serialized to one image at a time, queue waiting is bounded, and failed model loads use a cooldown. `/health` never downloads a model; `/ready` reports `warming_up`, readiness, cache state, and degraded mode. CLIP is disabled by default and can be enabled as a fallback or low-authority secondary scorer.
+
+Supported uploads are JPEG, PNG, and WebP. Images are limited to 2 MB and 20 million decoded pixels by default. Uploaded bytes are processed in memory and are not written to temporary files by the AI service. The complaint database stores normalized findings and the existing integrity hash, not raw model tensors or model prompts.
 
 ## Threat Detection
 
@@ -284,7 +307,7 @@ Important design rule: public search context and weather context support the cas
 | Database | MongoDB Atlas, Mongoose |
 | AI service | Python, Flask |
 | Text AI | Sentence Transformers when available, deterministic fallback |
-| Vision AI | CLIP via `sentence-transformers/clip-ViT-B-32` when available, feature fallback |
+| Vision AI | Self-hosted `microsoft/Florence-2-base-ft`, optional CLIP fallback, deterministic feature fallback |
 | Voice | Deepgram STT, transcript cleanup through AI service |
 | Email | Nodemailer SMTP |
 | Weather | Weatherstack current weather API |
@@ -302,7 +325,9 @@ Urban-Pulse-Ai/
 |   |-- pipeline.py             # Main hybrid complaint analysis pipeline
 |   |-- decision_engine.py      # Confidence calibration and structured reasoning
 |   |-- threat_intelligence.py  # Threat level, relationships, image integrity, duplicates
-|   |-- vision_analysis.py      # CLIP vision and feature fallback
+|   |-- florence_runtime.py     # Singleton model lifecycle, inference queue, and image cache
+|   |-- scene_observations.py   # Multi-issue normalization, uncertainty, and consistency
+|   |-- vision_analysis.py      # Scene orchestration, validation, CLIP/feature fallback
 |   |-- text_processing.py      # Text classification utilities
 |   |-- category_catalog.py     # Shared category loader
 |   `-- requirements.txt
@@ -391,8 +416,21 @@ Create a `.env` file in the project root. Start from [`.env.example`](.env.examp
 | `DEEPGRAM_MODEL` | No | `nova-3` | Deepgram model name |
 | `EMBEDDING_MODEL_NAME` | No | `sentence-transformers/all-MiniLM-L6-v2` | Text embedding model |
 | `VISION_MODEL_NAME` | No | `sentence-transformers/clip-ViT-B-32` | Optional CLIP vision model |
+| `FLORENCE_ENABLED` | No | `true` | Enable self-hosted Florence scene understanding; requires adequate RAM |
+| `FLORENCE_MODEL_NAME` | No | `microsoft/Florence-2-base-ft` | Florence checkpoint |
+| `FLORENCE_MODEL_REVISION` | No | pinned commit hash | Reproducible trusted model-code and weight revision |
+| `FLORENCE_LAZY_LOAD` | No | `true` | Load outside health checks and allow a degraded response while warming |
+| `FLORENCE_WARMUP` | No | `true` | Start background model loading when the Flask process starts |
+| `FLORENCE_OBJECT_DETECTION` | No | `false` | Run a second Florence object-detection task; increases latency |
+| `FLORENCE_INFERENCE_TIMEOUT_SECONDS` | No | `90` | Latency budget after which output is marked for review |
+| `FLORENCE_QUEUE_TIMEOUT_SECONDS` | No | `8` | Maximum wait for the one-image CPU inference slot |
+| `FLORENCE_MAX_IMAGE_DIMENSION` | No | `1024` | Longest input dimension before inference |
+| `FLORENCE_CACHE_SIZE` | No | `24` | Maximum identical-image results held in process memory |
+| `VISION_CLIP_FALLBACK_ENABLED` | No | `false` | Load CLIP only if Florence yields no structured issue |
+| `VISION_CLIP_SECONDARY_ENABLED` | No | `false` | Let CLIP weakly reinforce matching Florence evidence |
 | `VISION_CONFIDENCE_THRESHOLD` | No | `0.24` | Visual detection threshold |
 | `VISION_MAX_IMAGE_BYTES` | No | `2097152` | AI image payload limit |
+| `VISION_MAX_IMAGE_PIXELS` | No | `20000000` | Decompression-bomb pixel ceiling |
 | `VISION_IMAGE_WEIGHT` | No | `0.38` | Image influence in fusion |
 | `TEXT_CONFIDENCE_THRESHOLD` | No | `0.26` | Text confidence floor |
 | `CONTEXT_REPEAT_HIGH` | No | `5` | Repeat-count high threshold |
@@ -504,7 +542,7 @@ Fresh seed:
 npm run seed:fresh
 ```
 
-The first CLIP model run may take longer because the model may need to download or load. If the model cannot load, the AI service still returns deterministic feature-fallback image candidates.
+The first Florence deployment downloads roughly 463 MB of checkpoint weights. With warmup enabled, `/health` remains responsive while the model loads. CPU latency varies substantially by instance and scene; allow roughly 15-90 seconds until you benchmark your deployment. If loading or inference fails, complaint submission continues through review-safe fallback behavior.
 
 ## Scripts
 
@@ -539,6 +577,7 @@ The first CLIP model run may take longer because the model may need to download 
 | `npm run verify:bengaluru-routing` | Verify all 12 categories have one department owner and test ward resolution strategies |
 | `npm run verify:community-verification` | Verify privacy, eligibility, conflict handling, idempotency, cooldowns, and community-wide detection |
 | `npm run verify:image-reasoning` | Verify image-only electrical, tree, and abstention behavior in the Express fallback |
+| `npm run verify:scene-understanding` | Verify Florence observation normalization, multi-hazard output, consistency, validation, caching, degraded mode, and mocked integration |
 | `npm run verify:accessibility` | Run deterministic static accessibility contracts |
 | `npm run verify:resilience` | Verify rate limits, correlation IDs, and security headers |
 | `npm run verify:load` | Run concurrent local HTTP and payload-boundary checks |
@@ -781,7 +820,7 @@ The recommended production layout uses two Render services plus MongoDB Atlas. T
 | Service | Runtime | Responsibility |
 | --- | --- | --- |
 | Main app | Node.js | Express API, frontend, auth, complaints, email, routing, dashboards |
-| AI service | Python | Flask AI endpoints, text/vision/threat analysis |
+| AI service | Python 3.11, 2 GB+ RAM recommended | Flask AI endpoints, Florence scene understanding, text/threat analysis |
 | Database | MongoDB Atlas | Persistent users, complaints, OTPs, API usage, broadcasts, incidents |
 
 Use [render.yaml](render.yaml) as the deployment starting point. Configure production secrets in the Render dashboard, not in Git.
@@ -793,7 +832,7 @@ For the main web service:
 ```bash
 AI_SERVICE_URL=https://your-ai-service.onrender.com
 AI_SERVICE_TOKEN=use_the_same_32_plus_character_random_value_on_both_services
-AI_SERVICE_TIMEOUT_MS=30000
+AI_SERVICE_TIMEOUT_MS=110000
 ALLOW_ROLE_TOKEN_ISSUE=false
 BBMP_EMAIL_TO=comm@bbmp.gov.in
 CORS_ORIGIN=https://your-web-service.onrender.com
@@ -828,8 +867,21 @@ For the AI service:
 PYTHON_VERSION=3.11.11
 EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
 VISION_MODEL_NAME=sentence-transformers/clip-ViT-B-32
+FLORENCE_ENABLED=true
+FLORENCE_MODEL_NAME=microsoft/Florence-2-base-ft
+FLORENCE_MODEL_REVISION=58c9f97c2a8448696851e2cc95eb1b6919493fe4
+FLORENCE_LAZY_LOAD=true
+FLORENCE_WARMUP=true
+FLORENCE_OBJECT_DETECTION=false
+FLORENCE_INFERENCE_TIMEOUT_SECONDS=90
+FLORENCE_QUEUE_TIMEOUT_SECONDS=8
+FLORENCE_MAX_IMAGE_DIMENSION=1024
+FLORENCE_CACHE_SIZE=24
+VISION_CLIP_FALLBACK_ENABLED=false
+VISION_CLIP_SECONDARY_ENABLED=false
 VISION_CONFIDENCE_THRESHOLD=0.24
 VISION_MAX_IMAGE_BYTES=2097152
+VISION_MAX_IMAGE_PIXELS=20000000
 AI_MAX_REQUEST_BYTES=4194304
 AI_SERVICE_REQUIRE_TOKEN=true
 AI_SERVICE_TOKEN=use_the_same_32_plus_character_random_value_on_both_services
@@ -849,6 +901,8 @@ Before pushing live:
 - Confirm `SMTP_FAMILY=4` if Gmail IPv6 fails with `ENETUNREACH`.
 - Confirm `CORS_ORIGIN` matches the production frontend URL exactly.
 - Confirm `AI_SERVICE_URL` points to the deployed Flask service.
+- Upgrade the Render AI service from Free/Starter 512 MB to at least Standard 2 GB before setting `FLORENCE_ENABLED=true`; the checked-in free-tier blueprint keeps Florence disabled to prevent out-of-memory restarts.
+- Confirm `/ready` reports `sceneUnderstanding.ready=true` after warmup and test real CPU latency before enabling production traffic.
 - Set the same random, 32+ character `AI_SERVICE_TOKEN` on both Render services and keep `AI_SERVICE_REQUIRE_TOKEN=true` on Flask.
 - Run `npm run evaluate:ai`, `npm run verify:dataset`, `npm run verify:decision-audit`, and `python3 scripts/evaluateAiService.py`.
 - Submit a high-risk test complaint and verify routing, broadcast, incident command, and PDF.
@@ -906,9 +960,9 @@ Then confirm `AI_SERVICE_URL` in the main service.
 
 If Express receives HTTP 401 from the AI service, confirm both Render services use the exact same `AI_SERVICE_TOKEN` without quotes, spaces, or hidden newlines.
 
-### CLIP Model Is Slow Or Unavailable
+### Florence Is Warming Up Or Unavailable
 
-The first CLIP load can be slow. If `sentence-transformers` or `torch` cannot load, the AI service falls back to deterministic image features. This is expected and should not block complaint submission.
+Check `/ready` for `sceneUnderstanding.state`. A first deployment must download the checkpoint, and free 512 MB instances cannot load it safely. Use Python 3.11, a 2 GB+ AI instance, `FLORENCE_ENABLED=true`, and `FLORENCE_WARMUP=true`. If the model remains unavailable, the service returns review-safe CLIP/feature fallback output without blocking complaint submission. Set `VISION_CLIP_FALLBACK_ENABLED=true` only when the instance has enough memory for both models.
 
 ### Weather Or Zenserp Is Unavailable
 

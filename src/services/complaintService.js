@@ -504,6 +504,7 @@ async function createComplaintFromPayload(auth, payload) {
         source: candidate.source || ""
       })),
       confidenceBreakdown: analysis.cv?.confidenceBreakdown || {},
+      visualObservations: analysis.cv?.observations || null,
       evaluationVersion: analysis.aiMeta?.evaluationVersion || "unknown",
       threatAssessment,
       threatLevel: threatAssessment?.threatLevel || "",
@@ -649,6 +650,7 @@ async function createComplaintFromPayload(auth, payload) {
     visionFallbackUsed: Boolean(analysis.aiMeta?.visionFallbackUsed || analysis.cv?.fallbackUsed),
     visionCandidates: (analysis.cv?.candidates || []).slice(0, 5),
     confidenceBreakdown: analysis.cv?.confidenceBreakdown || {},
+    visualObservations: analysis.cv?.observations || null,
     threatLevel: threatAssessment?.threatLevel || "",
     threatRiskScore: threatAssessment?.riskScore || 0
   };

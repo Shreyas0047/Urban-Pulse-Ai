@@ -1162,8 +1162,8 @@ async function analyzeComplaint(payload) {
       aiMeta: {
         ...(data.aiMeta || {}),
         provider: data.aiMeta?.provider || "flask",
-        engine: data.aiMeta?.engine || "hybrid-semantic-feature-v3",
-        model: data.aiMeta?.model || "sentence-transformers-or-hash-fallback",
+        engine: data.aiMeta?.engine || "hybrid-scene-threat-v5",
+        model: data.aiMeta?.model || "sentence-transformers+florence-or-safe-fallback",
         fallbackUsed: false,
         categoryId: data.aiMeta?.categoryId || CATEGORY_ID_BY_ISSUE_TYPE.get(data.nlp?.issueType) || data.category || "general",
         visionEngine: data.aiMeta?.visionEngine || "shared-feature-signals-v2",
