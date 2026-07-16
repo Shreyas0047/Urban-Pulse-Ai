@@ -12,7 +12,7 @@
   <img alt="Node.js" src="https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white" />
   <img alt="Flask" src="https://img.shields.io/badge/Flask-AI_Service-000000?style=for-the-badge&logo=flask&logoColor=white" />
   <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb&logoColor=white" />
-  <img alt="Vision" src="https://img.shields.io/badge/Vision-Gemini%20%2B%20Local-5B5FC7?style=for-the-badge" />
+  <img alt="Vision" src="https://img.shields.io/badge/Vision-Florence--2-5B5FC7?style=for-the-badge" />
   <img alt="License" src="https://img.shields.io/badge/License-MIT-111827?style=for-the-badge" />
 </p>
 
@@ -49,7 +49,7 @@ The project is built around a simple idea: civic complaint systems should not st
 ## Highlights
 
 - AI complaint intake with text, image, voice, and location evidence.
-- Cloud Run Florence-2 visual understanding with Gemini fallback, strict structured observations, uncertainty, and human-review gates.
+- Cloud Run Florence-2 visual understanding with strict structured observations, uncertainty, provider resilience, and human-review gates.
 - Structured threat assessment with risk score, hazards, safety gate, duplicate signal, and image integrity snapshot.
 - Versioned Bengaluru ward and department routing based on location, category, severity, and active workload.
 - Privacy-safe community verification for still-present, worsening, resolved, and duplicate reports.
@@ -86,7 +86,7 @@ A fallen tree on a road, a live wire near water, sewage near a school, or a dama
 | Authentication | Email/password login, role selection, email OTP registration, forgot-password OTP reset | Integrated |
 | Citizen reporting | Text complaint, voice transcript, image upload, location, map preview | Integrated |
 | Bengaluru operations | BBMP-aligned routing, authority handoff, response deadlines, and local-area intelligence | Integrated |
-| Image analysis | Remote Florence-2 primary perception, Gemini fallback, versioned observation contract, hash caches, consistency checks, and human review | Integrated |
+| Image analysis | Remote Florence-2 perception, versioned observation contract, hash caches, consistency checks, resilient failure handling, and human review | Integrated |
 | Threat intelligence | Threat level, risk score, hazards, relationships, confidence, safety gate, duplicate signal | Integrated |
 | Smart routing | Nine configurable BBMP-aligned departments with explicit, boundary-ready, area-alias, and safe fallback ward resolution | Integrated |
 | Weather context | Weatherstack current conditions for weather-sensitive complaints | Integrated |
@@ -128,9 +128,9 @@ flowchart LR
     Flask --> TextAI[Semantic Text Classifier]
     Flask --> Provider[Visual Provider Chain]
     Provider -->|Primary| VisionAI[Florence-2 on Google Cloud Run]
-    Provider -. fallback .-> Gemini[Gemini Visual Understanding]
+    CloudBuild[Google Cloud Build] --> Registry[Artifact Registry]
+    Registry --> VisionAI
     VisionAI --> Observation[Versioned Structured Observations]
-    Gemini --> Observation
     Observation --> ThreatAI
     Flask -. optional .-> CLIP[CLIP Secondary/Fallback]
     Flask --> VisionFallback[Feature Fallback]
@@ -151,7 +151,8 @@ sequenceDiagram
     participant API as Express API
     participant AI as Flask AI
     participant DB as MongoDB
-    participant EXT as External Providers
+    participant FL as Florence Cloud Run
+    participant EXT as Context Providers
 
     U->>FE: Add complaint text, image, voice, or location
     FE->>FE: Extract image features and prepare payload
@@ -162,8 +163,12 @@ sequenceDiagram
     FE->>API: POST /api/analyze-complaint
     API->>API: Validate auth, image size, MIME type, and location
     API->>AI: Analyze complaint
-    AI->>EXT: Send resized image only to Gemini when configured
-    EXT-->>AI: Structured visual observations only
+    AI->>FL: Send sanitized, recompressed image with service token
+    alt Florence returns confident schema v1.0 observations
+        FL-->>AI: Structured visual observations only
+    else Florence fails, times out, or remains uncertain
+        AI->>AI: Activate review-safe provider resilience
+    end
     AI->>AI: Validate observations and compare image with complaint text locally
     AI->>AI: Compare text/image and evaluate context, severity, and threat
     AI-->>API: Category, confidence, threatAssessment, explanation
@@ -181,7 +186,7 @@ Urban Pulse AI uses a hybrid AI pipeline with two execution paths.
 
 | Path | When It Runs | Purpose |
 | --- | --- | --- |
-| Flask AI service | Preferred path when `AI_SERVICE_URL` is reachable | Semantic text classification, Gemini/local visual observations, structured decision engine, threat assessment |
+| Flask AI service | Preferred path when `AI_SERVICE_URL` is reachable | Semantic text classification, remote visual-provider orchestration, structured decision engine, threat assessment |
 | Express fallback | When Flask AI is unavailable or times out | Deterministic keyword/feature fusion so complaint submission continues |
 
 The AI output includes:
@@ -217,7 +222,7 @@ Current category coverage includes:
 
 ### Scene Understanding
 
-The primary visual perception layer is Florence-2 in an independent Google Cloud Run container, called only by the protected Flask service. Gemini is the backup perception provider. Both receive only a resized, recompressed incident image and return schema-constrained observations. Neither receives reporter identity, complaint history, ward data, routing contacts, or authority details. Provider credentials remain server-side.
+The primary visual perception layer is Florence-2 in an independent Google Cloud Run container, called only by the protected Flask service. It receives only a resized, recompressed incident image and returns schema-constrained observations. It never receives reporter identity, complaint history, ward data, routing contacts, or authority details. Provider credentials remain server-side.
 
 The visual flow is deliberately observation-first:
 
@@ -226,25 +231,24 @@ The visual flow is deliberately observation-first:
 3. Request a strict JSON observation schema covering scene, visible issues, damaged infrastructure, hazards, environmental conditions, quality, uncertainty, and review recommendation.
 4. Validate and truncate every response field; malformed, blocked, timed-out, or incomplete responses are rejected.
 5. Normalize visual phrases into the shared civic catalog and compare them with complaint text locally as `supports`, `partially_supports`, `contradicts`, `unrelated`, or `too_unclear`.
-6. Call Florence-2 on Cloud Run first. On timeout, quota, invalid output, authentication failure, or an open circuit, call Gemini. If both fail or evidence remains weak, preserve the complaint and require human review.
+6. Call Florence-2 on Cloud Run. On timeout, invalid output, authentication failure, uncertainty, or an open circuit, preserve the complaint and advance through review-safe provider resilience.
 7. Pass only normalized evidence to Urban Pulse threat and decision engines. External vision never owns category, severity, priority, threat score, safety gate, routing, acceptance, duplicate handling, broadcast, communication, escalation, or closure.
 
-Identical images reuse bounded SHA-256 caches and are not retransmitted. Both providers have deadlines, bounded retries, response-size checks, metadata-only logs, and safe failure behavior. The Florence client also has a circuit breaker so repeated Cloud Run failures fall back immediately. `/health` and `/ready` report configuration and provider state without exposing keys. In-process Florence and CLIP stay disabled on the 512 MB Render service.
+Identical images reuse bounded SHA-256 caches and are not retransmitted. Provider calls have deadlines, bounded retries, response-size checks, metadata-only logs, and safe failure behavior. The Florence client also has a circuit breaker so repeated Cloud Run failures degrade immediately to the review-safe path. `/health` and `/ready` report configuration and provider state without exposing keys. In-process Florence and CLIP stay disabled on the 512 MB Render service.
 
-Supported uploads are JPEG, PNG, and WebP. Images are limited to 2 MB and 12 million decoded pixels by default, then reduced to at most 1280 pixels and 1.5 MB before either external provider call. Uploaded bytes are processed in memory and are not written to temporary files. The complaint database stores normalized findings, provider audit metadata, and the existing integrity hash, not API keys, raw tensors, or provider request bodies.
+Supported uploads are JPEG, PNG, and WebP. Images are limited to 2 MB and 12 million decoded pixels by default, then reduced to at most 1280 pixels and 1.5 MB before external visual transmission. Uploaded bytes are processed in memory and are not written to temporary files. The complaint database stores normalized findings, provider audit metadata, and the existing integrity hash, not API keys, raw tensors, or provider request bodies.
 
 Implementation map:
 
 | Area | Files | Architectural decision |
 | --- | --- | --- |
 | Remote primary perception | `ai_service/florence_remote_provider.py` | Authenticated image-only Cloud Run request, timeout, retry, circuit breaker, hash cache, and response limits |
-| External fallback perception | `ai_service/gemini_vision_provider.py` | Strict image-only request, JSON-schema response, validation, timeout, retry, rate limit, hash cache, metadata-only logs |
 | Shared contract | `ai_service/vision_provider_contract.py` | Versioned provider-neutral normalization and untrusted-response validation |
-| Provider fallback | `ai_service/vision_provider.py` | Florence Cloud Run first, Gemini second, human review after provider exhaustion |
+| Provider resilience | `ai_service/vision_provider.py` | Florence Cloud Run orchestration and human review after provider exhaustion |
 | Civic interpretation | `ai_service/scene_observations.py`, `vision_analysis.py`, `decision_engine.py` | Normalize provider phrases and retain all category, consistency, threat, safety, and review decisions locally |
 | API health | `ai_service/app.py`, `model_runtime.py` | Report provider configuration and runtime state without secrets |
 | Citizen feedback | `public/app.js`, `src/services/complaintService.js` | Generic progress, unavailable, additional-evidence, and human-review states without provider branding |
-| Deployment and tests | `render.yaml`, `.env.example`, `test_florence_remote_provider.py`, `test_gemini_vision.py` | Backend-only secrets, memory-safe Render mode, mocked success/failure release gates |
+| Deployment and tests | `render.yaml`, `.env.example`, `test_florence_remote_provider.py` | Backend-only secrets, memory-safe Render mode, mocked success/failure release gates |
 
 ## Threat Detection
 
@@ -329,14 +333,14 @@ Important design rule: public search context and weather context support the cas
 | Database | MongoDB Atlas, Mongoose |
 | AI service | Python, Flask |
 | Text AI | Sentence Transformers when available, deterministic fallback |
-| Vision AI | Gemini structured vision, optional self-hosted Florence-2 fallback, deterministic feature fallback |
+| Vision AI | Florence-2 on Google Cloud Run with provider resilience and human-review safety fallback |
 | Voice | Deepgram STT, transcript cleanup through AI service |
 | Email | Nodemailer SMTP |
 | Weather | Weatherstack current weather API |
 | Civic search | Zenserp search API |
 | Geocoding | Nominatim |
 | Reports | jsPDF in browser |
-| Deployment | Render blueprint plus MongoDB Atlas |
+| Deployment | Render web/AI services, Google Cloud Run Florence service, Artifact Registry, Cloud Build, and MongoDB Atlas |
 
 ## Project Structure
 
@@ -349,9 +353,8 @@ Urban-Pulse-Ai/
 |   |-- threat_intelligence.py  # Threat level, relationships, image integrity, duplicates
 |   |-- florence_runtime.py     # Singleton model lifecycle, inference queue, and image cache
 |   |-- florence_remote_provider.py # Authenticated Cloud Run client and circuit breaker
-|   |-- gemini_vision_provider.py # External observation client, validation, retry, rate limit, and cache
 |   |-- vision_provider_contract.py # Shared versioned observation contract
-|   |-- vision_provider.py      # Cloud Run Florence -> Gemini -> human-review chain
+|   |-- vision_provider.py      # Cloud Run Florence and human-review resilience chain
 |   |-- scene_observations.py   # Multi-issue normalization, uncertainty, and consistency
 |   |-- vision_analysis.py      # Scene orchestration, validation, CLIP/feature fallback
 |   |-- text_processing.py      # Text classification utilities
@@ -439,7 +442,6 @@ Create a `.env` file in the project root. Start from [`.env.example`](.env.examp
 | `DEEPGRAM_MODEL` | No | `nova-3` | Deepgram model name |
 | `EMBEDDING_MODEL_NAME` | No | `sentence-transformers/all-MiniLM-L6-v2` | Text embedding model |
 | `VISION_MODEL_NAME` | No | `sentence-transformers/clip-ViT-B-32` | Optional CLIP vision model |
-| `VISION_PROVIDER_ORDER` | No | `florence,gemini` | Ordered visual provider chain; `local` is legacy and should not run on Render |
 | `VISION_FALLBACK_ENABLED` | No | `true` | Continue through the configured provider chain after a safe provider failure |
 | `FLORENCE_REMOTE_ENABLED` | No | `true` | Enable the independent Florence Cloud Run perception service |
 | `FLORENCE_SERVICE_URL` | Florence integration | `https://...run.app` | Cloud Run service base URL, stored only on the AI service |
@@ -447,18 +449,8 @@ Create a `.env` file in the project root. Start from [`.env.example`](.env.examp
 | `FLORENCE_TIMEOUT_SECONDS` | No | `35` | Deadline for one Cloud Run analysis request |
 | `FLORENCE_MAX_RETRIES` | No | `1` | Retry count for transient timeout and `5xx` failures |
 | `FLORENCE_REMOTE_CACHE_SIZE` | No | `128` | Maximum remote observation snapshots cached by image hash |
-| `FLORENCE_CIRCUIT_FAILURE_THRESHOLD` | No | `3` | Consecutive failures before immediate Gemini fallback |
+| `FLORENCE_CIRCUIT_FAILURE_THRESHOLD` | No | `3` | Consecutive failures before the remote-provider circuit opens |
 | `FLORENCE_CIRCUIT_COOLDOWN_SECONDS` | No | `60` | Recovery window before retrying Cloud Run |
-| `GEMINI_VISION_ENABLED` | No | `true` | Enable Gemini for image interpretation only |
-| `GEMINI_API_KEY` | Gemini vision | secret | Backend-only key stored on the Flask service, never the browser or Node response |
-| `GEMINI_MODEL_NAME` | No | `gemini-2.5-flash-lite` | Gemini multimodal model used for structured observations |
-| `GEMINI_API_BASE_URL` | No | `https://generativelanguage.googleapis.com/v1beta` | Official Gemini REST API base |
-| `GEMINI_TIMEOUT_SECONDS` | No | `25` | Deadline for one provider request |
-| `GEMINI_MAX_RETRIES` | No | `1` | Bounded retries for transient timeout and `5xx` failures |
-| `GEMINI_RATE_LIMIT_PER_MINUTE` | No | `10` | Per-process outbound call limiter |
-| `GEMINI_CACHE_SIZE` | No | `128` | Maximum image-hash observation snapshots cached in memory |
-| `GEMINI_MAX_IMAGE_DIMENSION` | No | `1280` | Maximum transmitted image dimension |
-| `GEMINI_MAX_TRANSMIT_BYTES` | No | `1500000` | Maximum recompressed bytes sent to Gemini |
 | `FLORENCE_ENABLED` | No | `false` | Legacy in-process Florence; keep disabled when using the Cloud Run service |
 | `FLORENCE_MODEL_NAME` | No | `microsoft/Florence-2-base-ft` | Florence checkpoint |
 | `FLORENCE_MODEL_REVISION` | No | pinned commit hash | Reproducible trusted model-code and weight revision |
@@ -590,7 +582,7 @@ Fresh seed:
 npm run seed:fresh
 ```
 
-Gemini requires no local model download. If optional Florence fallback is enabled, its first deployment downloads the pinned checkpoint and requires at least 2 GB RAM. In all provider failure modes, complaint submission continues through review-safe fallback behavior.
+The Render AI service does not download visual-model weights. Florence runs in its dedicated Cloud Run container, and all provider failure modes preserve complaint submission through review-safe behavior.
 
 ## Scripts
 
@@ -625,7 +617,6 @@ Gemini requires no local model download. If optional Florence fallback is enable
 | `npm run verify:community-verification` | Verify privacy, eligibility, conflict handling, idempotency, cooldowns, and community-wide detection |
 | `npm run verify:image-reasoning` | Verify image-only electrical, tree, and abstention behavior in the Express fallback |
 | `npm run verify:scene-understanding` | Verify Florence observation normalization, multi-hazard output, consistency, validation, caching, degraded mode, and mocked integration |
-| `npm run verify:gemini-vision` | Verify structured Gemini success, cache, timeout, quota, invalid output, quality, mismatch, fallback, and human review without external calls |
 | `npm run verify:accessibility` | Run deterministic static accessibility contracts |
 | `npm run verify:resilience` | Verify rate limits, correlation IDs, and security headers |
 | `npm run verify:load` | Run concurrent local HTTP and payload-boundary checks |
@@ -864,15 +855,19 @@ Recommended evaluator scenarios:
 
 ## Deployment
 
-The recommended production layout uses two Render services plus MongoDB Atlas. The Node service uses `npm ci` so deployment installs exactly the dependency versions in `package-lock.json`.
+The production layout separates the memory-heavy vision model from the application services. Render hosts the Node application and lightweight Flask decision service, Google Cloud Run hosts Florence-2, Artifact Registry stores the pinned container image, Cloud Build creates that image, and MongoDB Atlas stores application state. The Node service uses `npm ci` so deployment installs exactly the dependency versions in `package-lock.json`.
 
 | Service | Runtime | Responsibility |
 | --- | --- | --- |
 | Main app | Node.js | Express API, frontend, auth, complaints, email, routing, dashboards |
-| AI service | Python 3.11, 512 MB with Gemini or 2 GB+ with Florence | Flask AI endpoints, provider orchestration, text/threat analysis |
+| AI service | Render, Python 3.11, 512 MB | Flask endpoints, provider orchestration, shared observation validation, text/threat/civic decisions |
+| Florence vision | Google Cloud Run, 2 vCPU, 4 GiB, concurrency 1, request-based CPU | Image-only Florence-2 inference and schema `1.0` structured observations |
+| Container registry/build | Artifact Registry and Cloud Build in `asia-south1` | Store and reproducibly build the pinned, non-root Florence container |
 | Database | MongoDB Atlas | Persistent users, complaints, OTPs, API usage, broadcasts, incidents |
 
 Use [render.yaml](render.yaml) as the deployment starting point. Configure production secrets in the Render dashboard, not in Git.
+
+The visual request path is `Render AI service -> authenticated Cloud Run Florence -> review-safe provider resilience -> human review when evidence is unreliable`. Cloud Run receives only sanitized image bytes and a request ID. Urban Pulse retains every final category, severity, priority, threat, routing, duplicate, broadcast, escalation, and acceptance decision.
 
 ### Render Environment Checklist
 
@@ -914,7 +909,6 @@ For the AI service:
 
 ```bash
 PYTHON_VERSION=3.11.11
-VISION_PROVIDER_ORDER=florence,gemini
 VISION_FALLBACK_ENABLED=true
 FLORENCE_REMOTE_ENABLED=true
 FLORENCE_SERVICE_URL=https://your-florence-service.run.app
@@ -924,17 +918,6 @@ FLORENCE_MAX_RETRIES=1
 FLORENCE_REMOTE_CACHE_SIZE=128
 FLORENCE_CIRCUIT_FAILURE_THRESHOLD=3
 FLORENCE_CIRCUIT_COOLDOWN_SECONDS=60
-GEMINI_VISION_ENABLED=true
-GEMINI_API_KEY=your_server_side_google_ai_studio_key
-GEMINI_MODEL_NAME=gemini-2.5-flash-lite
-GEMINI_API_BASE_URL=https://generativelanguage.googleapis.com/v1beta
-GEMINI_TIMEOUT_SECONDS=25
-GEMINI_MAX_RETRIES=1
-GEMINI_RATE_LIMIT_PER_MINUTE=10
-GEMINI_CACHE_SIZE=128
-GEMINI_MAX_IMAGE_DIMENSION=1280
-GEMINI_JPEG_QUALITY=82
-GEMINI_MAX_TRANSMIT_BYTES=1500000
 EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
 VISION_MODEL_NAME=sentence-transformers/clip-ViT-B-32
 FLORENCE_ENABLED=false
@@ -967,11 +950,11 @@ AI_SERVICE_REQUIRE_TOKEN=true
 AI_SERVICE_TOKEN=use_the_same_32_plus_character_random_value_on_both_services
 ```
 
-The configuration above is the recommended split deployment: Cloud Run Florence performs primary visual perception, Gemini is the fallback, and Urban Pulse performs all civic reasoning. `FLORENCE_SERVICE_TOKEN` and `GEMINI_API_KEY` belong only on backend services. Do not add either secret to frontend JavaScript or expose it through API responses. Keep `FLORENCE_ENABLED=false` on Render so model weights are never loaded into the 512 MB process.
+The configuration above is the recommended split deployment: Cloud Run Florence performs visual perception while Urban Pulse performs all civic reasoning. `FLORENCE_SERVICE_TOKEN` belongs only on backend services. Do not add it to frontend JavaScript or expose it through API responses. Keep `FLORENCE_ENABLED=false` on Render so model weights are never loaded into the 512 MB process.
 
 The standalone Cloud Run project is included in this repository under `urban-pulse-florence/`. Its README contains the Docker build, Cloud Run sizing, deployment commands, readiness check, and authenticated smoke test. Run Cloud Build from that subdirectory and deploy it before setting `FLORENCE_SERVICE_URL` on Render.
 
-Gemini structured output follows Google's supported JSON-schema mode and image input API. Active account quotas vary and should be checked in Google AI Studio. Any provider timeout, `429`, malformed response, or missing configuration advances safely through the chain and never rejects complaint intake. See the [Florence-2 model card](https://huggingface.co/microsoft/Florence-2-base-ft), [Cloud Run container guidance](https://cloud.google.com/run/docs/container-contract), [Gemini image-understanding guide](https://ai.google.dev/gemini-api/docs/image-understanding), and [structured-output guide](https://ai.google.dev/gemini-api/docs/structured-output).
+Any provider timeout, malformed response, uncertainty, or missing configuration advances safely through the resilience chain and never rejects complaint intake. See the [Florence-2 model card](https://huggingface.co/microsoft/Florence-2-base-ft) and [Cloud Run container guidance](https://cloud.google.com/run/docs/container-contract).
 
 ## Production Checklist
 
@@ -987,13 +970,11 @@ Before pushing live:
 - Confirm `SMTP_FAMILY=4` if Gmail IPv6 fails with `ENETUNREACH`.
 - Confirm `CORS_ORIGIN` matches the production frontend URL exactly.
 - Confirm `AI_SERVICE_URL` points to the deployed Flask service.
-- Add `GEMINI_API_KEY` only to the Render AI service and confirm `/ready` reports `visualProviderReady=true`.
-- Confirm the browser bundle, complaint API, logs, and stored complaint never contain the Gemini key or raw provider request body.
-- Keep `GEMINI_MAX_RETRIES` and `GEMINI_RATE_LIMIT_PER_MINUTE` bounded; verify quota failure still permits complaint submission.
-- Upgrade the Render AI service from Free/Starter 512 MB to at least Standard 2 GB before setting `FLORENCE_ENABLED=true`; the checked-in free-tier blueprint keeps Florence disabled to prevent out-of-memory restarts.
+- Confirm the browser bundle, complaint API, logs, and stored complaint never contain provider credentials or raw provider request bodies.
+- Keep `FLORENCE_ENABLED=false` on Render and confirm remote Florence health through `FLORENCE_SERVICE_URL`; model weights belong only in the dedicated Cloud Run container.
 - Set `AI_MEMORY_BUDGET_MB` to the plan's actual RAM. Do not leave it at `0` in production because zero disables the pre-inference memory circuit breaker.
-- Use one Gunicorn worker, at most two threads, and bounded worker recycling (`--max-requests 40 --max-requests-jitter 10`) for the local model service.
-- Confirm `/ready` reports `sceneUnderstanding.ready=true` after warmup and test real CPU latency before enabling production traffic.
+- Use one Gunicorn worker, at most two threads, and bounded worker recycling (`--max-requests 40 --max-requests-jitter 10`) for the Render AI orchestration service.
+- Confirm Cloud Run `/ready` reports `modelRuntime.ready=true`, then run a real authenticated image smoke test before enabling production traffic.
 - Set the same random, 32+ character `AI_SERVICE_TOKEN` on both Render services and keep `AI_SERVICE_REQUIRE_TOKEN=true` on Flask.
 - Run `npm run evaluate:ai`, `npm run verify:dataset`, `npm run verify:decision-audit`, and `python3 scripts/evaluateAiService.py`.
 - Submit a high-risk test complaint and verify routing, broadcast, incident command, and PDF.
@@ -1053,7 +1034,7 @@ If Express receives HTTP 401 from the AI service, confirm both Render services u
 
 ### Florence Is Warming Up Or Unavailable
 
-Check `/ready` for `sceneUnderstanding.state`. A first deployment must download the checkpoint, and free 512 MB instances cannot load it safely. Use Python 3.11, a 2 GB+ AI instance, `FLORENCE_ENABLED=true`, and `FLORENCE_WARMUP=true`. If the model remains unavailable, the service returns review-safe CLIP/feature fallback output without blocking complaint submission. Set `VISION_CLIP_FALLBACK_ENABLED=true` only when the instance has enough memory for both models.
+Check the Cloud Run service's `/health` and `/ready` endpoints. The first request after scale-to-zero can include model cold-start time because the production service uses request-based CPU with `min-instances=0`. Keep `FLORENCE_ENABLED=false` on Render, verify `FLORENCE_SERVICE_URL` and the shared token, and inspect Cloud Run revision logs for model errors. A timeout, invalid response, open circuit, or uncertain result advances through review-safe provider resilience; complaint submission continues with human review when evidence remains insufficient.
 
 ### Weather Or Zenserp Is Unavailable
 
