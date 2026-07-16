@@ -7,7 +7,7 @@ const CommunityVerificationEvent = require("../models/CommunityVerificationEvent
 const IncidentCluster = require("../models/IncidentCluster");
 const crypto = require("crypto");
 const { transcribeAudio, compareResolutionEvidence } = require("../services/aiClient");
-const { createComplaintFromPayload, createHttpError } = require("../services/complaintService");
+const { analyzeImagePreview, summarizeImageAnalysis, createComplaintFromPayload, createHttpError } = require("../services/complaintService");
 const { buildFollowUpSchedule, refreshComplaintFollowUp } = require("../services/followUpService");
 const { buildComplaintIntelligence } = require("../services/civicIntelligenceService");
 const { areaMatchesLocation } = require("../utils/localAlerts");
@@ -97,6 +97,7 @@ async function analyzeAndCreateComplaint(req, res, next) {
     res.json({
       nlp: analysis.nlp,
       cv: analysis.cv,
+      imageAnalysis: summarizeImageAnalysis(analysis),
       imageUpload: analysis.imageUpload,
       priority: analysis.priority,
       confidence: analysis.confidence,
@@ -125,6 +126,24 @@ async function analyzeAndCreateComplaint(req, res, next) {
         permissions: req.auth.permissions
       },
       complaintId: complaint._id
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function previewComplaintImage(req, res, next) {
+  try {
+    const analysis = await analyzeImagePreview(req.body);
+    res.json({
+      imageAnalysis: summarizeImageAnalysis(analysis),
+      cv: analysis.cv,
+      decision: analysis.decision,
+      confidence: analysis.confidence,
+      confidenceLabel: analysis.confidenceLabel,
+      reviewRequired: Boolean(analysis.reviewRequired || analysis.decision?.reviewRequired),
+      threatAssessment: analysis.threatAssessment || analysis.cv?.threatAssessment || null,
+      aiMeta: analysis.aiMeta
     });
   } catch (error) {
     next(error);
@@ -666,6 +685,7 @@ async function submitHumanReview(req, res, next) {
 }
 
 module.exports = {
+  previewComplaintImage,
   analyzeAndCreateComplaint,
   getComplaint,
   transcribeComplaintAudio,

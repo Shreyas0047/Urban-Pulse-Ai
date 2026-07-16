@@ -3,3 +3,4 @@ node_modules/
 receipts/
 __pycache__/
 *.pyc
+.venv/

@@ -218,7 +218,7 @@
         </header>
 
         <main id="mainContent" class="content-shell" tabindex="-1">
-          <section id="heroStage" class="hero-stage hero-story app-view-section" data-view-section="home" data-reveal>
+          <section id="heroStage" class="hero-stage app-view-section" data-view-section="home" data-reveal>
             <div class="hero-sticky-shell">
               <div class="hero-grid hero-story-grid">
                 <div class="hero-copy hero-story-copy">
@@ -495,29 +495,57 @@
 
                   <label>
                     <span class="field-label">Image analysis</span>
-                    <textarea id="aiImageDescription" name="imageHint" rows="3" placeholder="Upload an image to prepare it for server analysis" readonly></textarea>
+                    <textarea id="aiImageDescription" name="imageHint" rows="3" placeholder="Upload an image to analyze the visible scene" readonly></textarea>
                   </label>
 
                   <div class="ai-actions">
                     <button type="button" id="showAiAccuracyBtn" class="secondary-button">Check Image Status</button>
-                    <p id="aiAccuracyStatus" class="helper-text">Upload an image to prepare it for server vision analysis.</p>
+                    <p id="aiAccuracyStatus" class="helper-text" role="status" aria-live="polite">Upload an image to analyze the visible scene.</p>
                   </div>
 
                   <div class="form-actions">
                     <button type="submit" id="complaintSubmitBtn" class="light-beam-button gradient-button">Submit Report</button>
                     <button type="button" id="generatePdfBtn" class="secondary-button" disabled>Generate PDF</button>
                     <button type="button" id="emailBbmpBtn" class="secondary-button" disabled>Email Authority</button>
+                    <button type="button" id="informClosedOnesBtn" class="secondary-button" disabled>Notify contacts</button>
                   </div>
 
-                  <div id="emailProgress" class="email-progress" hidden>
+                  <div id="emailProgress" class="email-progress report-progress" hidden role="status" aria-live="polite">
                     <div class="email-progress-head">
-                      <strong id="emailProgressLabel">Preparing complaint email...</strong>
+                      <strong id="emailProgressLabel">Preparing report...</strong>
                       <span id="emailProgressValue">0%</span>
                     </div>
                     <div class="email-progress-track">
                       <div id="emailProgressFill" class="email-progress-fill"></div>
                     </div>
                   </div>
+
+                  <section id="reportResultPanel" class="report-result-panel" hidden aria-live="polite">
+                    <div class="report-result-head">
+                      <div>
+                        <p class="eyebrow subtle">Submitted</p>
+                        <h3>Complaint received</h3>
+                      </div>
+                      <span class="report-result-check" aria-hidden="true">✓</span>
+                    </div>
+                    <div id="postSubmitSummary" class="post-submit-summary report-result-summary"></div>
+                  </section>
+                </form>
+
+                <form id="closeContactsForm" class="close-contacts-form inline-contacts-form" hidden>
+                    <p class="helper-text">Enter up to 5 email IDs to notify people about this issue.</p>
+                    <div class="close-contact-grid">
+                      <input type="email" name="contactEmail" aria-label="Contact email 1" placeholder="Email ID 1" autocomplete="email" />
+                      <input type="email" name="contactEmail" aria-label="Contact email 2" placeholder="Email ID 2" autocomplete="email" />
+                      <input type="email" name="contactEmail" aria-label="Contact email 3" placeholder="Email ID 3" autocomplete="email" />
+                      <input type="email" name="contactEmail" aria-label="Contact email 4" placeholder="Email ID 4" autocomplete="email" />
+                      <input type="email" name="contactEmail" aria-label="Contact email 5" placeholder="Email ID 5" autocomplete="email" />
+                    </div>
+                    <div class="form-actions compact-actions">
+                      <button type="submit" id="sendCloseContactsBtn" class="light-beam-button gradient-button gradient-button-variant">Send warning</button>
+                      <button type="button" id="cancelCloseContactsBtn" class="chip-button">Cancel</button>
+                    </div>
+                    <p id="closeContactsMessage" class="helper-text post-submit-message"></p>
                 </form>
               </article>
 
@@ -817,39 +845,6 @@
       <span class="chatbot-launcher-pulse" aria-hidden="true"></span>
     </button>
 
-    <section id="postSubmitOverlay" class="overlay-shell post-submit-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="postSubmitTitle">
-      <div class="overlay-panel post-submit-modal">
-        <div class="overlay-head">
-          <div>
-            <p class="eyebrow">Complaint Submitted</p>
-            <h2 id="postSubmitTitle">Complaint received</h2>
-          </div>
-          <button type="button" id="closePostSubmitBtn" class="chip-button post-submit-close" aria-label="Close complaint actions">×</button>
-        </div>
-        <div id="postSubmitSummary" class="post-submit-summary"></div>
-        <div class="post-submit-actions">
-          <button type="button" id="modalGeneratePdfBtn" class="secondary-button">Generate PDF</button>
-          <button type="button" id="modalEmailBbmpBtn" class="secondary-button">Email Authority</button>
-          <button type="button" id="informClosedOnesBtn" class="light-beam-button gradient-button gradient-button-variant">Notify contacts</button>
-        </div>
-        <form id="closeContactsForm" class="close-contacts-form" hidden>
-          <p class="helper-text">Enter up to 5 email IDs to notify people about this issue.</p>
-          <div class="close-contact-grid">
-            <input type="email" name="contactEmail" aria-label="Contact email 1" placeholder="Email ID 1" autocomplete="email" />
-            <input type="email" name="contactEmail" aria-label="Contact email 2" placeholder="Email ID 2" autocomplete="email" />
-            <input type="email" name="contactEmail" aria-label="Contact email 3" placeholder="Email ID 3" autocomplete="email" />
-            <input type="email" name="contactEmail" aria-label="Contact email 4" placeholder="Email ID 4" autocomplete="email" />
-            <input type="email" name="contactEmail" aria-label="Contact email 5" placeholder="Email ID 5" autocomplete="email" />
-          </div>
-          <div class="post-submit-actions">
-            <button type="submit" id="sendCloseContactsBtn" class="light-beam-button gradient-button gradient-button-variant">Send warning</button>
-            <button type="button" id="cancelCloseContactsBtn" class="chip-button">Cancel</button>
-          </div>
-        </form>
-        <p id="closeContactsMessage" class="helper-text post-submit-message"></p>
-      </div>
-    </section>
-
     <section id="complaintDetailOverlay" class="overlay-shell post-submit-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="complaintDetailTitle">
       <div class="overlay-panel post-submit-modal complaint-detail-modal">
         <div class="overlay-head">
@@ -922,7 +917,6 @@
       </form>
     </section>
 
-    <script type="module" src="/liquid-ether.js"></script>
     <script src="/liquid-glass-react.js"></script>
     <script src="/app.js"></script>
     <script src="/auth-characters.js"></script>

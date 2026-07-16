@@ -1,5 +1,6 @@
 const assert = require("assert");
 const { _analyzeComplaintLocally: analyze } = require("../src/services/aiClient");
+const { summarizeImageAnalysis } = require("../src/services/complaintService");
 
 function run(imageFeatures) {
   return analyze({
@@ -39,4 +40,49 @@ const tree = run({
 });
 assert.equal(tree.aiMeta.categoryId, "tree_obstruction");
 
-console.log(JSON.stringify({ passed: true, electrical: electrical.aiMeta.categoryId, ambiguous: ambiguous.aiMeta.categoryId, tree: tree.aiMeta.categoryId }, null, 2));
+const untrustedFallback = summarizeImageAnalysis({
+  cv: {
+    detected: "Electrical short circuit or exposed wiring hazard",
+    score: 0.91,
+    provider: "feature-fallback",
+    fallbackUsed: true,
+    sceneStatus: "not_provided"
+  }
+});
+assert.equal(untrustedFallback.status, "unavailable");
+assert.equal(untrustedFallback.incident, "");
+assert.equal(untrustedFallback.confidence, 0);
+
+const trustedScene = summarizeImageAnalysis({
+  cv: {
+    provider: "local-florence-2",
+    model: "microsoft/Florence-2-base-ft",
+    fallbackUsed: false,
+    sceneStatus: "available",
+    observations: {
+      description: "Sparks are visible from an exposed wire above a road.",
+      detectedIssues: [{ categoryId: "utility_fault", issue: "Electrical or street-lighting fault", evidenceScore: 0.82, evidence: ["wire + exposed"] }],
+      hazards: ["electric shock or ignition risk"],
+      affectedInfrastructure: ["electrical infrastructure"],
+      humanReviewRecommended: false
+    }
+  },
+  decision: { reviewRequired: false }
+});
+assert.equal(trustedScene.status, "complete");
+assert.equal(trustedScene.incident, "Electrical or street-lighting fault");
+assert.equal(trustedScene.confidence, 0.82);
+
+const warmingScene = summarizeImageAnalysis({
+  cv: { provider: "feature-fallback", fallbackUsed: true, sceneStatus: "warming_up" }
+});
+assert.equal(warmingScene.status, "processing");
+assert.equal(warmingScene.retryable, true);
+
+console.log(JSON.stringify({
+  passed: true,
+  electrical: electrical.aiMeta.categoryId,
+  ambiguous: ambiguous.aiMeta.categoryId,
+  tree: tree.aiMeta.categoryId,
+  previewContract: { fallback: untrustedFallback.status, trusted: trustedScene.status, warming: warmingScene.status }
+}, null, 2));

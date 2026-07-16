@@ -150,8 +150,12 @@ sequenceDiagram
     participant DB as MongoDB
     participant EXT as External Providers
 
-    U->>FE: Submit complaint with text, image, voice, or location
+    U->>FE: Add complaint text, image, voice, or location
     FE->>FE: Extract image features and prepare payload
+    FE->>API: POST /api/analyze-image for immediate visual feedback
+    API->>AI: Analyze uploaded image without creating a complaint
+    AI-->>FE: Scene description, confidence, and review state
+    U->>FE: Submit complaint
     FE->>API: POST /api/analyze-complaint
     API->>API: Validate auth, image size, MIME type, and location
     API->>AI: Analyze complaint
@@ -336,9 +340,7 @@ Urban-Pulse-Ai/
 |   |-- styles.css              # UI, layout, liquid glass styling
 |   |-- app.js                  # Dashboard, auth, complaints, reports
 |   |-- chatbot.js              # Floating assistant UI
-|   |-- audio-transcriber.js    # Optional browser speech fallback helper, not loaded by default
 |   |-- videos/                 # About-page video assets
-|   `-- vendor/                 # Local visual/vendor assets
 |-- scripts/                    # Evaluation, benchmark, seed, SMTP verification
 |-- shared/
 |   |-- aiCategories.json       # Shared AI category catalog
@@ -353,7 +355,6 @@ Urban-Pulse-Ai/
 |   |-- models/                 # Mongoose models
 |   |-- routes/                 # API routes
 |   `-- services/               # AI, threat, routing, email, weather, search, risk, command
-|-- stt_service/                # Optional local Whisper/faster-whisper service
 |-- dataset/                    # Legacy regression fixtures and real benchmark workspace
 |   `-- benchmark/              # Phase 1 schema, collection protocol, manifest, and targets
 |-- render.yaml                 # Render deployment blueprint
@@ -381,12 +382,6 @@ git clone <your-repo-url>
 cd Urban-Pulse-Ai
 npm install
 pip install -r ai_service/requirements.txt
-```
-
-Optional local STT dependencies:
-
-```bash
-pip install -r stt_service/requirements.txt
 ```
 
 ## Environment Variables
@@ -515,8 +510,13 @@ Never commit real `.env` secrets.
 Start the Flask AI service in one terminal:
 
 ```bash
-npm run start:ai
+uv python install 3.11
+uv venv --python 3.11 .venv
+uv pip install --python .venv/bin/python -r ai_service/requirements.txt
+FLORENCE_WARMUP=true .venv/bin/python ai_service/app.py
 ```
+
+Florence is not supported by this project's pinned dependency set on Python 3.13 or newer. Wait until `http://127.0.0.1:5000/ready` reports `sceneUnderstandingReady: true` before testing image analysis. The UI retries while the model is warming and never presents browser feature statistics as a confirmed incident.
 
 Start the Express app in another terminal:
 
@@ -550,7 +550,6 @@ The first Florence deployment downloads roughly 463 MB of checkpoint weights. Wi
 | --- | --- |
 | `npm start` | Start Express app |
 | `npm run start:ai` | Start Flask AI service |
-| `npm run start:stt` | Start optional local STT service |
 | `npm run seed` | Seed local/demo database data |
 | `npm run seed:fresh` | Clear and reseed local/demo data |
 | `npm run verify:smtp` | Verify SMTP connection without sending an email |
@@ -607,6 +606,7 @@ Health probes are available at `GET /health/live` for process liveness and `GET 
 | Method | Endpoint | Permission | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/api/dashboard` | `submit_complaint` | Load the citizen or Bengaluru Admin dashboard |
+| `POST` | `/api/analyze-image` | `submit_complaint` | Preview server-side image analysis without creating a complaint |
 | `POST` | `/api/analyze-complaint` | `submit_complaint` | Create and analyze a Bengaluru civic complaint |
 | `GET` | `/api/complaints/:id` | `submit_complaint` | Load complaint detail |
 | `PATCH` | `/api/complaints/:id/status` | `update_complaint_status` | Update complaint status or priority |
@@ -785,7 +785,7 @@ npm run verify:resilience
 npm run verify:load
 npm run evaluate:benchmark:readiness
 python3 scripts/evaluateAiService.py
-python3 -m compileall ai_service stt_service scripts
+python3 -m compileall ai_service scripts
 ```
 
 Run the consolidated gate with `npm run verify:release`.
@@ -1050,7 +1050,7 @@ Recommended checks before a pull request:
 node -e "require('./src/app'); console.log('app-load ok')"
 npm run evaluate:ai
 python scripts/evaluateAiService.py
-python -m compileall ai_service stt_service scripts
+python -m compileall ai_service scripts
 ```
 
 ## License

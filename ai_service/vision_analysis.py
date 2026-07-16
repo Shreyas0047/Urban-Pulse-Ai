@@ -503,7 +503,9 @@ def detect_objects_from_features(
         reliable_top = top_score >= threshold and candidate_margin >= 0.08
     detections = [item for item in candidates if item["confidence"] >= threshold] if reliable_top else []
     top_detection = detections[0] if detections else None
-    fallback_used = not bool(scene_items)
+    # A completed Florence caption is primary vision evidence even when it does not
+    # match a supported civic incident. Fallback means the model did not run.
+    fallback_used = not scene_completed
     if image is not None and fallback_used:
         LOGGER.info(
             json.dumps(

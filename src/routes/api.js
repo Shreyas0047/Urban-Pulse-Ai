@@ -1,7 +1,7 @@
 const express = require("express");
 const { getRoles, issueToken, requestRegistrationOtp, requestPasswordResetOtp, resetPassword, register, login } = require("../controllers/authController");
 const { getDashboard, resetDashboard } = require("../controllers/dashboardController");
-const { analyzeAndCreateComplaint, getComplaint, transcribeComplaintAudio, updateComplaintStatus, acknowledgeAlert, verifyComplaintStatus, submitResolutionEvidence, submitCommunityProof, submitHumanReview } = require("../controllers/complaintController");
+const { analyzeAndCreateComplaint, previewComplaintImage, getComplaint, transcribeComplaintAudio, updateComplaintStatus, acknowledgeAlert, verifyComplaintStatus, submitResolutionEvidence, submitCommunityProof, submitHumanReview } = require("../controllers/complaintController");
 const { getChatHistory, postChatMessage, clearChatHistory } = require("../controllers/chatbotController");
 const { emailAuthorityComplaint, informCloseContacts } = require("../controllers/emailController");
 const { getLocalAlertPreferences, updateLocalAlertPreferences } = require("../controllers/localAlertController");
@@ -25,6 +25,7 @@ router.use(authenticate);
 
 router.get("/dashboard", requirePermission("submit_complaint"), getDashboard);
 router.post("/analyze-complaint", requirePermission("submit_complaint"), analyzeAndCreateComplaint);
+router.post("/analyze-image", requirePermission("submit_complaint"), previewComplaintImage);
 router.post("/transcribe-audio", requirePermission("submit_complaint"), transcribeComplaintAudio);
 router.get("/chatbot/history", requirePermission("submit_complaint"), getChatHistory);
 router.delete("/chatbot/history", requirePermission("submit_complaint"), clearChatHistory);

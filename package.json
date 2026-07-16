@@ -6,8 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "build:glass": "esbuild src/frontend/liquidGlassBridge.jsx --bundle --format=iife --platform=browser --target=es2020 --minify --outfile=public/liquid-glass-react.js",
-    "start:ai": "python ai_service/app.py",
-    "start:stt": "python stt_service/app.py",
+    "start:ai": "FLORENCE_WARMUP=true .venv/bin/python ai_service/app.py",
     "seed": "node scripts/seedDatabase.js",
     "seed:fresh": "node scripts/seedDatabase.js --fresh",
     "verify:ai-service-auth": "python3 scripts/verifyAiServiceAuth.py",

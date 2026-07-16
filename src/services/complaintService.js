@@ -658,7 +658,92 @@ async function createComplaintFromPayload(auth, payload) {
   return { analysis, complaint };
 }
 
+async function analyzeImagePreview(payload = {}) {
+  const imagePayload = normalizeImagePayload(payload);
+  if (!imagePayload.imageBase64) {
+    throw createHttpError("Upload an image before requesting visual analysis.", 400);
+  }
+
+  const textComplaint = normalizeLimitedText(payload.textComplaint, "Complaint description", MAX_COMPLAINT_TEXT_LENGTH);
+  const voiceTranscript = normalizeLimitedText(payload.voiceTranscript, "Voice transcript", MAX_VOICE_TRANSCRIPT_LENGTH);
+  const location = normalizeLimitedText(payload.location, "Location", MAX_LOCATION_LENGTH);
+
+  return analyzeComplaint({
+    textComplaint,
+    voiceTranscript,
+    machineImageHint: "",
+    imageFeatures: payload.imageFeatures || null,
+    imageBase64: imagePayload.imageBase64,
+    imageMimeType: imagePayload.imageMimeType,
+    location: location ? `${location}, Bengaluru, Karnataka, India` : "Bengaluru, Karnataka, India",
+    iotTriggered: false,
+    previousComplaints: [],
+    recentAreaComplaints: []
+  });
+}
+
+function summarizeImageAnalysis(analysis = {}) {
+  const cv = analysis.cv || {};
+  const observations = cv.observations || {};
+  const sceneStatus = String(cv.sceneStatus || observations.status || "not_available").toLowerCase();
+  const provider = String(cv.provider || analysis.aiMeta?.visionProvider || "unknown");
+  const fallbackUsed = Boolean(cv.fallbackUsed ?? analysis.aiMeta?.visionFallbackUsed ?? true);
+  const processing = ["loading", "warming_up", "busy"].includes(sceneStatus);
+  const trustedScene = provider === "local-florence-2" && ["available", "timeout"].includes(sceneStatus);
+  const issues = Array.isArray(observations.detectedIssues)
+    ? observations.detectedIssues.slice(0, 5).map((item) => ({
+        categoryId: String(item.categoryId || ""),
+        label: String(item.issue || item.categoryLabel || ""),
+        confidence: Number(item.evidenceScore || 0),
+        evidence: Array.isArray(item.evidence) ? item.evidence.slice(0, 5).map(String) : []
+      }))
+    : [];
+  const description = trustedScene && observations.description && observations.description !== "No reliable scene description was generated."
+    ? String(observations.description)
+    : "";
+  const incident = trustedScene ? String(issues[0]?.label || "") : "";
+  const confidence = trustedScene && incident ? Number(issues[0]?.confidence || cv.score || 0) : 0;
+  const reviewRequired = Boolean(
+    analysis.reviewRequired ||
+      analysis.decision?.reviewRequired ||
+      observations.humanReviewRecommended ||
+      sceneStatus === "timeout" ||
+      (trustedScene && !incident)
+  );
+
+  let status = "unavailable";
+  if (processing) status = "processing";
+  else if (trustedScene && incident && !reviewRequired) status = "complete";
+  else if (trustedScene) status = "needs_review";
+
+  let reason = String(observations.uncertainty?.reason || observations.degradedReason || cv.sceneReason || "").trim();
+  if (processing) reason = "The scene model is still loading. Analysis will retry automatically.";
+  else if (!trustedScene) reason = "The Florence scene model is unavailable, so no visual incident was confirmed.";
+  else if (!incident && !reason) reason = "The scene was described, but no supported civic incident could be confirmed.";
+
+  return {
+    status,
+    sceneStatus,
+    retryable: processing,
+    incident,
+    description,
+    confidence,
+    issues,
+    hazards: Array.isArray(observations.hazards) ? observations.hazards.slice(0, 8).map(String) : [],
+    affectedInfrastructure: Array.isArray(observations.affectedInfrastructure)
+      ? observations.affectedInfrastructure.slice(0, 8).map(String)
+      : [],
+    reviewRequired,
+    reason,
+    provider,
+    model: String(cv.model || observations.model || analysis.aiMeta?.visionEngine || "unknown"),
+    fallbackUsed
+  };
+}
+
 module.exports = {
+  analyzeImagePreview,
+  summarizeImageAnalysis,
   createComplaintFromPayload,
   createHttpError,
   isWithinCityEnvelope

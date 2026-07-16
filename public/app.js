@@ -107,11 +107,8 @@ const incidentClusterPanel = document.getElementById("incidentClusterPanel");
 const locationMapFrame = document.getElementById("locationMapFrame");
 const liveLocationStatus = document.getElementById("liveLocationStatus");
 const pageFooter = document.querySelector(".page-footer");
-const postSubmitOverlay = document.getElementById("postSubmitOverlay");
-const closePostSubmitBtn = document.getElementById("closePostSubmitBtn");
 const postSubmitSummary = document.getElementById("postSubmitSummary");
-const modalGeneratePdfBtn = document.getElementById("modalGeneratePdfBtn");
-const modalEmailBbmpBtn = document.getElementById("modalEmailBbmpBtn");
+const reportResultPanel = document.getElementById("reportResultPanel");
 const informClosedOnesBtn = document.getElementById("informClosedOnesBtn");
 const closeContactsForm = document.getElementById("closeContactsForm");
 const sendCloseContactsBtn = document.getElementById("sendCloseContactsBtn");
@@ -127,9 +124,9 @@ const draftStorageKey = "smart-community-report-draft-v1";
 let authState = null;
 let authMode = "login";
 let currentImageFeatures = null;
-let currentImageInsight = null;
 let currentImageDataUrl = null;
 let currentImageAiPayload = null;
+let imageAnalysisRequestId = 0;
 const dialogReturnFocus = new WeakMap();
 
 function focusDialog(dialog) {
@@ -152,7 +149,6 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && dialog !== authOverlay) {
     event.preventDefault();
     if (dialog === faqOverlay) closeFaqOverlay();
-    if (dialog === postSubmitOverlay) closePostSubmitOverlay();
     if (dialog === complaintDetailOverlay) closeComplaintDetailOverlay();
     return;
   }
@@ -670,7 +666,7 @@ function closeAuthOverlay() {
   authOverlay.hidden = true;
   restoreDialogFocus(authOverlay);
   document.body.classList.remove("auth-screen-active");
-  if (faqOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
+  if (faqOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
 }
@@ -688,7 +684,7 @@ function openFaqOverlay() {
 function closeFaqOverlay() {
   faqOverlay.hidden = true;
   restoreDialogFocus(faqOverlay);
-  if (authOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
+  if (authOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
 }
@@ -717,33 +713,9 @@ function renderPostSubmitSummary(report) {
     .join("");
 }
 
-function openPostSubmitOverlay(report) {
-  if (!postSubmitOverlay) {
-    return;
-  }
-
+function showInlineReportResult(report) {
   renderPostSubmitSummary(report);
-  closeContactsForm.hidden = true;
-  closeContactsForm.reset();
-  closeContactsMessage.textContent = "";
-  postSubmitOverlay.hidden = false;
-  document.body.classList.add("auth-open");
-  focusDialog(postSubmitOverlay);
-}
-
-function closePostSubmitOverlay() {
-  if (!postSubmitOverlay) {
-    return;
-  }
-
-  postSubmitOverlay.hidden = true;
-  restoreDialogFocus(postSubmitOverlay);
-  closeContactsForm.hidden = true;
-  closeContactsForm.reset();
-  closeContactsMessage.textContent = "";
-  if (authOverlay?.hidden !== false && faqOverlay?.hidden !== false && complaintDetailOverlay?.hidden !== false) {
-    document.body.classList.remove("auth-open");
-  }
+  if (reportResultPanel) reportResultPanel.hidden = false;
 }
 
 const viewTargets = {
@@ -947,16 +919,6 @@ function setupRevealAnimations() {
   );
 
   revealElements.forEach((element) => observer.observe(element));
-}
-
-function setupHeroStorytelling() {
-  const storySection = document.querySelector(".hero-story");
-  if (!storySection) {
-    return;
-  }
-
-  storySection.style.setProperty("--story-progress", "0");
-  storySection.dataset.storyStep = "static";
 }
 
 function setupAboutVideoExperience() {
@@ -1406,6 +1368,7 @@ function buildGoogleMapsEmbedUrl(location, mapLocation) {
 function setPdfButtonState(enabled) {
   generatePdfBtn.disabled = !enabled;
   emailBbmpBtn.disabled = !enabled;
+  informClosedOnesBtn.disabled = !enabled;
 }
 
 function setEmailProgress(value, label) {
@@ -1418,6 +1381,39 @@ function setEmailProgress(value, label) {
   }
 }
 
+function beginSubmissionProgress(hasImage) {
+  clearEmailProgressTimer();
+  emailProgress.dataset.state = "working";
+  const stages = hasImage
+    ? [
+        [8, "Uploading image evidence..."],
+        [24, "Analyzing the visible scene..."],
+        [46, "Checking hazards and confidence..."],
+        [66, "Selecting the ward and department..."],
+        [82, "Saving the complaint..."],
+        [90, "Preparing report actions..."]
+      ]
+    : [
+        [10, "Analyzing complaint details..."],
+        [42, "Checking hazards and confidence..."],
+        [68, "Selecting the ward and department..."],
+        [86, "Saving the complaint..."]
+      ];
+  let index = 0;
+  setEmailProgress(stages[0][0], stages[0][1]);
+  emailProgressTimer = window.setInterval(() => {
+    index = Math.min(index + 1, stages.length - 1);
+    setEmailProgress(stages[index][0], stages[index][1]);
+    if (index === stages.length - 1) clearEmailProgressTimer();
+  }, 1800);
+}
+
+function finishReportProgress(success, label) {
+  clearEmailProgressTimer();
+  emailProgress.dataset.state = success ? "success" : "error";
+  setEmailProgress(100, label || (success ? "Completed successfully." : "The operation could not be completed."));
+}
+
 function clearEmailProgressTimer() {
   if (emailProgressTimer) {
     window.clearInterval(emailProgressTimer);
@@ -1427,6 +1423,7 @@ function clearEmailProgressTimer() {
 
 function beginEmailProgress() {
   clearEmailProgressTimer();
+  emailProgress.dataset.state = "working";
   setEmailProgress(6, "Preparing complaint report...");
   emailProgressTimer = window.setInterval(() => {
     const current = Number.parseInt(emailProgressFill.style.width, 10) || 0;
@@ -1451,14 +1448,7 @@ function beginEmailProgress() {
 }
 
 function finishEmailProgress(success = true) {
-  clearEmailProgressTimer();
-  setEmailProgress(100, success ? "Complaint email sent successfully." : "Complaint email could not be sent.");
-  window.setTimeout(() => {
-    emailProgress.hidden = true;
-    emailProgressFill.style.width = "0%";
-    emailProgressValue.textContent = "0%";
-    emailProgressLabel.textContent = "Preparing complaint email...";
-  }, success ? 2200 : 2600);
+  finishReportProgress(success, success ? "Complaint email sent successfully." : "Complaint email could not be sent.");
 }
 
 function updateLiveLocationMap(location, mapQuery = location) {
@@ -1524,13 +1514,6 @@ async function reverseGeocodeLiveLocation(latitude, longitude) {
   return formatReverseGeocodedLocation(data, latitude, longitude);
 }
 
-function updateLiveLocationMapFromCoordinates(latitude, longitude) {
-  const formatted = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-  locationMapFrame.hidden = false;
-  locationMapFrame.src = `https://www.google.com/maps?q=${encodeURIComponent(formatted)}&output=embed`;
-  liveLocationStatus.textContent = `Showing live location preview for ${formatted}.`;
-}
-
 function showTypedLocationOnMap() {
   const location = reportLocationInput.value.trim();
 
@@ -1589,157 +1572,6 @@ function useLiveLocation() {
   );
 }
 
-const IMAGE_INCIDENT_PROFILES = [
-  {
-    id: "safety_fire",
-    label: "Potential fire, smoke, or gas hazard",
-    issueType: "Gas Leak / Fire Risk",
-    score(features) {
-      return clampImageScore(features.redHeatRatio * 1.2 + features.smokeLikeRatio * 1.05 + features.hotspotRatio * 0.9 + features.darkRatio * 0.12);
-    }
-  },
-  {
-    id: "road_damage",
-    label: "Road damage, pothole, or crack-like structure",
-    issueType: "Road Damage",
-    score(features) {
-      return clampImageScore(features.edgeDensity * 0.92 + features.contrast * 0.72 + features.darkRatio * 0.32 + (1 - features.averageBrightness) * 0.22 - features.greenRatio * 0.12);
-    }
-  },
-  {
-    id: "tree_obstruction",
-    label: "Tree, branch, or vegetation obstruction on the roadway",
-    issueType: "Tree / Obstruction on Road",
-    score(features) {
-      return clampImageScore(features.greenRatio * 1.36 + features.averageSaturation * 0.22 + features.edgeDensity * 0.22 + features.contrast * 0.14 - features.blueRatio * 0.1);
-    }
-  },
-  {
-    id: "garbage",
-    label: "Garbage, waste, or clutter accumulation",
-    issueType: "Garbage Overflow",
-    score(features) {
-      return clampImageScore(features.edgeDensity * 0.34 + features.averageSaturation * 0.22 + features.contrast * 0.24 + features.darkRatio * 0.14 + features.neutralRatio * 0.12 - features.greenRatio * 0.18);
-    }
-  },
-  {
-    id: "sewage_overflow",
-    label: "Sewage spill, dirty drain overflow, or open manhole hazard",
-    issueType: "Sewage / Manhole Overflow",
-    score(features) {
-      return clampImageScore(features.neutralRatio * 0.34 + features.darkRatio * 0.3 + features.contrast * 0.18 + (1 - features.blueRatio) * 0.18 + (1 - features.averageBrightness) * 0.12);
-    }
-  },
-  {
-    id: "water_drainage",
-    label: "Waterlogging, drainage overflow, or wet surface pattern",
-    issueType: "Drainage / Waterlogging",
-    score(features) {
-      return clampImageScore(features.blueRatio * 0.92 + features.neutralRatio * 0.42 + (1 - features.averageSaturation) * 0.22 + features.averageBrightness * 0.1 - features.greenRatio * 0.42);
-    }
-  },
-  {
-    id: "wall_damage",
-    label: "Cracked wall, ceiling damage, or structural surface defect",
-    issueType: "Wall / Building Damage",
-    score(features) {
-      return clampImageScore(features.edgeDensity * 0.4 + features.contrast * 0.26 + features.neutralRatio * 0.28 + features.darkRatio * 0.14 + (1 - features.averageSaturation) * 0.12);
-    }
-  },
-  {
-    id: "utility_fault",
-    label: "Utility or public asset fault",
-    issueType: "Utility Fault",
-    score(features) {
-      return clampImageScore(features.edgeDensity * 0.22 + features.hotspotRatio * 0.24 + features.averageBrightness * 0.12 + (1 - features.greenRatio) * 0.08);
-    }
-  },
-  {
-    id: "water_leakage",
-    label: "Leakage, pipe burst, or continuous water seepage pattern",
-    issueType: "Water Leakage / Pipe Burst",
-    score(features) {
-      return clampImageScore(features.blueRatio * 0.42 + features.neutralRatio * 0.26 + features.averageBrightness * 0.14 + features.edgeDensity * 0.12 + features.contrast * 0.08);
-    }
-  },
-  {
-    id: "animal_intrusion",
-    label: "Animal intrusion or stray animal obstruction",
-    issueType: "Stray Animal / Animal Menace",
-    score(features) {
-      return clampImageScore(features.contrast * 0.16 + features.edgeDensity * 0.18 + features.darkRatio * 0.08 + features.greenRatio * 0.08);
-    }
-  },
-  {
-    id: "vehicle_obstruction",
-    label: "Vehicle obstruction, illegal parking, or blocked access",
-    issueType: "Vehicle Obstruction / Illegal Parking",
-    score(features) {
-      return clampImageScore(features.edgeDensity * 0.2 + features.contrast * 0.18 + features.darkRatio * 0.12 + features.neutralRatio * 0.1 + (1 - features.greenRatio) * 0.08);
-    }
-  }
-];
-
-function clampImageScore(value) {
-  return Math.max(0, Math.min(1, Number(value) || 0));
-}
-
-function rankImageIncidentCandidates(features) {
-  if (!features) return [];
-
-  const vegetationStrength = clampImageScore(
-    features.greenRatio * 1.2 + features.averageSaturation * 0.24 + features.edgeDensity * 0.16 - features.blueRatio * 0.08
-  );
-  const structuralStrength = clampImageScore(
-    features.edgeDensity * 0.42 + features.neutralRatio * 0.34 + features.contrast * 0.26 + (1 - features.averageSaturation) * 0.18
-  );
-  const dirtyWaterStrength = clampImageScore(
-    features.neutralRatio * 0.6 + features.darkRatio * 0.44 + (1 - features.blueRatio) * 0.24 + (1 - features.averageBrightness) * 0.18
-  );
-
-  return IMAGE_INCIDENT_PROFILES.map((profile) => {
-    let confidence = profile.score(features);
-
-    if (profile.id === "tree_obstruction" && vegetationStrength > 0.2) {
-      confidence = clampImageScore(confidence + 0.18 + vegetationStrength * 0.22);
-    }
-    if (profile.id === "garbage" && vegetationStrength > 0.2) {
-      confidence = clampImageScore(confidence - (0.12 + vegetationStrength * 0.18));
-    }
-    if (profile.id === "water_drainage" && features.greenRatio > 0.22) {
-      confidence = clampImageScore(confidence - (0.12 + features.greenRatio * 0.16));
-    }
-    if (profile.id === "sewage_overflow" && dirtyWaterStrength > 0.22) {
-      confidence = clampImageScore(confidence + 0.14 + dirtyWaterStrength * 0.16);
-    }
-    if (profile.id === "wall_damage" && structuralStrength > 0.24) {
-      confidence = clampImageScore(confidence + 0.1 + structuralStrength * 0.14);
-    }
-
-    return {
-      ...profile,
-      confidence: Number(confidence.toFixed(2))
-    };
-  })
-    .filter((candidate) => candidate.confidence > 0)
-    .sort((left, right) => right.confidence - left.confidence);
-}
-
-function describeImageFromFeatures(features) {
-  if (!features) {
-    return {
-      description: "Upload an image to attach visual evidence.",
-      accuracy: 0,
-      candidates: []
-    };
-  }
-  return {
-    description: "Image ready for server vision analysis.",
-    accuracy: 0,
-    candidates: []
-  };
-}
-
 async function apiRequest(path, options = {}) {
   let response;
 
@@ -1788,13 +1620,14 @@ function renderRecentComplaints(complaints) {
     .slice(0, 3)
     .map(
       (complaint) => `
-        <div class="mini-item">
-          <div>
+        <button type="button" class="mini-item" data-complaint-id="${escapeHtml(complaint._id || "")}">
+          <div class="mini-item-copy">
             <strong>${escapeHtml(complaint.type)}</strong>
-            <span>${escapeHtml(complaint.location)}</span>
+            <span class="mini-item-location">${escapeHtml(complaint.location)}</span>
+            <span class="mini-item-meta">${escapeHtml(complaint.status || "Queued")} · ${escapeHtml(formatDateTime(complaint.createdAt))}</span>
           </div>
           <span class="mini-chevron">›</span>
-        </div>
+        </button>
       `
     )
     .join("");
@@ -2297,27 +2130,17 @@ function renderAnalysis(result) {
   const broadcastText = result.broadcast?.triggered ? ` Emergency broadcast ${result.broadcast.status}.` : "";
   const weatherText = result.weather?.note ? ` Weather context: ${result.weather.note}` : "";
   const threatText = result.threatAssessment?.threatLevel ? ` Threat level: ${result.threatAssessment.threatLevel}.` : "";
-  const visualFinding = result.cv?.detected;
-  const observations = result.cv?.observations || {};
-  const detectedIssue = visualFinding && !["No image uploaded", "Image uploaded; incident unclear"].includes(visualFinding)
-    ? visualFinding
-    : result.nlp?.issueType || "Civic issue requiring review";
+  const imageAnalysis = result.imageAnalysis || {};
+  const detectedIssue = imageAnalysis.incident || result.nlp?.issueType || "Civic issue requiring review";
   setDashboardMessage(
     `Complaint logged with ${result.priority.level} severity and routed to ${result.assignedAuthority}.${routeText} Detected issue: ${detectedIssue}.${threatText}${reviewText}${broadcastText}${weatherText}`,
     result.explainability?.reviewRequired ? "info" : "success"
   );
-  if (observations.description) {
-    aiAccuracyStatus.textContent = observations.humanReviewRecommended
-      ? `Scene analyzed, but confirmation is recommended: ${observations.description}`
-      : `Scene analyzed: ${observations.description}`;
-  }
+  if (result.cv?.detected !== "No image uploaded") renderImageAnalysisResult(imageAnalysis);
 }
 
 function buildSubmittedReport(payload, result) {
-  const finalAiDescription =
-    result.cv?.detected && result.cv.detected !== "No image uploaded"
-      ? result.cv.detected
-      : result.nlp?.issueType || payload.imageHint || "No AI description generated.";
+  const finalAiDescription = result.imageAnalysis?.incident || result.nlp?.issueType || "No confirmed visual incident.";
 
   return {
     complaintId: result.complaintId || "Pending",
@@ -2348,6 +2171,7 @@ function buildSubmittedReport(payload, result) {
     areaIntelligence: result.areaIntelligence || result.explainability?.areaIntelligence || null,
     threatAssessment: result.threatAssessment || result.explainability?.threatAssessment || result.cv?.threatAssessment || null,
     visualObservations: result.cv?.observations || result.explainability?.visualObservations || null,
+    imageAnalysis: result.imageAnalysis || null,
     status: result.status || "Queued",
     detection: result.cv?.detected || "No image analysis available",
     cvReason: result.cv?.reason || "Local AI matched the uploaded issue against known civic patterns.",
@@ -2364,7 +2188,7 @@ function closeComplaintDetailOverlay() {
   if (!complaintDetailOverlay) return;
   complaintDetailOverlay.hidden = true;
   restoreDialogFocus(complaintDetailOverlay);
-  if (authOverlay?.hidden !== false && faqOverlay?.hidden !== false && postSubmitOverlay?.hidden !== false) {
+  if (authOverlay?.hidden !== false && faqOverlay?.hidden !== false) {
     document.body.classList.remove("auth-open");
   }
 }
@@ -4279,17 +4103,6 @@ function toReadableTranscriptionError(error) {
   return message;
 }
 
-function combineTranscriptionErrors(primaryError, fallbackError) {
-  const primary = toReadableTranscriptionError(primaryError);
-  const fallback = toReadableTranscriptionError(fallbackError);
-
-  if (primary && fallback && primary !== fallback) {
-    return `${primary} Browser fallback also failed: ${fallback}`;
-  }
-
-  return primary || fallback || "Audio transcription failed. Type the complaint summary manually.";
-}
-
 function getSupportedRecordingMimeType() {
   if (!window.MediaRecorder) {
     return "";
@@ -4365,7 +4178,7 @@ async function readFileAsDataUrl(file) {
   });
 }
 
-async function transcribeVoiceAudio(sourceFile) {
+async function transcribeVoiceAudio() {
   try {
     if (!currentVoiceAudioData?.dataUrl) {
       throw new Error("No voice recording is available for transcription.");
@@ -4388,30 +4201,9 @@ async function transcribeVoiceAudio(sourceFile) {
     updateVoiceTranscriptValue(result.transcript);
     voiceTranscriptStatus.textContent = "Recording transcribed by Deepgram. Review the text before submitting.";
   } catch (serviceError) {
-    if (!window.browserAudioTranscriber?.transcribeAudioFile) {
-      voiceTranscriptStatus.textContent =
-        toReadableTranscriptionError(serviceError);
-      return;
-    }
-
-    try {
-      voiceTranscriptStatus.textContent = "Deepgram is unavailable. Falling back to browser transcription...";
-      const browserResult = await window.browserAudioTranscriber.transcribeAudioFile(sourceFile, (statusText) => {
-        voiceTranscriptStatus.textContent = statusText;
-      });
-
-      if (!browserResult.text) {
-        throw new Error("No transcript text was produced. Type the complaint summary manually.");
-      }
-
-      updateVoiceTranscriptValue(browserResult.text);
-      voiceTranscriptStatus.textContent =
-        "Recording transcribed in the browser fallback. Review the text before submitting.";
-    } catch (browserError) {
-      const finalError = combineTranscriptionErrors(serviceError, browserError);
-      voiceTranscriptStatus.textContent = finalError;
-      setDashboardMessage(finalError, "error");
-    }
+    const message = toReadableTranscriptionError(serviceError);
+    voiceTranscriptStatus.textContent = message;
+    setDashboardMessage(message, "error");
   }
 }
 
@@ -4490,7 +4282,7 @@ async function startVoiceRecording() {
             detail: { state: "processing" }
           })
         );
-        await transcribeVoiceAudio(recordingFile);
+        await transcribeVoiceAudio();
       });
 
       voiceRecordingStartedAt = Date.now();
@@ -4778,21 +4570,28 @@ async function loadDashboard() {
 
 function resetComposer({ clearDraft = true } = {}) {
   form.reset();
+  imageAnalysisRequestId += 1;
   uploadPreview.hidden = true;
   imagePreview.removeAttribute("src");
   imageName.textContent = "No image selected";
   imageHintText.textContent = "AI visual inspection will appear here after upload.";
   aiImageDescription.value = "";
-  aiAccuracyStatus.textContent = "Upload an image to attach visual evidence.";
-    currentImageFeatures = null;
-    currentImageInsight = null;
+  aiAccuracyStatus.textContent = "Upload an image to analyze the visible scene.";
+  currentImageFeatures = null;
   currentImageDataUrl = null;
   currentImageAiPayload = null;
   clearEmailProgressTimer();
   emailProgress.hidden = true;
+  emailProgress.dataset.state = "";
   emailProgressFill.style.width = "0%";
   emailProgressValue.textContent = "0%";
-  emailProgressLabel.textContent = "Preparing complaint email...";
+  emailProgressLabel.textContent = "Preparing report...";
+  if (reportResultPanel) reportResultPanel.hidden = true;
+  if (closeContactsForm) {
+    closeContactsForm.hidden = true;
+    closeContactsForm.reset();
+  }
+  if (closeContactsMessage) closeContactsMessage.textContent = "";
   updateLiveLocationMap("");
   clearVoiceAudioSelection();
   updateVoiceTranscriptValue("");
@@ -4813,15 +4612,6 @@ function loadImageElement(file) {
       image.src = reader.result;
     };
     reader.onerror = () => reject(new Error("Unable to load the uploaded file."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("Unable to prepare the uploaded image for PDF export."));
     reader.readAsDataURL(file);
   });
 }
@@ -4934,8 +4724,76 @@ async function extractImageFeatures(file) {
   };
 }
 
+function formatImageAnalysisResult(imageAnalysis = {}) {
+  const lines = [];
+  if (imageAnalysis.incident) lines.push(`Incident: ${imageAnalysis.incident}`);
+  if (imageAnalysis.description) lines.push(`Scene: ${imageAnalysis.description}`);
+  if (imageAnalysis.hazards?.length) lines.push(`Hazards: ${imageAnalysis.hazards.join(", ")}`);
+  return lines.join("\n") || imageAnalysis.reason || "No visual incident could be confirmed from this image.";
+}
+
+function renderImageAnalysisResult(imageAnalysis = {}) {
+  const rawConfidence = Number(imageAnalysis.confidence || 0);
+  const confidence = rawConfidence > 0 && rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence;
+  aiImageDescription.value = formatImageAnalysisResult(imageAnalysis);
+
+  if (imageAnalysis.status === "complete") {
+    aiAccuracyStatus.textContent = `Visual incident confirmed${confidence ? ` (${Math.round(confidence)}% confidence)` : ""} by ${imageAnalysis.model || "the scene model"}.`;
+  } else if (imageAnalysis.status === "needs_review") {
+    aiAccuracyStatus.textContent = `The scene was analyzed, but the incident needs confirmation${confidence ? ` (${Math.round(confidence)}% confidence)` : ""}.`;
+  } else if (imageAnalysis.status === "processing") {
+    aiAccuracyStatus.textContent = imageAnalysis.reason || "The scene model is loading. Analysis will retry automatically.";
+  } else {
+    aiAccuracyStatus.textContent = imageAnalysis.reason || "The scene model is unavailable. The photo will still be attached to the complaint.";
+  }
+}
+
+function waitForImageAnalysisRetry(milliseconds) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function analyzePreparedImage(requestId) {
+  if (!currentImageAiPayload) {
+    throw new Error("The image could not be prepared for analysis.");
+  }
+
+  aiImageDescription.value = "Analyzing the uploaded image...";
+  aiAccuracyStatus.textContent = "Sending the image to the server vision model...";
+  showAiAccuracyBtn.disabled = true;
+
+  try {
+    const requestBody = JSON.stringify({
+      textComplaint: String(typedComplaintInput?.value || "").trim(),
+      voiceTranscript: String(voiceTranscriptInput?.value || "").trim(),
+      location: String(reportLocationInput?.value || "").trim(),
+      imageFeatures: currentImageFeatures,
+      imageBase64: currentImageAiPayload.base64,
+      imageMimeType: currentImageAiPayload.mimeType
+    });
+
+    let analysis = null;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      analysis = await apiRequest("/api/analyze-image", { method: "POST", body: requestBody });
+      if (requestId !== imageAnalysisRequestId) return;
+      const imageAnalysis = analysis.imageAnalysis || {};
+      renderImageAnalysisResult(imageAnalysis);
+      if (!imageAnalysis.retryable || imageAnalysis.status !== "processing") break;
+      aiAccuracyStatus.textContent = `Scene model is warming up. Retrying automatically (${attempt + 1}/20)...`;
+      if (attempt === 19) {
+        aiAccuracyStatus.textContent = "The scene model is still loading. Use Check Image Status to retry shortly.";
+        break;
+      }
+      await waitForImageAnalysisRetry(3000);
+      if (requestId !== imageAnalysisRequestId) return;
+    }
+  } finally {
+    if (requestId === imageAnalysisRequestId) showAiAccuracyBtn.disabled = false;
+  }
+}
+
 function setupImageUpload() {
   imageFileInput.addEventListener("change", async () => {
+    const requestId = ++imageAnalysisRequestId;
     const file = imageFileInput.files[0];
     if (!file) {
       uploadPreview.hidden = true;
@@ -4943,7 +4801,6 @@ function setupImageUpload() {
       aiImageDescription.value = "";
       aiAccuracyStatus.textContent = "Upload an image to attach visual evidence.";
       currentImageFeatures = null;
-      currentImageInsight = null;
       currentImageDataUrl = null;
       currentImageAiPayload = null;
       scheduleDraftSave();
@@ -4960,29 +4817,31 @@ function setupImageUpload() {
       currentImageDataUrl = await readFileAsDataUrl(file);
       currentImageAiPayload = await prepareImageForAi(file);
       currentImageFeatures = await extractImageFeatures(file);
-      currentImageInsight = describeImageFromFeatures(currentImageFeatures);
-      aiImageDescription.value = currentImageInsight.description;
-      aiAccuracyStatus.textContent = "Image prepared successfully. Submit the report to run the server vision model.";
+      await analyzePreparedImage(requestId);
       scheduleDraftSave();
     } catch (error) {
+      if (requestId !== imageAnalysisRequestId) return;
       currentImageFeatures = null;
-      currentImageInsight = null;
-      currentImageDataUrl = null;
-      currentImageAiPayload = null;
-      aiImageDescription.value = "AI could not inspect this image.";
-      aiAccuracyStatus.textContent = error.message;
+      aiImageDescription.value = "Image analysis is temporarily unavailable. You can still submit the complaint with the photo.";
+      aiAccuracyStatus.textContent = `Image analysis could not complete: ${error.message}`;
       scheduleDraftSave();
     }
   });
 }
 
-showAiAccuracyBtn.addEventListener("click", () => {
-  if (!currentImageInsight) {
+showAiAccuracyBtn.addEventListener("click", async () => {
+  if (!currentImageAiPayload) {
     aiAccuracyStatus.textContent = "Upload an image first to run image-only detection.";
     return;
   }
 
-  aiAccuracyStatus.textContent = "The browser only validates and prepares the image. Incident classification runs on the server when you submit.";
+  const requestId = ++imageAnalysisRequestId;
+  try {
+    await analyzePreparedImage(requestId);
+  } catch (error) {
+    if (requestId !== imageAnalysisRequestId) return;
+    aiAccuracyStatus.textContent = `Image analysis could not complete: ${error.message}`;
+  }
 });
 
 showLoginBtn.addEventListener("click", () => openAuthOverlay("login"));
@@ -5014,10 +4873,7 @@ openFaqLink?.addEventListener("click", (event) => {
   openFaqOverlay();
 });
 closeFaqBtn?.addEventListener("click", closeFaqOverlay);
-closePostSubmitBtn?.addEventListener("click", closePostSubmitOverlay);
 closeComplaintDetailBtn?.addEventListener("click", closeComplaintDetailOverlay);
-modalGeneratePdfBtn?.addEventListener("click", () => generatePdfBtn.click());
-modalEmailBbmpBtn?.addEventListener("click", () => emailBbmpBtn.click());
 informClosedOnesBtn?.addEventListener("click", () => {
   closeContactsForm.hidden = false;
   closeContactsMessage.textContent = "Add at least one email ID, up to 5.";
@@ -5046,6 +4902,8 @@ closeContactsForm?.addEventListener("submit", async (event) => {
 
     sendCloseContactsBtn.disabled = true;
     closeContactsMessage.textContent = "Sending warning email...";
+    emailProgress.dataset.state = "working";
+    setEmailProgress(36, "Preparing contact notifications...");
     const response = await apiRequest("/api/inform-close-contacts", {
       method: "POST",
       body: JSON.stringify({
@@ -5055,10 +4913,12 @@ closeContactsForm?.addEventListener("submit", async (event) => {
     });
 
     closeContactsMessage.textContent = response.message || "Close contacts were informed successfully.";
+    finishReportProgress(true, "Contact notifications sent successfully.");
     setDashboardMessage(closeContactsMessage.textContent, "success");
     closeContactsForm.reset();
   } catch (error) {
     closeContactsMessage.textContent = error.message;
+    finishReportProgress(false, "Contact notifications could not be sent.");
     setDashboardMessage(error.message, "error");
   } finally {
     sendCloseContactsBtn.disabled = false;
@@ -5067,9 +4927,13 @@ closeContactsForm?.addEventListener("submit", async (event) => {
 localAlertsForm?.addEventListener("submit", saveLocalAlertPreferences);
 generatePdfBtn.addEventListener("click", async () => {
   try {
+    emailProgress.dataset.state = "working";
+    setEmailProgress(18, "Generating complaint PDF...");
     const result = await generatePdfReport(lastSubmittedReport, { download: true });
+    finishReportProgress(true, `PDF generated as ${result.filename}.`);
     setDashboardMessage(`Complaint report PDF downloaded as ${result.filename}.`, "success");
   } catch (error) {
+    finishReportProgress(false, "Complaint PDF could not be generated.");
     setDashboardMessage(error.message, "error");
   }
 });
@@ -5216,7 +5080,6 @@ authForm.addEventListener("submit", async (event) => {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  let analysisStageTimer = null;
 
   try {
     complaintSubmitBtn.disabled = true;
@@ -5241,16 +5104,7 @@ form.addEventListener("submit", async (event) => {
     // Browser pixel statistics are transport metadata, never trusted semantic evidence.
     payload.imageHint = "";
     showTypedLocationOnMap();
-
-    const analysisStages = imageAiPayload
-      ? ["Uploading image evidence...", "AI service may be waking up...", "Analyzing the visible scene...", "Checking civic hazards...", "Comparing the image with the complaint..."]
-      : ["Analyzing complaint text...", "Checking civic hazards...", "Preparing the routing decision..."];
-    let stageIndex = 0;
-    aiAccuracyStatus.textContent = analysisStages[stageIndex];
-    analysisStageTimer = window.setInterval(() => {
-      stageIndex = Math.min(stageIndex + 1, analysisStages.length - 1);
-      aiAccuracyStatus.textContent = analysisStages[stageIndex];
-    }, 3500);
+    beginSubmissionProgress(Boolean(imageAiPayload));
 
     const result = await apiRequest("/api/analyze-complaint", {
       method: "POST",
@@ -5261,15 +5115,22 @@ form.addEventListener("submit", async (event) => {
     setPdfButtonState(true);
     resetComposer();
     renderAnalysis(result);
-    openPostSubmitOverlay(lastSubmittedReport);
+    showInlineReportResult(lastSubmittedReport);
+    finishReportProgress(true, "Complaint submitted. Report actions are ready.");
     await loadDashboard();
   } catch (error) {
     aiAccuracyStatus.textContent = `Analysis could not complete: ${error.message}`;
+    finishReportProgress(false, `Complaint could not be submitted: ${error.message}`);
     setDashboardMessage(error.message, "error");
   } finally {
-    if (analysisStageTimer) window.clearInterval(analysisStageTimer);
     updateComplaintSubmitAvailability();
   }
+});
+
+document.getElementById("recentComplaints")?.addEventListener("click", (event) => {
+  const complaintItem = event.target.closest(".mini-item[data-complaint-id]");
+  const complaintId = complaintItem?.dataset.complaintId;
+  if (complaintId) openComplaintDetail(complaintId);
 });
 
 resetDashboardBtn.addEventListener("click", async () => {
@@ -5304,7 +5165,6 @@ setupImageUpload();
 setupComplaintInputMode();
 setupMobileMenu();
 setupRevealAnimations();
-setupHeroStorytelling();
 setupAboutVideoExperience();
 setupAppNavigation();
 setupGooeyInteractions();

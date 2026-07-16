@@ -21,7 +21,7 @@ const checks = [
   ["dataset", "python3", ["scripts/verifyBenchmarkDataset.py"]],
   ["metrics", "python3", ["scripts/verifyBenchmarkMetrics.py"]],
   ["ai-service", "python3", ["scripts/evaluateAiService.py"]],
-  ["python-syntax", "python3", ["-m", "compileall", "-q", "ai_service", "stt_service", "scripts"]]
+  ["python-syntax", "python3", ["-m", "compileall", "-q", "ai_service", "scripts"]]
 ];
 
 const results = [];
