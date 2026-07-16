@@ -14,6 +14,7 @@ from pipeline import run_hybrid_pipeline
 from scene_observations import build_scene_observations
 from vision_analysis import decode_image_payload
 from ai_config import VISION_MAX_IMAGE_BYTES
+from memory_runtime import memory_pressure
 
 
 def sample_image(size=(320, 240), color=(110, 120, 125)):
@@ -109,6 +110,14 @@ class VisionValidationTests(unittest.TestCase):
         self.assertIsNone(image)
         self.assertIn("upload limit", reason)
 
+    def test_large_image_is_downscaled_during_decode(self):
+        image, payload = sample_image(size=(3000, 2400))
+        decoded, _hash, reason = decode_image_payload(payload, "image/jpeg")
+        self.assertEqual(reason, "")
+        self.assertLessEqual(max(decoded.size), 2048)
+        decoded.close()
+        image.close()
+
 
 class FlorenceCacheTests(unittest.TestCase):
     def test_identical_image_uses_bounded_cache(self):
@@ -124,17 +133,39 @@ class FlorenceCacheTests(unittest.TestCase):
         self.assertTrue(second["cacheHit"])
         self.assertEqual(task.call_count, 1)
 
+    def test_unsafe_memory_budget_prevents_model_load(self):
+        runtime = FlorenceRuntime()
+        with (
+            patch("florence_runtime.FLORENCE_ENABLED", True),
+            patch("florence_runtime.AI_MEMORY_BUDGET_MB", 512),
+            patch("florence_runtime.FLORENCE_MIN_MEMORY_MB", 1400),
+        ):
+            self.assertFalse(runtime.request_load(background=False))
+        self.assertEqual(runtime.state, "unavailable")
+        self.assertIn("below the safe Florence minimum", runtime.error)
+
+
+class MemoryRuntimeTests(unittest.TestCase):
+    def test_memory_status_is_safe_and_serializable(self):
+        status = memory_pressure()
+        self.assertIn("rssMb", status)
+        self.assertIn("pressured", status)
+        if sys.platform.startswith("linux"):
+            self.assertGreater(status["rssMb"], 0)
+
 
 class PipelineIntegrationTests(unittest.TestCase):
     def test_upload_to_observations_threat_and_decision(self):
         _image, payload = sample_image()
         scene = {
             "status": "available",
+            "provider": "local-florence-2",
+            "model": "microsoft/Florence-2-base-ft",
             "description": "An exposed wire emits sparks above standing water on a flooded road.",
             "cacheHit": False,
             "inferenceMs": 120,
         }
-        with patch("vision_analysis.florence_runtime.analyze", return_value=scene):
+        with patch("vision_analysis.vision_provider_chain.analyze", return_value=scene):
             result = run_hybrid_pipeline(
                 {
                     "textComplaint": "",
@@ -157,8 +188,8 @@ class PipelineIntegrationTests(unittest.TestCase):
     def test_model_unavailable_degrades_without_crashing(self):
         _image, payload = sample_image()
         with patch(
-            "vision_analysis.florence_runtime.analyze",
-            return_value={"status": "unavailable", "reason": "mock unavailable", "cacheHit": False},
+            "vision_analysis.vision_provider_chain.analyze",
+            return_value={"status": "unavailable", "provider": "human-review-fallback", "reason": "mock unavailable", "cacheHit": False, "fallbackUsed": True},
         ):
             result = run_hybrid_pipeline(
                 {

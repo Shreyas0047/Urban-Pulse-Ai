@@ -162,13 +162,13 @@ def build_image_integrity(image_base64, image, image_mime_type):
 
     if raw and Image is not None:
         try:
-            original = Image.open(io.BytesIO(raw))
-            image_format = original.format or ""
-            width = original.width
-            height = original.height
-            exif = original.getexif()
-            metadata_present = bool(exif)
-            gps_present = 34853 in exif if exif else False
+            with Image.open(io.BytesIO(raw)) as original:
+                image_format = original.format or ""
+                width = original.width
+                height = original.height
+                exif = original.getexif()
+                metadata_present = bool(exif)
+                gps_present = 34853 in exif if exif else False
         except Exception:
             notes.append("Image bytes were received but metadata could not be inspected.")
 

@@ -55,7 +55,8 @@ assert.equal(untrustedFallback.confidence, 0);
 
 const trustedScene = summarizeImageAnalysis({
   cv: {
-    provider: "local-florence-2",
+    schemaVersion: "1.0",
+    provider: "florence-cloud-run",
     model: "microsoft/Florence-2-base-ft",
     fallbackUsed: false,
     sceneStatus: "available",
@@ -72,6 +73,26 @@ const trustedScene = summarizeImageAnalysis({
 assert.equal(trustedScene.status, "complete");
 assert.equal(trustedScene.incident, "Electrical or street-lighting fault");
 assert.equal(trustedScene.confidence, 0.82);
+
+const trustedGeminiScene = summarizeImageAnalysis({
+  cv: {
+    schemaVersion: "1.0",
+    provider: "gemini-vision",
+    model: "gemini-2.5-flash-lite",
+    fallbackUsed: false,
+    sceneStatus: "available",
+    observations: {
+      description: "A fallen tree blocks the road.",
+      detectedIssues: [{ categoryId: "tree_obstruction", issue: "Fallen tree or branch obstruction", evidenceScore: 0.82, evidence: ["fallen tree", "blocking"] }],
+      imageQuality: { status: "usable", limitations: [] },
+      textImageConsistency: { status: "not_provided", reason: "" },
+      humanReviewRecommended: false
+    }
+  },
+  decision: { reviewRequired: false }
+});
+assert.equal(trustedGeminiScene.status, "complete");
+assert.equal(trustedGeminiScene.incident, "Fallen tree or branch obstruction");
 
 const warmingScene = summarizeImageAnalysis({
   cv: { provider: "feature-fallback", fallbackUsed: true, sceneStatus: "warming_up" }

@@ -15,15 +15,16 @@ from ai_config import (
     VISION_CLIP_SECONDARY_ENABLED,
     VISION_CONFIDENCE_THRESHOLD,
     VISION_MAX_IMAGE_BYTES,
+    VISION_DECODE_MAX_DIMENSION,
     VISION_MAX_IMAGE_PIXELS,
     VISION_MODEL_NAME,
 )
 from category_catalog import COMPLAINT_CATEGORIES, CATEGORY_BY_ID
-from florence_runtime import florence_runtime
 from model_runtime import cosine_similarity, get_vision_model
 from scene_observations import build_scene_observations, observation_candidates
 from text_processing import normalize_text
 from threat_intelligence import build_threat_assessment
+from vision_provider import vision_provider_chain
 
 try:
     from PIL import Image
@@ -166,16 +167,19 @@ def decode_image_payload(image_base64, image_mime_type=""):
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
-            probe = Image.open(io.BytesIO(raw))
-            image_format = str(probe.format or "").upper()
-            if image_format not in {"JPEG", "PNG", "WEBP"}:
-                return None, "", "Only JPEG, PNG, and WebP images are supported."
-            expected = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}.get(str(image_mime_type or "").lower())
-            if expected and image_format != expected:
-                return None, "", "The declared image type does not match the uploaded file."
-            probe.verify()
-            image = Image.open(io.BytesIO(raw)).convert("RGB")
-            image.load()
+            with Image.open(io.BytesIO(raw)) as probe:
+                image_format = str(probe.format or "").upper()
+                if image_format not in {"JPEG", "PNG", "WEBP"}:
+                    return None, "", "Only JPEG, PNG, and WebP images are supported."
+                expected = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}.get(str(image_mime_type or "").lower())
+                if expected and image_format != expected:
+                    return None, "", "The declared image type does not match the uploaded file."
+                probe.verify()
+            with Image.open(io.BytesIO(raw)) as source:
+                source.draft("RGB", (VISION_DECODE_MAX_DIMENSION, VISION_DECODE_MAX_DIMENSION))
+                source.thumbnail((VISION_DECODE_MAX_DIMENSION, VISION_DECODE_MAX_DIMENSION))
+                image = source.convert("RGB")
+                image.load()
         return image, hashlib.sha256(raw).hexdigest(), ""
     except (Image.DecompressionBombError, Image.DecompressionBombWarning):
         return None, "", "The image dimensions exceed the safe pixel limit."
@@ -455,9 +459,8 @@ def detect_objects_from_features(
     raw_scene = {"status": "not_provided", "reason": image_error}
     observations = None
     scene_items = []
-    if image is not None and FLORENCE_ENABLED:
-        raw_scene = florence_runtime.analyze(image, image_hash)
-        raw_scene["model"] = FLORENCE_MODEL_NAME
+    if image is not None:
+        raw_scene = vision_provider_chain.analyze(image, image_hash)
         observations = build_scene_observations(raw_scene, image, sanitized_features, image_hint)
         scene_items = observation_candidates(observations)
         LOGGER.info(
@@ -475,7 +478,7 @@ def detect_objects_from_features(
             )
         )
 
-    scene_completed = raw_scene.get("status") in {"available", "timeout"}
+    scene_completed = raw_scene.get("status") == "available"
 
     use_clip = bool(
         image is not None
@@ -505,7 +508,7 @@ def detect_objects_from_features(
     top_detection = detections[0] if detections else None
     # A completed Florence caption is primary vision evidence even when it does not
     # match a supported civic incident. Fallback means the model did not run.
-    fallback_used = not scene_completed
+    fallback_used = bool(raw_scene.get("fallbackUsed", not scene_completed))
     if image is not None and fallback_used:
         LOGGER.info(
             json.dumps(
@@ -540,12 +543,13 @@ def detect_objects_from_features(
         location=location,
     )
 
-    return {
+    result = {
+        "schemaVersion": raw_scene.get("schemaVersion", ""),
         "detections": detections[:6],
         "top_detection": top_detection,
         "candidates": candidates[:5],
-        "model": FLORENCE_MODEL_NAME if scene_completed else (VISION_MODEL_NAME if clip_items else "feature-signals"),
-        "provider": "local-florence-2" if scene_completed else ("local-clip" if clip_items else "feature-fallback"),
+        "model": raw_scene.get("model", FLORENCE_MODEL_NAME) if scene_completed else (VISION_MODEL_NAME if clip_items else "feature-signals"),
+        "provider": raw_scene.get("provider", "local-scene-analysis") if scene_completed else ("local-clip" if clip_items else "feature-fallback"),
         "fallbackUsed": fallback_used,
         "imageAccepted": image is not None,
         "imageMimeType": image_mime_type or "",
@@ -567,6 +571,9 @@ def detect_objects_from_features(
             "threatConfidence": threat_assessment.get("confidence", 0),
         },
     }
+    if image is not None:
+        image.close()
+    return result
 
 
 def map_visual_labels_to_categories(vision_result):

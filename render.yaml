@@ -5,14 +5,53 @@ services:
     plan: free
     rootDir: ai_service
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --workers 1 --threads 4 --timeout 120 app:app
+    startCommand: gunicorn --workers 1 --threads 2 --timeout 120 --max-requests 40 --max-requests-jitter 10 app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: VISION_MODEL_NAME
         value: sentence-transformers/clip-ViT-B-32
-      # Free instances have 512 MB RAM, which cannot safely load Florence-2.
-      # Upgrade this service to Standard (2 GB+) before setting this to true.
+      - key: VISION_PROVIDER_ORDER
+        value: florence,gemini
+      - key: VISION_FALLBACK_ENABLED
+        value: "true"
+      - key: FLORENCE_REMOTE_ENABLED
+        value: "true"
+      - key: FLORENCE_SERVICE_URL
+        sync: false
+      - key: FLORENCE_SERVICE_TOKEN
+        sync: false
+      - key: FLORENCE_TIMEOUT_SECONDS
+        value: "35"
+      - key: FLORENCE_MAX_RETRIES
+        value: "1"
+      - key: FLORENCE_REMOTE_CACHE_SIZE
+        value: "128"
+      - key: FLORENCE_CIRCUIT_FAILURE_THRESHOLD
+        value: "3"
+      - key: FLORENCE_CIRCUIT_COOLDOWN_SECONDS
+        value: "60"
+      - key: GEMINI_VISION_ENABLED
+        value: "true"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL_NAME
+        value: gemini-2.5-flash-lite
+      - key: GEMINI_API_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta
+      - key: GEMINI_TIMEOUT_SECONDS
+        value: "25"
+      - key: GEMINI_MAX_RETRIES
+        value: "1"
+      - key: GEMINI_RATE_LIMIT_PER_MINUTE
+        value: "10"
+      - key: GEMINI_CACHE_SIZE
+        value: "128"
+      - key: GEMINI_MAX_IMAGE_DIMENSION
+        value: "1280"
+      - key: GEMINI_MAX_TRANSMIT_BYTES
+        value: "1500000"
+      # Florence runs on Cloud Run. Never load its weights into this Render service.
       - key: FLORENCE_ENABLED
         value: "false"
       - key: FLORENCE_MODEL_NAME
@@ -21,12 +60,30 @@ services:
         value: 58c9f97c2a8448696851e2cc95eb1b6919493fe4
       - key: FLORENCE_WARMUP
         value: "false"
+      - key: AI_MEMORY_BUDGET_MB
+        value: "512"
+      - key: AI_MEMORY_RESERVE_MB
+        value: "160"
+      - key: AI_MEMORY_CLEANUP_ENABLED
+        value: "true"
+      - key: EMBEDDING_MODEL_ENABLED
+        value: "false"
+      - key: MALLOC_ARENA_MAX
+        value: "2"
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"
       - key: VISION_CLIP_FALLBACK_ENABLED
         value: "false"
       - key: VISION_CONFIDENCE_THRESHOLD
         value: "0.24"
       - key: VISION_MAX_IMAGE_BYTES
         value: "2097152"
+      - key: VISION_MAX_IMAGE_PIXELS
+        value: "12000000"
+      - key: VISION_DECODE_MAX_DIMENSION
+        value: "2048"
       - key: AI_MAX_REQUEST_BYTES
         value: "4194304"
       - key: AI_SERVICE_REQUIRE_TOKEN

@@ -687,9 +687,10 @@ function summarizeImageAnalysis(analysis = {}) {
   const observations = cv.observations || {};
   const sceneStatus = String(cv.sceneStatus || observations.status || "not_available").toLowerCase();
   const provider = String(cv.provider || analysis.aiMeta?.visionProvider || "unknown");
+  const schemaVersion = String(cv.schemaVersion || observations.schemaVersion || "");
   const fallbackUsed = Boolean(cv.fallbackUsed ?? analysis.aiMeta?.visionFallbackUsed ?? true);
   const processing = ["loading", "warming_up", "busy"].includes(sceneStatus);
-  const trustedScene = provider === "local-florence-2" && ["available", "timeout"].includes(sceneStatus);
+  const trustedScene = schemaVersion === "1.0" && sceneStatus === "available";
   const issues = Array.isArray(observations.detectedIssues)
     ? observations.detectedIssues.slice(0, 5).map((item) => ({
         categoryId: String(item.categoryId || ""),
@@ -718,7 +719,7 @@ function summarizeImageAnalysis(analysis = {}) {
 
   let reason = String(observations.uncertainty?.reason || observations.degradedReason || cv.sceneReason || "").trim();
   if (processing) reason = "The scene model is still loading. Analysis will retry automatically.";
-  else if (!trustedScene) reason = "The Florence scene model is unavailable, so no visual incident was confirmed.";
+  else if (!trustedScene) reason = "Visual analysis is unavailable. The photo will remain attached for human review.";
   else if (!incident && !reason) reason = "The scene was described, but no supported civic incident could be confirmed.";
 
   return {
@@ -733,6 +734,12 @@ function summarizeImageAnalysis(analysis = {}) {
     affectedInfrastructure: Array.isArray(observations.affectedInfrastructure)
       ? observations.affectedInfrastructure.slice(0, 8).map(String)
       : [],
+    imageQuality: observations.imageQuality || { status: "unknown", limitations: [] },
+    consistency: observations.textImageConsistency || { status: "not_available", reason: "" },
+    multipleIssues: Boolean(observations.multipleIssues),
+    additionalEvidenceRequired: Boolean(
+      reviewRequired && (!incident || observations.imageQuality?.status === "limited")
+    ),
     reviewRequired,
     reason,
     provider,

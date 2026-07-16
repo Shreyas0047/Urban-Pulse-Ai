@@ -229,17 +229,22 @@ def request_too_large(_error):
 
 @app.get("/health")
 def health():
+    models = runtime_status()
+    providers = models.get("visionProviders", {})
+    florence = providers.get("florenceRemote", {})
+    gemini = providers.get("gemini", {})
+    local = providers.get("localLegacy", {})
     return jsonify(
         {
             "status": "ok",
             "service": "urban-pulse-ai-service",
             "engine": "ai-service-decision-engine-v5",
             "categoryCount": len(COMPLAINT_CATEGORIES),
-            "models": runtime_status(),
+            "models": models,
             "capabilities": {
                 "semanticTextClassification": True,
                 "imageClassification": True,
-                "sceneUnderstanding": FLORENCE_ENABLED,
+                "sceneUnderstanding": bool(florence.get("configured") or gemini.get("configured") or local.get("enabled")),
                 "confidenceCalibration": True,
                 "textImageConflictDetection": True,
                 "structuredExplainability": True,
@@ -254,14 +259,24 @@ def health():
 def readiness():
     models = runtime_status()
     scene = models.get("sceneUnderstanding", {})
-    if not scene.get("enabled") or scene.get("ready"):
+    providers = models.get("visionProviders", {})
+    florence = providers.get("florenceRemote", {})
+    gemini = providers.get("gemini", {})
+    provider_ready = (
+        bool(florence.get("enabled") and florence.get("configured"))
+        or bool(gemini.get("enabled") and gemini.get("configured"))
+        or bool(scene.get("ready"))
+    )
+    if provider_ready or (
+        not florence.get("enabled") and not gemini.get("enabled") and not scene.get("enabled")
+    ):
         status = "ready"
     elif scene.get("state") == "loading":
         status = "warming_up"
     else:
         status = "degraded"
     # HTTP stays healthy because deterministic safety paths remain available in degraded mode.
-    return jsonify({"status": status, "sceneUnderstandingReady": bool(scene.get("ready")), "models": models})
+    return jsonify({"status": status, "visualProviderReady": provider_ready, "sceneUnderstandingReady": bool(scene.get("ready")), "models": models})
 
 
 @app.post("/analyze")

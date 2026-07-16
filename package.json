@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "build:glass": "esbuild src/frontend/liquidGlassBridge.jsx --bundle --format=iife --platform=browser --target=es2020 --minify --outfile=public/liquid-glass-react.js",
-    "start:ai": "FLORENCE_WARMUP=true .venv/bin/python ai_service/app.py",
+    "start:ai": "FLORENCE_WARMUP=false .venv/bin/python ai_service/app.py",
     "seed": "node scripts/seedDatabase.js",
     "seed:fresh": "node scripts/seedDatabase.js --fresh",
     "verify:ai-service-auth": "python3 scripts/verifyAiServiceAuth.py",
@@ -15,6 +15,9 @@
     "verify:community-verification": "node scripts/verifyCommunityVerification.js",
     "verify:image-reasoning": "node scripts/verifyImageReasoning.js",
     "verify:scene-understanding": "python3 -m unittest ai_service/test_scene_understanding.py",
+    "verify:gemini-vision": "python3 -m unittest ai_service/test_gemini_vision.py",
+    "verify:florence-remote": "python3 -m unittest ai_service/test_florence_remote_provider.py",
+    "verify:florence-service": "python3 -m unittest discover -s urban-pulse-florence/tests -v",
     "verify:smtp": "node scripts/verifySmtp.js",
     "verify:resolution": "node scripts/verifyResolutionLoop.js",
     "verify:civic-intelligence": "node scripts/verifyCivicIntelligence.js",

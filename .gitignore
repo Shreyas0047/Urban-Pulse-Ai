@@ -1,5 +1,6 @@
 node_modules/
 .env
+.florence-service-token
 receipts/
 __pycache__/
 *.pyc

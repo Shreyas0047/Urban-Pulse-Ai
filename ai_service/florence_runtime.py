@@ -13,18 +13,23 @@ from ai_config import (
     FLORENCE_MAX_NEW_TOKENS,
     FLORENCE_MODEL_NAME,
     FLORENCE_MODEL_REVISION,
+    FLORENCE_MIN_MEMORY_MB,
     FLORENCE_NUM_BEAMS,
     FLORENCE_OBJECT_DETECTION,
     FLORENCE_QUEUE_TIMEOUT_SECONDS,
     FLORENCE_RETRY_COOLDOWN_SECONDS,
+    AI_MEMORY_BUDGET_MB,
 )
+from memory_runtime import memory_pressure, trim_process_memory
 
 LOGGER = logging.getLogger("urban_pulse.vision")
 
 try:
+    if not FLORENCE_ENABLED or (AI_MEMORY_BUDGET_MB and AI_MEMORY_BUDGET_MB < FLORENCE_MIN_MEMORY_MB):
+        raise ImportError
     import torch
     from transformers import AutoModelForCausalLM, AutoProcessor
-except ImportError:  # pragma: no cover - exercised through degraded-mode tests
+except ImportError:  # pragma: no cover - exercised through disabled/degraded-mode tests
     torch = None
     AutoModelForCausalLM = None
     AutoProcessor = None
@@ -53,6 +58,16 @@ class FlorenceRuntime:
 
     def request_load(self, background=True):
         if not FLORENCE_ENABLED:
+            return False
+        if AI_MEMORY_BUDGET_MB and AI_MEMORY_BUDGET_MB < FLORENCE_MIN_MEMORY_MB:
+            with self._state_lock:
+                self.state = "unavailable"
+                self.error = (
+                    f"Configured memory budget ({AI_MEMORY_BUDGET_MB} MB) is below the safe "
+                    f"Florence minimum ({FLORENCE_MIN_MEMORY_MB} MB)."
+                )
+                self.failed_at = time.time()
+            _log("vision_model_load_skipped_memory_budget", budgetMb=AI_MEMORY_BUDGET_MB, minimumMb=FLORENCE_MIN_MEMORY_MB)
             return False
         with self._state_lock:
             if self.state == "ready":
@@ -108,6 +123,7 @@ class FlorenceRuntime:
                 self.load_duration_ms = int((time.monotonic() - started) * 1000)
                 self.failed_at = time.time()
             _log("vision_model_load_failed", model=FLORENCE_MODEL_NAME, durationMs=self.load_duration_ms, errorType=type(error).__name__)
+            trim_process_memory()
 
     def _cache_get(self, image_hash):
         if not image_hash or FLORENCE_CACHE_SIZE <= 0:
@@ -128,19 +144,25 @@ class FlorenceRuntime:
                 self._cache.popitem(last=False)
 
     def _run_task(self, image, task):
-        inputs = self.processor(text=task, images=image, return_tensors="pt")
-        inputs = {key: value.to("cpu") for key, value in inputs.items()}
-        with torch.inference_mode():
-            generated_ids = self.model.generate(
-                input_ids=inputs.get("input_ids"),
-                pixel_values=inputs.get("pixel_values"),
-                max_new_tokens=FLORENCE_MAX_NEW_TOKENS,
-                num_beams=FLORENCE_NUM_BEAMS,
-                do_sample=False,
-            )
-        generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
-        parsed = self.processor.post_process_generation(generated_text, task=task, image_size=image.size)
-        return parsed.get(task, parsed) if isinstance(parsed, dict) else parsed
+        inputs = None
+        generated_ids = None
+        try:
+            inputs = self.processor(text=task, images=image, return_tensors="pt")
+            inputs = {key: value.to("cpu") for key, value in inputs.items()}
+            with torch.inference_mode():
+                generated_ids = self.model.generate(
+                    input_ids=inputs.get("input_ids"),
+                    pixel_values=inputs.get("pixel_values"),
+                    max_new_tokens=FLORENCE_MAX_NEW_TOKENS,
+                    num_beams=FLORENCE_NUM_BEAMS,
+                    do_sample=False,
+                )
+            generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+            parsed = self.processor.post_process_generation(generated_text, task=task, image_size=image.size)
+            return parsed.get(task, parsed) if isinstance(parsed, dict) else parsed
+        finally:
+            del generated_ids
+            del inputs
 
     def analyze(self, image, image_hash):
         cached = self._cache_get(image_hash)
@@ -162,12 +184,25 @@ class FlorenceRuntime:
                     "cacheHit": False,
                 }
 
+        pressure = memory_pressure()
+        if pressure["pressured"]:
+            trim_process_memory()
+            pressure = memory_pressure()
+            if pressure["pressured"]:
+                _log("vision_inference_skipped_memory_pressure", **pressure)
+                return {
+                    "status": "unavailable",
+                    "reason": "Scene analysis was paused to keep the service within its memory limit.",
+                    "cacheHit": False,
+                }
+
         acquired = self._inference_lock.acquire(timeout=max(0.1, FLORENCE_QUEUE_TIMEOUT_SECONDS))
         if not acquired:
             _log("vision_queue_timeout", timeoutSeconds=FLORENCE_QUEUE_TIMEOUT_SECONDS)
             return {"status": "busy", "reason": "The scene analyzer is busy. Review or retry this image shortly.", "cacheHit": False}
 
         started = time.monotonic()
+        prepared = None
         try:
             prepared = image.copy()
             prepared.thumbnail((FLORENCE_MAX_IMAGE_DIMENSION, FLORENCE_MAX_IMAGE_DIMENSION))
@@ -195,7 +230,11 @@ class FlorenceRuntime:
             _log("vision_inference_failed", errorType=type(error).__name__, durationMs=int((time.monotonic() - started) * 1000))
             return {"status": "unavailable", "reason": "Scene analysis failed safely.", "cacheHit": False}
         finally:
+            if prepared is not None:
+                prepared.close()
             self._inference_lock.release()
+            rss_mb = trim_process_memory()
+            _log("vision_memory_released", rssMb=rss_mb)
 
     def status_payload(self):
         with self._cache_lock:
@@ -210,6 +249,7 @@ class FlorenceRuntime:
             "loadDurationMs": self.load_duration_ms,
             "cacheEntries": cache_entries,
             "objectDetection": FLORENCE_OBJECT_DETECTION,
+            "memory": memory_pressure(),
             "error": self.error if self.state == "unavailable" else "",
         }
 

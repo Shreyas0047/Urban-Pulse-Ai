@@ -201,10 +201,27 @@ def compare_text_and_image(text, visual_category_ids, quality_status, evidence_s
 
 def build_scene_observations(raw_result, image, image_features, complaint_text):
     raw_result = raw_result if isinstance(raw_result, dict) else {}
+    structured = raw_result.get("structuredObservations") if isinstance(raw_result.get("structuredObservations"), dict) else {}
     description = " ".join(str(raw_result.get("description") or "").split())[:1200]
     object_labels = _flatten_object_labels(raw_result.get("objects"))[:40]
-    searchable = normalize_text(" ".join([description, *object_labels]))
+    provider_issues = structured.get("visibleCivicIssues") if isinstance(structured.get("visibleCivicIssues"), list) else []
+    provider_issue_text = []
+    for item in provider_issues[:8]:
+        if not isinstance(item, dict):
+            continue
+        provider_issue_text.append(str(item.get("issue") or ""))
+        provider_issue_text.extend(str(value) for value in item.get("visibleEvidence", [])[:5] if value)
+    searchable = normalize_text(" ".join([description, *object_labels, *provider_issue_text]))
     quality = _quality_assessment(image, image_features)
+    provider_quality = structured.get("imageQuality") if isinstance(structured.get("imageQuality"), dict) else {}
+    provider_quality_status = normalize_text(provider_quality.get("status"))
+    if provider_quality_status and provider_quality_status != "usable":
+        quality["status"] = "limited"
+        quality["limitations"] = _unique([
+            *quality["limitations"],
+            *[str(item) for item in provider_quality.get("limitations", [])[:5]],
+            f"Visual provider marked image quality as {provider_quality_status}.",
+        ])
     detected = []
 
     for category_id, rule in ISSUE_RULES.items():
@@ -231,13 +248,26 @@ def build_scene_observations(raw_result, image, image_features, complaint_text):
     affected = _unique(item for issue in detected for item in ISSUE_RULES[issue["categoryId"]]["infrastructure"])
     hazards = _unique(item for issue in detected for item in ISSUE_RULES[issue["categoryId"]]["hazards"])
     consistency = compare_text_and_image(complaint_text, [item["categoryId"] for item in detected], quality["status"], top_score)
-    uncertain = raw_result.get("status") != "available" or not detected or quality["status"] != "usable"
-    review_recommended = uncertain or consistency["status"] in {"contradicts", "unrelated", "too_unclear"} or top_score < 0.58
+    provider_uncertainty = structured.get("uncertainty") if isinstance(structured.get("uncertainty"), dict) else {}
+    uncertain = (
+        raw_result.get("status") != "available"
+        or not detected
+        or quality["status"] != "usable"
+        or bool(provider_uncertainty.get("present"))
+    )
+    review_recommended = (
+        uncertain
+        or bool(structured.get("humanReviewRecommended"))
+        or consistency["status"] in {"contradicts", "unrelated", "too_unclear"}
+        or top_score < 0.58
+    )
     if review_recommended:
         reasons = []
         if not detected:
             reasons.append("No supported civic issue phrase was visible in the scene description.")
         reasons.extend(quality["limitations"])
+        if provider_uncertainty.get("reason"):
+            reasons.append(str(provider_uncertainty.get("reason")))
         if consistency["status"] in {"contradicts", "unrelated", "too_unclear"}:
             reasons.append(consistency["reason"])
         uncertainty_reason = " ".join(_unique(reasons)) or raw_result.get("reason") or "Visual evidence requires human confirmation."
@@ -245,8 +275,9 @@ def build_scene_observations(raw_result, image, image_features, complaint_text):
         uncertainty_reason = ""
 
     return {
+        "schemaVersion": raw_result.get("schemaVersion", ""),
         "status": raw_result.get("status", "unavailable"),
-        "provider": "local-florence-2",
+        "provider": raw_result.get("provider", "local-scene-analysis"),
         "model": raw_result.get("model", "microsoft/Florence-2-base-ft"),
         "description": description or "No reliable scene description was generated.",
         "detectedIssues": detected,
@@ -261,6 +292,16 @@ def build_scene_observations(raw_result, image, image_features, complaint_text):
         "multipleIssues": len(detected) > 1,
         "humanReviewRecommended": review_recommended,
         "textImageConsistency": consistency,
+        "providerObservations": {
+            "visibleCivicIssues": provider_issues[:8],
+            "damagedInfrastructure": structured.get("damagedInfrastructure", [])[:8],
+            "hazards": structured.get("hazards", [])[:8],
+            "environmentalConditions": structured.get("environmentalConditions", [])[:6],
+            "multipleProblems": bool(structured.get("multipleProblems")),
+            "imageQuality": provider_quality,
+            "uncertainty": provider_uncertainty,
+        } if structured else None,
+        "providerAttempts": raw_result.get("providerAttempts", [])[:4],
         "objectLabels": object_labels[:20],
         "cacheHit": bool(raw_result.get("cacheHit")),
         "inferenceMs": int(raw_result.get("inferenceMs") or 0),
@@ -277,7 +318,7 @@ def observation_candidates(observations):
                 "category_id": issue["categoryId"],
                 "category_label": issue["categoryLabel"],
                 "confidence": issue["evidenceScore"],
-                "source": "florence-observation",
+                "source": f"{observations.get('provider', 'visual')}-observation",
                 "visualEvidence": issue["evidence"],
             }
         )
