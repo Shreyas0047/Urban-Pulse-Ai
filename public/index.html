@@ -549,6 +549,25 @@
                     <p id="aiAccuracyStatus" class="helper-text" role="status" aria-live="polite">Upload an image to analyze the visible scene.</p>
                   </div>
 
+                  <section id="imageAnalysisProgress" class="image-analysis-progress" data-state="working" hidden aria-live="polite">
+                    <div class="image-analysis-progress-head">
+                      <strong id="imageAnalysisProgressLabel">Preparing image</strong>
+                      <span id="imageAnalysisProgressValue">0%</span>
+                    </div>
+                    <div
+                      id="imageAnalysisProgressTrack"
+                      class="image-analysis-progress-track"
+                      role="progressbar"
+                      aria-label="Image analysis progress"
+                      aria-valuemin="0"
+                      aria-valuemax="100"
+                      aria-valuenow="0"
+                    >
+                      <div id="imageAnalysisProgressFill" class="image-analysis-progress-fill"></div>
+                    </div>
+                    <p id="imageAnalysisProgressDetail" class="helper-text">Validating and preparing the selected evidence.</p>
+                  </section>
+
                   <div class="form-actions">
                     <button type="submit" id="complaintSubmitBtn" class="light-beam-button gradient-button">Submit Report</button>
                     <button type="button" id="generatePdfBtn" class="secondary-button" disabled>Generate PDF</button>

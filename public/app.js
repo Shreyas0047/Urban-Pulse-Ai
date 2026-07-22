@@ -21,6 +21,12 @@ const imageHintText = document.getElementById("imageHintText");
 const showAiAccuracyBtn = document.getElementById("showAiAccuracyBtn");
 const retryImageAnalysisBtn = document.getElementById("retryImageAnalysisBtn");
 const aiAccuracyStatus = document.getElementById("aiAccuracyStatus");
+const imageAnalysisProgress = document.getElementById("imageAnalysisProgress");
+const imageAnalysisProgressLabel = document.getElementById("imageAnalysisProgressLabel");
+const imageAnalysisProgressValue = document.getElementById("imageAnalysisProgressValue");
+const imageAnalysisProgressTrack = document.getElementById("imageAnalysisProgressTrack");
+const imageAnalysisProgressFill = document.getElementById("imageAnalysisProgressFill");
+const imageAnalysisProgressDetail = document.getElementById("imageAnalysisProgressDetail");
 const previewLocationBtn = document.getElementById("previewLocationBtn");
 const useLiveLocationBtn = document.getElementById("useLiveLocationBtn");
 const resetDashboardBtn = document.getElementById("resetDashboardBtn");
@@ -4580,6 +4586,10 @@ function resetComposer({ clearDraft = true } = {}) {
   aiAccuracyStatus.textContent = "Upload an image to analyze the visible scene.";
   retryImageAnalysisBtn.hidden = true;
   retryImageAnalysisBtn.disabled = false;
+  imageAnalysisProgress.hidden = true;
+  imageAnalysisProgress.dataset.state = "working";
+  imageAnalysisProgressFill.style.width = "0%";
+  imageAnalysisProgressTrack.setAttribute("aria-valuenow", "0");
   currentImageFeatures = null;
   currentImageDataUrl = null;
   currentImageAiPayload = null;
@@ -4735,6 +4745,17 @@ function formatImageAnalysisResult(imageAnalysis = {}) {
   return lines.join("\n") || imageAnalysis.reason || "No visual incident could be confirmed from this image.";
 }
 
+function updateImageAnalysisProgress({ value, label, detail, state = "working", hidden = false }) {
+  const boundedValue = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  imageAnalysisProgress.hidden = hidden;
+  imageAnalysisProgress.dataset.state = state;
+  imageAnalysisProgressLabel.textContent = label;
+  imageAnalysisProgressValue.textContent = `${boundedValue}%`;
+  imageAnalysisProgressFill.style.width = `${boundedValue}%`;
+  imageAnalysisProgressTrack.setAttribute("aria-valuenow", String(boundedValue));
+  imageAnalysisProgressDetail.textContent = detail;
+}
+
 function renderImageAnalysisResult(imageAnalysis = {}) {
   const rawConfidence = Number(imageAnalysis.confidence || 0);
   const confidence = rawConfidence > 0 && rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence;
@@ -4743,14 +4764,40 @@ function renderImageAnalysisResult(imageAnalysis = {}) {
 
   if (imageAnalysis.status === "complete") {
     aiAccuracyStatus.textContent = `Visual analysis completed${confidence ? ` with ${Math.round(confidence)}% evidence confidence` : ""}.`;
+    updateImageAnalysisProgress({
+      value: 100,
+      label: "Image analysis complete",
+      detail: "The visible scene, hazards, and complaint consistency were checked.",
+      state: "success"
+    });
   } else if (imageAnalysis.status === "needs_review") {
     aiAccuracyStatus.textContent = imageAnalysis.additionalEvidenceRequired
       ? "Additional evidence is recommended because the image is unclear or incomplete."
       : `Human review is recommended${confidence ? ` (${Math.round(confidence)}% evidence confidence)` : ""}.`;
+    updateImageAnalysisProgress({
+      value: 100,
+      label: "Analysis complete - review recommended",
+      detail: imageAnalysis.additionalEvidenceRequired
+        ? "The image was processed, but clearer or additional evidence would improve the decision."
+        : "The image was processed and retained for a human decision check.",
+      state: "review"
+    });
   } else if (imageAnalysis.status === "processing") {
     aiAccuracyStatus.textContent = imageAnalysis.reason || "Visual evidence is still being analyzed.";
+    updateImageAnalysisProgress({
+      value: 88,
+      label: "Vision service is preparing",
+      detail: "The image is ready. The analysis service may be completing a cold start.",
+      state: "working"
+    });
   } else {
     aiAccuracyStatus.textContent = imageAnalysis.reason || "Visual analysis is unavailable. The photo will still be attached for review.";
+    updateImageAnalysisProgress({
+      value: 100,
+      label: "Image analysis unavailable",
+      detail: "The photo remains attached. Re-submit it to retry visual analysis.",
+      state: "error"
+    });
   }
 }
 
@@ -4765,17 +4812,19 @@ async function analyzePreparedImage(requestId) {
 
   aiImageDescription.value = "Analyzing the uploaded image...";
   const analysisStages = [
-    "Analyzing image...",
-    "Detecting visible hazards...",
-    "Checking for multiple civic issues...",
-    "Comparing image and complaint..."
+    { value: 22, label: "Analyzing image", detail: "Reading the visible scene and infrastructure." },
+    { value: 46, label: "Detecting visible hazards", detail: "Checking for safety risks and damaged infrastructure." },
+    { value: 68, label: "Checking multiple issues", detail: "Looking for more than one civic problem in the image." },
+    { value: 84, label: "Comparing evidence", detail: "Comparing the image with the complaint text and location." }
   ];
   let stageIndex = 0;
-  aiAccuracyStatus.textContent = analysisStages[stageIndex];
+  aiAccuracyStatus.textContent = `${analysisStages[stageIndex].label}...`;
+  updateImageAnalysisProgress(analysisStages[stageIndex]);
   const stageTimer = window.setInterval(() => {
     if (requestId !== imageAnalysisRequestId) return;
     stageIndex = Math.min(stageIndex + 1, analysisStages.length - 1);
-    aiAccuracyStatus.textContent = analysisStages[stageIndex];
+    aiAccuracyStatus.textContent = `${analysisStages[stageIndex].label}...`;
+    updateImageAnalysisProgress(analysisStages[stageIndex]);
   }, 1800);
   showAiAccuracyBtn.disabled = true;
   retryImageAnalysisBtn.hidden = true;
@@ -4799,9 +4848,21 @@ async function analyzePreparedImage(requestId) {
       renderImageAnalysisResult(imageAnalysis);
       if (!imageAnalysis.retryable || imageAnalysis.status !== "processing") break;
       aiAccuracyStatus.textContent = `Visual analysis is still preparing. Retrying automatically (${attempt + 1}/20)...`;
+      updateImageAnalysisProgress({
+        value: 90,
+        label: "Waiting for visual analysis",
+        detail: `The vision service is preparing. Automatic retry ${attempt + 1} of 20.`,
+        state: "working"
+      });
       if (attempt === 19) {
         aiAccuracyStatus.textContent = "Visual analysis is still preparing. Re-submit the image shortly to try again.";
         retryImageAnalysisBtn.hidden = false;
+        updateImageAnalysisProgress({
+          value: 90,
+          label: "Analysis delayed",
+          detail: "The image is retained. Re-submit it after the vision service finishes starting.",
+          state: "review"
+        });
         break;
       }
       await waitForImageAnalysisRetry(3000);
@@ -4829,6 +4890,7 @@ function setupImageUpload() {
       currentImageDataUrl = null;
       currentImageAiPayload = null;
       retryImageAnalysisBtn.hidden = true;
+      imageAnalysisProgress.hidden = true;
       scheduleDraftSave();
       return;
     }
@@ -4842,6 +4904,12 @@ function setupImageUpload() {
     try {
       aiAccuracyStatus.textContent = "Uploading evidence...";
       retryImageAnalysisBtn.hidden = true;
+      updateImageAnalysisProgress({
+        value: 8,
+        label: "Preparing image",
+        detail: "Validating, resizing, and preparing the selected evidence.",
+        state: "working"
+      });
       currentImageDataUrl = await readFileAsDataUrl(file);
       currentImageAiPayload = await prepareImageForAi(file);
       currentImageFeatures = await extractImageFeatures(file);
@@ -4853,6 +4921,12 @@ function setupImageUpload() {
       aiImageDescription.value = "Image analysis is temporarily unavailable. You can still submit the complaint with the photo.";
       aiAccuracyStatus.textContent = `Image analysis could not complete: ${error.message}`;
       retryImageAnalysisBtn.hidden = false;
+      updateImageAnalysisProgress({
+        value: 100,
+        label: "Image analysis failed",
+        detail: "The photo remains selected. Re-submit it to try again.",
+        state: "error"
+      });
       scheduleDraftSave();
     }
   });
@@ -4871,6 +4945,12 @@ showAiAccuracyBtn.addEventListener("click", async () => {
     if (requestId !== imageAnalysisRequestId) return;
     aiAccuracyStatus.textContent = `Image analysis could not complete: ${error.message}`;
     retryImageAnalysisBtn.hidden = false;
+    updateImageAnalysisProgress({
+      value: 100,
+      label: "Image analysis failed",
+      detail: "The photo remains selected. Re-submit it to try again.",
+      state: "error"
+    });
   }
 });
 
@@ -4883,12 +4963,24 @@ retryImageAnalysisBtn.addEventListener("click", async () => {
 
   const requestId = ++imageAnalysisRequestId;
   aiAccuracyStatus.textContent = "Re-submitting the image for visual analysis...";
+  updateImageAnalysisProgress({
+    value: 10,
+    label: "Re-submitting image",
+    detail: "Sending the retained evidence through the visual analysis pipeline again.",
+    state: "working"
+  });
   try {
     await analyzePreparedImage(requestId);
   } catch (error) {
     if (requestId !== imageAnalysisRequestId) return;
     aiAccuracyStatus.textContent = `Image analysis could not complete: ${error.message}`;
     retryImageAnalysisBtn.hidden = false;
+    updateImageAnalysisProgress({
+      value: 100,
+      label: "Image analysis failed",
+      detail: "The photo remains selected. Re-submit it to try again.",
+      state: "error"
+    });
   }
 });
 
