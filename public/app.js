@@ -19,6 +19,7 @@ const imagePreview = document.getElementById("imagePreview");
 const imageName = document.getElementById("imageName");
 const imageHintText = document.getElementById("imageHintText");
 const showAiAccuracyBtn = document.getElementById("showAiAccuracyBtn");
+const retryImageAnalysisBtn = document.getElementById("retryImageAnalysisBtn");
 const aiAccuracyStatus = document.getElementById("aiAccuracyStatus");
 const previewLocationBtn = document.getElementById("previewLocationBtn");
 const useLiveLocationBtn = document.getElementById("useLiveLocationBtn");
@@ -4577,6 +4578,8 @@ function resetComposer({ clearDraft = true } = {}) {
   imageHintText.textContent = "AI visual inspection will appear here after upload.";
   aiImageDescription.value = "";
   aiAccuracyStatus.textContent = "Upload an image to analyze the visible scene.";
+  retryImageAnalysisBtn.hidden = true;
+  retryImageAnalysisBtn.disabled = false;
   currentImageFeatures = null;
   currentImageDataUrl = null;
   currentImageAiPayload = null;
@@ -4736,6 +4739,7 @@ function renderImageAnalysisResult(imageAnalysis = {}) {
   const rawConfidence = Number(imageAnalysis.confidence || 0);
   const confidence = rawConfidence > 0 && rawConfidence <= 1 ? rawConfidence * 100 : rawConfidence;
   aiImageDescription.value = formatImageAnalysisResult(imageAnalysis);
+  retryImageAnalysisBtn.hidden = imageAnalysis.status !== "unavailable";
 
   if (imageAnalysis.status === "complete") {
     aiAccuracyStatus.textContent = `Visual analysis completed${confidence ? ` with ${Math.round(confidence)}% evidence confidence` : ""}.`;
@@ -4774,6 +4778,8 @@ async function analyzePreparedImage(requestId) {
     aiAccuracyStatus.textContent = analysisStages[stageIndex];
   }, 1800);
   showAiAccuracyBtn.disabled = true;
+  retryImageAnalysisBtn.hidden = true;
+  retryImageAnalysisBtn.disabled = true;
 
   try {
     const requestBody = JSON.stringify({
@@ -4794,7 +4800,8 @@ async function analyzePreparedImage(requestId) {
       if (!imageAnalysis.retryable || imageAnalysis.status !== "processing") break;
       aiAccuracyStatus.textContent = `Visual analysis is still preparing. Retrying automatically (${attempt + 1}/20)...`;
       if (attempt === 19) {
-        aiAccuracyStatus.textContent = "Visual analysis is still preparing. Use Check Image Status to retry shortly.";
+        aiAccuracyStatus.textContent = "Visual analysis is still preparing. Re-submit the image shortly to try again.";
+        retryImageAnalysisBtn.hidden = false;
         break;
       }
       await waitForImageAnalysisRetry(3000);
@@ -4802,7 +4809,10 @@ async function analyzePreparedImage(requestId) {
     }
   } finally {
     window.clearInterval(stageTimer);
-    if (requestId === imageAnalysisRequestId) showAiAccuracyBtn.disabled = false;
+    if (requestId === imageAnalysisRequestId) {
+      showAiAccuracyBtn.disabled = false;
+      retryImageAnalysisBtn.disabled = false;
+    }
   }
 }
 
@@ -4818,6 +4828,7 @@ function setupImageUpload() {
       currentImageFeatures = null;
       currentImageDataUrl = null;
       currentImageAiPayload = null;
+      retryImageAnalysisBtn.hidden = true;
       scheduleDraftSave();
       return;
     }
@@ -4830,6 +4841,7 @@ function setupImageUpload() {
 
     try {
       aiAccuracyStatus.textContent = "Uploading evidence...";
+      retryImageAnalysisBtn.hidden = true;
       currentImageDataUrl = await readFileAsDataUrl(file);
       currentImageAiPayload = await prepareImageForAi(file);
       currentImageFeatures = await extractImageFeatures(file);
@@ -4840,6 +4852,7 @@ function setupImageUpload() {
       currentImageFeatures = null;
       aiImageDescription.value = "Image analysis is temporarily unavailable. You can still submit the complaint with the photo.";
       aiAccuracyStatus.textContent = `Image analysis could not complete: ${error.message}`;
+      retryImageAnalysisBtn.hidden = false;
       scheduleDraftSave();
     }
   });
@@ -4857,6 +4870,25 @@ showAiAccuracyBtn.addEventListener("click", async () => {
   } catch (error) {
     if (requestId !== imageAnalysisRequestId) return;
     aiAccuracyStatus.textContent = `Image analysis could not complete: ${error.message}`;
+    retryImageAnalysisBtn.hidden = false;
+  }
+});
+
+retryImageAnalysisBtn.addEventListener("click", async () => {
+  if (!currentImageAiPayload) {
+    retryImageAnalysisBtn.hidden = true;
+    aiAccuracyStatus.textContent = "Select the image again before re-submitting it for analysis.";
+    return;
+  }
+
+  const requestId = ++imageAnalysisRequestId;
+  aiAccuracyStatus.textContent = "Re-submitting the image for visual analysis...";
+  try {
+    await analyzePreparedImage(requestId);
+  } catch (error) {
+    if (requestId !== imageAnalysisRequestId) return;
+    aiAccuracyStatus.textContent = `Image analysis could not complete: ${error.message}`;
+    retryImageAnalysisBtn.hidden = false;
   }
 });
 

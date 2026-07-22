@@ -1357,12 +1357,28 @@ function detectIntentLocally(message, history = []) {
         response: "Use Live Location to fill the location field automatically. Show Map updates the live location preview."
       },
       {
+        patterns: ["image analysis", "photo analysis", "uploaded photo", "what does ai do", "florence"],
+        response: "The visual service observes the scene, visible civic issues, infrastructure damage, hazards, image quality, and uncertainty. Urban Pulse combines those observations with complaint and location evidence, while unclear or conflicting cases require human review."
+      },
+      {
+        patterns: ["ward", "department", "routing", "route complaint", "which authority"],
+        response: "Bengaluru routing uses the complaint location, ward evidence, issue category, severity, and configured authority directory to select a BBMP-aligned department, operational unit, and escalation destination."
+      },
+      {
+        patterns: ["nearby users", "community verification", "verify incident", "still present", "worsening", "duplicate complaint"],
+        response: "Eligible nearby citizens can mark an incident as still present, worsening, resolved, or duplicated without seeing the reporter's identity or private evidence. Conflicting or suspicious signals are retained for review."
+      },
+      {
+        patterns: ["government api", "government integration", "official api", "future implementation", "future feature", "officer access"],
+        response: "Future authorized government API access could create official tickets directly, synchronize acknowledgements and status, assign verified officers, exchange resolution evidence, and provide authorities with a managed queue. It depends on formal API access, secure credentials, data-sharing agreements, and department adoption."
+      },
+      {
         patterns: ["admin", "dashboard", "reset", "alerts", "status update"],
         response: "Admin actions stay permission-protected. Admin users can review complaints, update status, and manage dashboard data through the admin panels."
       },
       {
-        patterns: ["bbmp", "email", "mail", "portal", "pdf", "receipt", "download"],
-        response: "The system can generate a PDF complaint summary and use the verified authority handoff available for the complaint city."
+        patterns: ["bbmp", "email", "mail", "portal", "pdf", "receipt", "download", "reach authority", "authority handoff"],
+        response: "Urban Pulse prepares an authority ticket and supports configured email or webhook delivery, plus manual official-portal handoff with reference tracking. Actual delivery depends on the authority channel configured by the deployment administrator."
       }
     ];
 

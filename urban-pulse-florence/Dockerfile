@@ -26,4 +26,4 @@ RUN TRANSFORMERS_OFFLINE=0 HF_HUB_OFFLINE=0 FLORENCE_MODEL_REVISION=${FLORENCE_M
 COPY --chown=app:app app ./app
 USER app
 
-CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 2 --timeout 180 --graceful-timeout 30 app.main:app"]
+CMD ["sh", "-c", "exec gunicorn --preload --bind 0.0.0.0:${PORT} --workers 1 --threads 2 --timeout 180 --graceful-timeout 30 app.main:app"]

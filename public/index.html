@@ -157,29 +157,74 @@
         <div class="faq-list">
           <details class="faq-item">
             <summary>
-              <span>Can citizens still submit complaints the same way?</span>
+              <span>How do I report a civic issue?</span>
               <span class="faq-icon">+</span>
             </summary>
             <div class="faq-content">
-              <p>Yes. The flow still supports complaint submission, AI analysis, PDF generation, verified authority handoff, map preview, and permissions.</p>
+              <p>Open Report, add a description or voice note, attach a clear incident photo, confirm the Bengaluru location, and submit. Urban Pulse validates the evidence, analyzes the issue, and creates a trackable complaint.</p>
             </div>
           </details>
           <details class="faq-item">
             <summary>
-              <span>Does the admin dashboard still manage alerts and status changes?</span>
+              <span>What does the AI do with an uploaded photo?</span>
               <span class="faq-icon">+</span>
             </summary>
             <div class="faq-content">
-              <p>Yes. Alerts, complaint status updates, and account management remain protected by backend permissions. Destructive dashboard reset is disabled in production to preserve audit records.</p>
+              <p>Florence-2 observes the visible scene, infrastructure damage, hazards, image quality, and uncertainty. Urban Pulse then combines that evidence with the complaint and location; uncertain or conflicting cases are marked for human review instead of forcing a confident answer.</p>
             </div>
           </details>
           <details class="faq-item">
             <summary>
-              <span>How does voice input work now?</span>
+              <span>How is a complaint routed in Bengaluru?</span>
               <span class="faq-icon">+</span>
             </summary>
             <div class="faq-content">
-              <p>Voice complaints use recorded audio plus backend transcription, then place the processed transcript into the complaint summary field.</p>
+              <p>The routing engine uses the issue category, location, ward evidence, severity, and configured authority directory to select a BBMP-aligned ward, department, operational unit, and escalation destination.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>
+              <span>Does the complaint automatically reach a government authority?</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-content">
+              <p>Urban Pulse prepares an authority ticket and supports configured email or webhook delivery, plus a manual official-portal handoff with reference tracking. Actual delivery depends on the authority channel configured by the deployment administrator.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>
+              <span>Can nearby citizens verify an incident?</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-content">
+              <p>Eligible nearby users can report that an issue is still present, worsening, resolved, or duplicated. The original reporter's identity and private evidence are not shown, and suspicious or conflicting activity is sent for review.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>
+              <span>How can I track progress and confirm resolution?</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-content">
+              <p>Open Complaints to view status, routing, authority handoff, timeline, and available evidence. When an issue is marked resolved, citizens can submit follow-up evidence so high-risk cases are not closed only from an unverified status change.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>
+              <span>How are urgent incidents handled?</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-content">
+              <p>High-risk evidence can trigger a safety gate, priority escalation, incident command record, response deadline, and alerts for opted-in users in the affected area. Automated signals remain reviewable by authorized administrators.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>
+              <span>What could official government API access add in the future?</span>
+              <span class="faq-icon">+</span>
+            </summary>
+            <div class="faq-content">
+              <p>With authorized government APIs, Urban Pulse could create tickets directly in official systems, receive acknowledgement and status updates, assign verified officers, synchronize resolution evidence, and give authorities a managed operational queue. This requires formal API access, secure government credentials, data-sharing agreements, and adoption by the relevant departments.</p>
             </div>
           </details>
         </div>
@@ -500,6 +545,7 @@
 
                   <div class="ai-actions">
                     <button type="button" id="showAiAccuracyBtn" class="secondary-button">Check Image Status</button>
+                    <button type="button" id="retryImageAnalysisBtn" class="secondary-button" hidden>Re-submit Image</button>
                     <p id="aiAccuracyStatus" class="helper-text" role="status" aria-live="polite">Upload an image to analyze the visible scene.</p>
                   </div>
 

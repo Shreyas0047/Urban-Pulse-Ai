@@ -34,7 +34,9 @@ The initial production profile is deliberately single-concurrency because model 
 - Concurrency: `1`
 - Request timeout: `120s`
 - Minimum instances: `0`
-- Maximum instances: `2`
+- Maximum instances: `1` to cap concurrent model cost; raise only after observing real queue demand
+
+The container preloads Florence synchronously before Gunicorn accepts traffic. This is intentional: with request-based CPU and `min-instances=0`, a background warm-up thread can be throttled after the startup request finishes and leave readiness stuck in `loading`.
 
 ```bash
 gcloud auth login
@@ -51,7 +53,7 @@ gcloud run deploy urban-pulse-florence \
   --concurrency 1 \
   --timeout 120 \
   --min-instances 0 \
-  --max-instances 2 \
+  --max-instances 1 \
   --allow-unauthenticated \
   --set-env-vars FLORENCE_SERVICE_TOKEN=REPLACE_WITH_THE_SAME_LONG_RANDOM_SECRET,FLORENCE_WARMUP=true,REQUIRE_SERVICE_TOKEN=true
 ```

@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">Urban Pulse AI</title>
+  <desc id="desc">Animated civic intelligence network connecting reports, AI analysis, routing, and response.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#08101c"/>
+      <stop offset="0.55" stop-color="#111c2b"/>
+      <stop offset="1" stop-color="#07130f"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7aa7ff" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#9bc0ff" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#65e0a3" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#7aa7ff" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#7aa7ff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#b8c9e8" stroke-opacity="0.055"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="360" rx="28" fill="url(#background)"/>
+  <rect width="1200" height="360" rx="28" fill="url(#grid)"/>
+  <circle cx="930" cy="160" r="230" fill="url(#glow)" opacity="0.5">
+    <animate attributeName="opacity" values="0.25;0.55;0.25" dur="7s" repeatCount="indefinite"/>
+  </circle>
+
+  <g fill="none" stroke="url(#line)" stroke-width="1.5">
+    <path d="M720 84C805 84 818 138 880 138S970 92 1062 92"/>
+    <path d="M720 180C800 180 822 180 880 180S982 180 1080 180"/>
+    <path d="M720 276C806 276 820 222 880 222S970 268 1062 268"/>
+  </g>
+
+  <g filter="url(#softGlow)">
+    <circle cx="720" cy="180" r="5" fill="#8fb6ff">
+      <animate attributeName="r" values="4;7;4" dur="2.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="880" cy="138" r="5" fill="#8fb6ff">
+      <animate attributeName="r" values="4;7;4" dur="2.8s" begin="0.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="880" cy="222" r="5" fill="#ffb874">
+      <animate attributeName="r" values="4;7;4" dur="2.8s" begin="1.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="1062" cy="92" r="5" fill="#65e0a3">
+      <animate attributeName="opacity" values="0.45;1;0.45" dur="2.4s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="1080" cy="180" r="5" fill="#65e0a3">
+      <animate attributeName="opacity" values="0.45;1;0.45" dur="2.4s" begin="0.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="1062" cy="268" r="5" fill="#65e0a3">
+      <animate attributeName="opacity" values="0.45;1;0.45" dur="2.4s" begin="1.6s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <rect x="700" y="48" width="400" height="264" rx="22" fill="#ffffff" fill-opacity="0.025" stroke="#d9e5ff" stroke-opacity="0.12"/>
+  <rect x="700" y="48" width="4" height="264" rx="2" fill="#8fb6ff" opacity="0.75">
+    <animate attributeName="y" values="54;300;54" dur="6s" repeatCount="indefinite"/>
+    <animate attributeName="height" values="22;8;22" dur="6s" repeatCount="indefinite"/>
+  </rect>
+
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+    <text x="76" y="108" fill="#8fb6ff" font-size="14" font-weight="700" letter-spacing="4">BENGALURU CIVIC INTELLIGENCE</text>
+    <text x="72" y="182" fill="#f2f5fb" font-size="58" font-weight="650" letter-spacing="-2">Urban Pulse AI</text>
+    <text x="76" y="228" fill="#aeb9cb" font-size="20">From evidence to accountable civic response.</text>
+    <text x="76" y="286" fill="#65e0a3" font-size="14" font-weight="650">REPORT</text>
+    <text x="155" y="286" fill="#647187" font-size="14">/</text>
+    <text x="177" y="286" fill="#8fb6ff" font-size="14" font-weight="650">UNDERSTAND</text>
+    <text x="302" y="286" fill="#647187" font-size="14">/</text>
+    <text x="324" y="286" fill="#ffb874" font-size="14" font-weight="650">ROUTE</text>
+    <text x="390" y="286" fill="#647187" font-size="14">/</text>
+    <text x="412" y="286" fill="#65e0a3" font-size="14" font-weight="650">VERIFY</text>
+  </g>
+
+  <rect x="0.5" y="0.5" width="1199" height="359" rx="27.5" fill="none" stroke="#ffffff" stroke-opacity="0.12"/>
+</svg>

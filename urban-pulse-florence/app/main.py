@@ -2,7 +2,6 @@ import hmac
 import json
 import logging
 import os
-import threading
 import time
 import uuid
 
@@ -120,4 +119,7 @@ def warm_model():
 if REQUIRE_SERVICE_TOKEN and not SERVICE_TOKEN:
     LOGGER.warning("FLORENCE_SERVICE_TOKEN is missing; protected analysis requests will be rejected")
 if WARMUP:
-    threading.Thread(target=warm_model, name="florence-warmup", daemon=True).start()
+    # Cloud Run may throttle background CPU after startup when min-instances is
+    # zero. Preload synchronously so a worker never advertises readiness while
+    # its model is still waiting for CPU.
+    warm_model()
