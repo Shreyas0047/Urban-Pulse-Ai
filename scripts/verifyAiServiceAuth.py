@@ -24,6 +24,17 @@ def main():
         unauthorized = client.post("/transcript/process", json={"transcript": "fallen tree"})
         assert unauthorized.status_code == 401, "AI POST endpoint must reject a missing service token"
 
+        unauthorized_probe = client.post("/auth/probe", json={})
+        assert unauthorized_probe.status_code == 401, "Auth probe must reject a missing service token"
+
+        authorized_probe = client.post(
+            "/auth/probe",
+            json={},
+            headers={"X-Urban-Pulse-Service-Token": token},
+        )
+        assert authorized_probe.status_code == 200, "Auth probe must accept the configured service token"
+        assert authorized_probe.get_json().get("authenticated") is True
+
         authorized = client.post(
             "/transcript/process",
             json={"transcript": "fallen tree blocking the road"},
@@ -44,6 +55,7 @@ def main():
             "publicHealthProbe": True,
             "missingTokenRejected": True,
             "validTokenAccepted": True,
+            "authenticatedProbe": True,
             "requestSizeBounded": True,
         }, indent=2))
     finally:

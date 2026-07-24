@@ -279,6 +279,12 @@ def readiness():
     return jsonify({"status": status, "visualProviderReady": provider_ready, "sceneUnderstandingReady": bool(scene.get("ready")), "models": models})
 
 
+@app.post("/auth/probe")
+def auth_probe():
+    """Verify service-to-service authentication without invoking the AI pipeline."""
+    return jsonify({"status": "ok", "service": "urban-pulse-ai-service", "authenticated": True})
+
+
 @app.post("/analyze")
 def analyze():
     payload = request.get_json(silent=True) or {}

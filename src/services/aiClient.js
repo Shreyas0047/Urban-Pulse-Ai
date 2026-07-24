@@ -1131,6 +1131,72 @@ function aiServiceHeaders() {
   };
 }
 
+function aiServiceHost() {
+  try {
+    return new URL(env.aiServiceUrl).host;
+  } catch (_error) {
+    return "invalid-ai-service-url";
+  }
+}
+
+function classifyAiServiceFailure(error) {
+  if (error?.name === "AbortError") return "timeout";
+  if (error?.statusCode === 401 || error?.statusCode === 403) return "authentication_failed";
+  if (error?.statusCode === 413) return "payload_too_large";
+  if (error?.code === "INVALID_RESPONSE") return "invalid_response";
+  return "unavailable";
+}
+
+function logAiServiceFailure(error, operation, payload = {}) {
+  const message = String(error?.message || "AI service request failed")
+    .replace(/[\r\n]+/g, " ")
+    .slice(0, 240);
+  console.warn(JSON.stringify({
+    event: "ai_service_request_failed",
+    operation,
+    serviceHost: aiServiceHost(),
+    failureType: classifyAiServiceFailure(error),
+    httpStatus: Number(error?.statusCode) || undefined,
+    hasImage: Boolean(payload.imageBase64),
+    message
+  }));
+}
+
+async function parseAiServiceResponse(response) {
+  const rawBody = await response.text();
+  try {
+    return rawBody ? JSON.parse(rawBody) : {};
+  } catch (_error) {
+    const error = new Error("AI microservice returned an invalid JSON response.");
+    error.code = "INVALID_RESPONSE";
+    error.statusCode = response.status;
+    throw error;
+  }
+}
+
+async function probeAiService() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.min(env.aiServiceTimeoutMs, 30000));
+
+  try {
+    const response = await fetch(`${env.aiServiceUrl}/auth/probe`, {
+      method: "POST",
+      headers: aiServiceHeaders(),
+      body: "{}",
+      signal: controller.signal
+    });
+    const data = await parseAiServiceResponse(response);
+    if (!response.ok) {
+      const error = new Error(data.error || "AI service authentication probe failed.");
+      error.statusCode = response.status;
+      throw error;
+    }
+    return { status: "ok", authenticated: data.authenticated === true, serviceHost: aiServiceHost() };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function analyzeComplaint(payload) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), env.aiServiceTimeoutMs);
@@ -1143,9 +1209,11 @@ async function analyzeComplaint(payload) {
       signal: controller.signal
     });
 
-    const data = await response.json();
+    const data = await parseAiServiceResponse(response);
     if (!response.ok) {
-      throw new Error(data.error || "AI microservice request failed");
+      const error = new Error(data.error || "AI microservice request failed");
+      error.statusCode = response.status;
+      throw error;
     }
 
     const threatAssessment = buildThreatAssessment(payload, {
@@ -1178,8 +1246,17 @@ async function analyzeComplaint(payload) {
         imageFingerprint: data.aiMeta?.imageFingerprint || threatAssessment.integrity?.sha256 || ""
       }
     };
-  } catch (_error) {
-    return analyzeComplaintLocally(payload);
+  } catch (error) {
+    logAiServiceFailure(error, "analyze", payload);
+    const fallback = analyzeComplaintLocally(payload);
+    return {
+      ...fallback,
+      aiMeta: {
+        ...(fallback.aiMeta || {}),
+        upstreamStatus: classifyAiServiceFailure(error),
+        upstreamHttpStatus: Number(error?.statusCode) || null
+      }
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -1550,6 +1627,7 @@ async function transcribeAudio(payload) {
 
 module.exports = {
   analyzeComplaint,
+  probeAiService,
   compareResolutionEvidence,
   transcribeAudio,
   processTranscriptWithAi,
