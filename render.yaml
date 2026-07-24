@@ -22,7 +22,7 @@ services:
       - key: FLORENCE_SERVICE_TOKEN
         sync: false
       - key: FLORENCE_TIMEOUT_SECONDS
-        value: "35"
+        value: "50"
       - key: FLORENCE_MAX_RETRIES
         value: "1"
       - key: FLORENCE_REMOTE_CACHE_SIZE

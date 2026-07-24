@@ -245,7 +245,7 @@ These variables belong to the **Flask AI service**, not the browser:
 | <code>FLORENCE_REMOTE_ENABLED</code> | <code>true</code> |
 | <code>FLORENCE_SERVICE_URL</code> | Cloud Run service URL |
 | <code>FLORENCE_SERVICE_TOKEN</code> | Same long secret configured on Cloud Run |
-| <code>FLORENCE_TIMEOUT_SECONDS</code> | <code>35</code> |
+| <code>FLORENCE_TIMEOUT_SECONDS</code> | <code>50</code> |
 | <code>FLORENCE_MAX_RETRIES</code> | <code>1</code> |
 | <code>FLORENCE_ENABLED</code> | <code>false</code> on memory-limited Render instances |
 

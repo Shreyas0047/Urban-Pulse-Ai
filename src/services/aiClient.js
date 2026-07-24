@@ -4,6 +4,12 @@ const aiCategories = require("../../shared/aiCategories.json");
 
 const CATEGORY_ID_BY_ISSUE_TYPE = new Map(aiCategories.map((category) => [category.label, category.id]));
 const AI_EVALUATION_VERSION = "urban-pulse-threat-v1";
+let aiServiceConnectionStatus = {
+  status: "not_checked",
+  failureType: "",
+  httpStatus: null,
+  checkedAt: null
+};
 
 const ISSUE_PROFILES = [
   {
@@ -1147,6 +1153,22 @@ function classifyAiServiceFailure(error) {
   return "unavailable";
 }
 
+function recordAiServiceConnection(status, error = null) {
+  aiServiceConnectionStatus = {
+    status,
+    failureType: error ? classifyAiServiceFailure(error) : "",
+    httpStatus: Number(error?.statusCode) || null,
+    checkedAt: new Date().toISOString()
+  };
+}
+
+function getAiServiceConnectionStatus() {
+  return {
+    ...aiServiceConnectionStatus,
+    serviceHost: aiServiceHost()
+  };
+}
+
 function logAiServiceFailure(error, operation, payload = {}) {
   const message = String(error?.message || "AI service request failed")
     .replace(/[\r\n]+/g, " ")
@@ -1191,7 +1213,11 @@ async function probeAiService() {
       error.statusCode = response.status;
       throw error;
     }
+    recordAiServiceConnection("ok");
     return { status: "ok", authenticated: data.authenticated === true, serviceHost: aiServiceHost() };
+  } catch (error) {
+    recordAiServiceConnection("failed", error);
+    throw error;
   } finally {
     clearTimeout(timeout);
   }
@@ -1215,6 +1241,7 @@ async function analyzeComplaint(payload) {
       error.statusCode = response.status;
       throw error;
     }
+    recordAiServiceConnection("ok");
 
     const threatAssessment = buildThreatAssessment(payload, {
       remoteAnalysis: data
@@ -1247,6 +1274,7 @@ async function analyzeComplaint(payload) {
       }
     };
   } catch (error) {
+    recordAiServiceConnection("failed", error);
     logAiServiceFailure(error, "analyze", payload);
     const fallback = analyzeComplaintLocally(payload);
     return {
@@ -1628,6 +1656,7 @@ async function transcribeAudio(payload) {
 module.exports = {
   analyzeComplaint,
   probeAiService,
+  getAiServiceConnectionStatus,
   compareResolutionEvidence,
   transcribeAudio,
   processTranscriptWithAi,

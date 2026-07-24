@@ -5,6 +5,7 @@ const path = require("path");
 const env = require("./config/env");
 const apiRoutes = require("./routes/api");
 const { setSecurityHeaders, setNoStoreHeaders, createRateLimiter } = require("./middleware/security");
+const { getAiServiceConnectionStatus } = require("./services/aiClient");
 
 const app = express();
 const allowedOrigins = new Set([`http://localhost:${env.port}`, `http://127.0.0.1:${env.port}`, ...env.corsOrigins]);
@@ -45,7 +46,8 @@ app.get("/health", (_req, res) => {
   res.status(databaseReady ? 200 : 503).json({
     status: databaseReady ? "ok" : "degraded",
     service: "urban-pulse-web",
-    database: databaseReady ? "connected" : "disconnected"
+    database: databaseReady ? "connected" : "disconnected",
+    aiService: getAiServiceConnectionStatus()
   });
 });
 
