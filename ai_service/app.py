@@ -213,11 +213,18 @@ if AI_SERVICE_REQUIRE_TOKEN and len(AI_SERVICE_TOKEN) < 32:
     raise RuntimeError("AI_SERVICE_TOKEN must contain at least 32 characters when service authentication is required.")
 
 
+def service_token_matches(supplied, expected):
+    try:
+        return hmac.compare_digest(str(supplied or "").encode("utf-8"), str(expected or "").encode("utf-8"))
+    except (UnicodeEncodeError, TypeError):
+        return False
+
+
 @app.before_request
 def require_service_token():
     if request.method == "POST" and AI_SERVICE_REQUIRE_TOKEN:
         supplied = request.headers.get("X-Urban-Pulse-Service-Token", "")
-        if not hmac.compare_digest(supplied, AI_SERVICE_TOKEN):
+        if not service_token_matches(supplied, AI_SERVICE_TOKEN):
             return jsonify({"error": "Service authentication required."}), 401
     return None
 

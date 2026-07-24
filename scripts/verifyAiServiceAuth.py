@@ -27,6 +27,13 @@ def main():
         unauthorized_probe = client.post("/auth/probe", json={})
         assert unauthorized_probe.status_code == 401, "Auth probe must reject a missing service token"
 
+        malformed_token_probe = client.post(
+            "/auth/probe",
+            json={},
+            headers={"X-Urban-Pulse-Service-Token": "invalid-token-\u00e9-with-hidden-character-123456"},
+        )
+        assert malformed_token_probe.status_code == 401, "Non-ASCII tokens must be rejected without crashing"
+
         authorized_probe = client.post(
             "/auth/probe",
             json={},
@@ -54,6 +61,7 @@ def main():
             "passed": True,
             "publicHealthProbe": True,
             "missingTokenRejected": True,
+            "malformedTokenRejected": True,
             "validTokenAccepted": True,
             "authenticatedProbe": True,
             "requestSizeBounded": True,
